@@ -1,0 +1,2 @@
+# Zero external dependencies - pure Python stdlib
+# This file exists for deployment platforms that require it
