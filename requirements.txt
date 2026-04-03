@@ -1,2 +1,10 @@
-# Zero external dependencies - pure Python stdlib
-# This file exists for deployment platforms that require it
+flask==3.0.0
+flask-cors==4.0.0
+psycopg2-binary==2.9.9
+anthropic==0.39.0
+bcrypt==4.2.0
+PyJWT==2.9.0
+requests==2.31.0
+beautifulsoup4==4.12.3
+lxml==5.1.0
+gunicorn==22.0.0
