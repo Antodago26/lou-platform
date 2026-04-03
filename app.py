@@ -591,8 +591,13 @@ def health():
     return jsonify({"status": "ok"})
 
 
-if __name__ == '__main__':
-    if DATABASE_URL:
+# Initialize database on module load (works with gunicorn)
+if DATABASE_URL:
+    try:
         init_db()
+    except Exception as e:
+        print(f"DB init error (will retry on first request): {e}")
+
+if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=os.environ.get('FLASK_ENV') != 'production')
