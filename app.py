@@ -620,36 +620,75 @@ def api_scrape():
 
 @app.route('/api/scrape/test', methods=['GET'])
 def api_scrape_test():
-    """Debug endpoint: test each scraper individually and report status."""
-    import traceback
-    from scrapers import scrape_flatfox, scrape_homegate, scrape_immoscout, scrape_comparis
+    """Debug endpoint: test raw HTTP responses from each portal."""
+    import requests as req
 
     city = request.args.get('city', 'Lausanne')
     tx = request.args.get('transaction', 'location')
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'fr-CH,fr;q=0.9',
+    }
     results = {}
 
-    scrapers = [
-        ('Flatfox', scrape_flatfox),
-        ('Homegate', scrape_homegate),
-        ('ImmoScout24', scrape_immoscout),
-        ('Comparis', scrape_comparis),
-    ]
+    # 1. Flatfox
+    try:
+        r = req.get('https://flatfox.ch/api/v1/public/listings/',
+                     headers=headers,
+                     params={'city': city, 'offer_type': 'RENT', 'ordering': '-created', 'limit': 3},
+                     timeout=15)
+        body = r.text[:500]
+        results['Flatfox'] = {"http": r.status_code, "body_preview": body}
+    except Exception as e:
+        results['Flatfox'] = {"error": str(e)}
 
-    for name, fn in scrapers:
-        try:
-            listings = fn(city=city, transaction=tx)
-            results[name] = {
-                "status": "ok",
-                "count": len(listings),
-                "sample": listings[0]['title'] if listings else None,
-                "sample_price": listings[0]['price'] if listings else None,
-            }
-        except Exception as e:
-            results[name] = {
-                "status": "error",
-                "error": str(e),
-                "traceback": traceback.format_exc()[-500:],
-            }
+    # 2. Homegate API
+    try:
+        r = req.get(f'https://www.homegate.ch/api/search/rent',
+                     headers={**headers, 'Referer': 'https://www.homegate.ch/'},
+                     params={'loc': city, 'ag': 3, 'o': 'dateCreated-desc'},
+                     timeout=15)
+        body = r.text[:500]
+        results['Homegate_API'] = {"http": r.status_code, "body_preview": body}
+    except Exception as e:
+        results['Homegate_API'] = {"error": str(e)}
+
+    # 3. Homegate __NEXT_DATA__
+    try:
+        slug = city.lower().replace(' ', '-')
+        r = req.get(f'https://www.homegate.ch/rent/real-estate/city-{slug}/matching-list',
+                     headers=headers, timeout=15)
+        has_next = '__NEXT_DATA__' in r.text
+        next_snippet = ''
+        if has_next:
+            import re
+            m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.{0,300})', r.text)
+            next_snippet = m.group(1) if m else ''
+        results['Homegate_Page'] = {"http": r.status_code, "has_NEXT_DATA": has_next, "snippet": next_snippet[:300], "page_size": len(r.text)}
+    except Exception as e:
+        results['Homegate_Page'] = {"error": str(e)}
+
+    # 4. ImmoScout24
+    try:
+        slug = city.lower().replace(' ', '-')
+        r = req.get(f'https://www.immoscout24.ch/fr/immobilier/louer/lieu-{slug}',
+                     headers=headers, timeout=15)
+        has_next = '__NEXT_DATA__' in r.text
+        results['ImmoScout24'] = {"http": r.status_code, "has_NEXT_DATA": has_next, "page_size": len(r.text)}
+    except Exception as e:
+        results['ImmoScout24'] = {"error": str(e)}
+
+    # 5. Comparis API
+    try:
+        payload = {'DealType': 10, 'Keyword': city, 'LocationSearchString': city, 'Sort': 4, 'Page': 1, 'PageSize': 3, 'RootPropertyTypes': [1]}
+        r = req.post('https://api.comparis.ch/realestate/v1/search/list',
+                      headers={**headers, 'Content-Type': 'application/json'},
+                      json=payload, timeout=15)
+        body = r.text[:500]
+        results['Comparis_API'] = {"http": r.status_code, "body_preview": body}
+    except Exception as e:
+        results['Comparis_API'] = {"error": str(e)}
 
     return jsonify({"city": city, "transaction": tx, "results": results})
 
