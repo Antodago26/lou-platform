@@ -643,6 +643,38 @@ def api_import():
     })
 
 
+@app.route('/api/scrape/debug', methods=['GET'])
+def api_scrape_debug():
+    """Test ScrapingBee with a single Homegate request."""
+    from scrapers import _sb_get, SCRAPINGBEE_KEY
+    import os
+
+    city = request.args.get('city', 'Lausanne')
+    sb_key = os.environ.get('SCRAPINGBEE_API_KEY', 'NOT SET')
+
+    results = {
+        "scrapingbee_key_set": bool(sb_key and sb_key != 'NOT SET'),
+        "scrapingbee_key_start": sb_key[:8] + '...' if sb_key and sb_key != 'NOT SET' else 'NOT SET',
+        "key_from_scrapers": SCRAPINGBEE_KEY[:8] + '...' if SCRAPINGBEE_KEY else 'EMPTY',
+    }
+
+    # Test ScrapingBee with Homegate
+    url = f"https://www.homegate.ch/rent/real-estate/city-lausanne/matching-list"
+    status, html = _sb_get(url, render_js=False)
+    has_next = '__NEXT_DATA__' in html if html else False
+    has_cloudflare = 'Just a moment' in html if html else False
+
+    results["homegate"] = {
+        "http_status": status,
+        "html_size": len(html) if html else 0,
+        "has_NEXT_DATA": has_next,
+        "has_cloudflare_block": has_cloudflare,
+        "html_start": html[:300] if html else '',
+    }
+
+    return jsonify(results)
+
+
 @app.route('/api/scrape/test', methods=['GET'])
 def api_scrape_test():
     """Debug endpoint: test raw HTTP responses from each portal."""
