@@ -57,14 +57,12 @@ def _sb_get(url, render_js=False):
     params = {
         'api_key': SCRAPINGBEE_KEY,
         'url': url,
-        'premium_proxy': 'true',
+        'stealth_proxy': 'true',
         'country_code': 'ch',
     }
     if render_js:
         params['render_js'] = 'true'
         params['wait'] = 3000
-    else:
-        params['render_js'] = 'false'
 
     try:
         r = requests.get(SCRAPINGBEE_URL, params=params, timeout=60)
