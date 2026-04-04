@@ -34,7 +34,7 @@
     overlay.innerHTML = [
       '<div class="lou-auth-box">',
       '<button class="close-btn" id="lou-auth-close">&times;</button>',
-      '<h2><svg style="width:28px;height:28px;vertical-align:middle;margin-right:8px" viewBox="0 0 28 28" fill="none"><rect width="28" height="28" rx="7" fill="#0369a1"/><path d="M7 20 L10.5 9 L12 14 L14 6 L16 14 L17.5 9 L21 20 Z" fill="#fff" opacity="0.95"/><circle cx="12" cy="15.5" r="1" fill="#0369a1"/><circle cx="16" cy="15.5" r="1" fill="#0369a1"/></svg>Lou Garou</h2>',
+      '<h2 style="color:#0c4a6e">Lou Garou.</h2>',
       '<div class="sub">Votre chasseur immobilier IA en Suisse</div>',
       '<input id="lou-auth-email" type="email" placeholder="Email">',
       '<input id="lou-auth-pass" type="password" placeholder="Mot de passe">',
@@ -160,7 +160,7 @@
     // NAV
     var nav = ce('div', 'dash-nav');
     nav.innerHTML =
-      '<a href="/" class="dash-nav-brand"><svg class="dash-logo-icon" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="28" height="28" rx="7" fill="#0369a1"/><path d="M7 20 L10.5 9 L12 14 L14 6 L16 14 L17.5 9 L21 20 Z" fill="#fff" opacity="0.95"/><circle cx="12" cy="15.5" r="1" fill="#0369a1"/><circle cx="16" cy="15.5" r="1" fill="#0369a1"/></svg> Lou Garou</a>' +
+      '<a href="/" class="dash-nav-brand">Lou Garou.</a>' +
       '<div class="dash-nav-right">' +
         '<span class="dash-user-email">' + escapeHtml(USER.email || '') + '</span>' +
         '<button class="dash-logout-btn" id="logout-btn">Deconnexion</button>' +
@@ -546,8 +546,7 @@
 
       // Nav
       '.dash-nav{background:#0f172a;padding:14px 32px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100}',
-      '.dash-nav-brand{color:#fff;font-size:20px;font-weight:800;font-family:"Playfair Display",Georgia,serif;text-decoration:none;display:flex;align-items:center;gap:10px}',
-      '.dash-logo-icon{width:30px;height:30px;flex-shrink:0}',
+      '.dash-nav-brand{color:#fff;font-size:20px;font-weight:500;font-family:"Elvira Serif",Georgia,serif;text-decoration:none;letter-spacing:-0.4px}',
       '.dash-nav-right{display:flex;align-items:center;gap:16px}',
       '.dash-user-email{color:#94a3b8;font-size:13px}',
       '.dash-logout-btn{background:none;border:1px solid #475569;color:#94a3b8;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px;transition:all .2s}',
@@ -558,7 +557,7 @@
 
       // Header
       '.dash-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:16px}',
-      '.dash-header h1{font-family:"Playfair Display",Georgia,serif;font-size:28px;margin:0}',
+      '.dash-header h1{font-family:"Elvira Serif",Georgia,serif;font-size:28px;margin:0}',
       '.dash-actions{display:flex;gap:10px}',
       '.dash-select{padding:8px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;background:#fff;cursor:pointer;color:#334155;outline:none}',
       '.dash-select:focus{border-color:#0369a1}',
@@ -567,7 +566,7 @@
       '.dash-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}',
       '.dash-stat{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;text-align:center;transition:box-shadow .2s}',
       '.dash-stat:hover{box-shadow:0 4px 16px rgba(0,0,0,.06)}',
-      '.dash-stat-num{font-size:32px;font-weight:700;font-family:"Playfair Display",Georgia,serif;color:#0f172a}',
+      '.dash-stat-num{font-size:32px;font-weight:700;font-family:"Elvira Serif",Georgia,serif;color:#0f172a}',
       '.dash-stat-lbl{font-size:13px;color:#64748b;margin-top:4px}',
 
       // Profile bar
@@ -649,7 +648,7 @@
       '.lou-overlay{position:fixed;inset:0;background:rgba(15,23,42,.7);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(4px)}',
       '.lou-auth-box{background:#fff;border-radius:16px;padding:36px;width:400px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,.3);position:relative;color:#0f172a}',
       '.lou-auth-box .close-btn{position:absolute;top:12px;right:16px;background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8}',
-      '.lou-auth-box h2{font-size:24px;margin:0 0 4px;font-family:"Playfair Display",Georgia,serif}',
+      '.lou-auth-box h2{font-size:24px;margin:0 0 4px;font-family:"Elvira Serif",Georgia,serif}',
       '.lou-auth-box .sub{font-size:14px;color:#64748b;margin-bottom:20px}',
       '.lou-auth-box input{width:100%;padding:12px 14px;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:12px;font-size:14px;box-sizing:border-box;outline:none}',
       '.lou-auth-box input:focus{border-color:#0369a1;box-shadow:0 0 0 3px rgba(3,105,161,.1)}',
