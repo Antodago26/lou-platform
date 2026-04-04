@@ -618,6 +618,42 @@ def api_scrape():
     })
 
 
+@app.route('/api/scrape/test', methods=['GET'])
+def api_scrape_test():
+    """Debug endpoint: test each scraper individually and report status."""
+    import traceback
+    from scrapers import scrape_flatfox, scrape_homegate, scrape_immoscout, scrape_comparis
+
+    city = request.args.get('city', 'Lausanne')
+    tx = request.args.get('transaction', 'location')
+    results = {}
+
+    scrapers = [
+        ('Flatfox', scrape_flatfox),
+        ('Homegate', scrape_homegate),
+        ('ImmoScout24', scrape_immoscout),
+        ('Comparis', scrape_comparis),
+    ]
+
+    for name, fn in scrapers:
+        try:
+            listings = fn(city=city, transaction=tx)
+            results[name] = {
+                "status": "ok",
+                "count": len(listings),
+                "sample": listings[0]['title'] if listings else None,
+                "sample_price": listings[0]['price'] if listings else None,
+            }
+        except Exception as e:
+            results[name] = {
+                "status": "error",
+                "error": str(e),
+                "traceback": traceback.format_exc()[-500:],
+            }
+
+    return jsonify({"city": city, "transaction": tx, "results": results})
+
+
 # ============================================================
 # HELPERS
 # ============================================================
