@@ -683,25 +683,20 @@ def api_scrape_debug():
             }
 
             if status1 == 200 and html1:
-                # Find all unique data-test attributes
-                data_tests = list(set(re2.findall(r'data-test="([^"]+)"', html1)))[:20]
-                results["data_test_attrs"] = sorted(data_tests)
+                # Find all hrefs patterns
+                all_hrefs = re2.findall(r'href="(/[^"]{5,60})"', html1)
+                unique_hrefs = list(set(all_hrefs))[:30]
+                results["sample_hrefs"] = sorted(unique_hrefs)
 
-                # Find all href containing /rent/
-                rent_hrefs = re2.findall(r'href="(/rent/\d+)"', html1)[:10]
-                results["rent_links"] = rent_hrefs
+                # Extract HTML around first result-list-item (2000 chars)
+                marker = re2.search(r'data-test="result-list-item"', html1)
+                if marker:
+                    start = max(0, marker.start() - 100)
+                    end = min(len(html1), marker.start() + 2000)
+                    results["first_card_html"] = html1[start:end]
 
-                # Find class names with keywords
-                all_classes = re2.findall(r'class="([^"]*(?:card|Card|list|List|item|Item|result|Result|Hg|property)[^"]*)"', html1)
-                unique_classes = list(set(all_classes))[:20]
-                results["interesting_classes"] = sorted(unique_classes)
-
-                # Extract a chunk around first listing link to see structure
-                first_link = re2.search(r'href="/rent/\d+"', html1)
-                if first_link:
-                    start = max(0, first_link.start() - 500)
-                    end = min(len(html1), first_link.end() + 500)
-                    results["html_around_first_listing"] = html1[start:end]
+                # Count result-list-items
+                results["total_result_items"] = len(re2.findall(r'data-test="result-list-item"', html1))
 
         except Exception as e:
             results["homegate"] = {"error": str(e)}
