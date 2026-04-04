@@ -34,7 +34,7 @@
     overlay.innerHTML = [
       '<div class="lou-auth-box">',
       '<button class="close-btn" id="lou-auth-close">&times;</button>',
-      '<h2 style="color:#0c4a6e">Lou Garou.</h2>',
+      '<h2><svg style="width:28px;height:28px;vertical-align:middle;margin-right:8px" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" rx="12" fill="#0369a1"/><g transform="translate(8,6)"><path d="M4 34 L10 5 L16 16 L22 5 L28 34 L22 28 L16 32 L10 28 Z" fill="rgba(255,255,255,0.95)"/><circle cx="12.5" cy="21" r="2" fill="#0369a1"/><circle cx="19.5" cy="21" r="2" fill="#0369a1"/></g></svg>Lou Garou</h2>',
       '<div class="sub">Votre chasseur immobilier IA en Suisse</div>',
       '<input id="lou-auth-email" type="email" placeholder="Email">',
       '<input id="lou-auth-pass" type="password" placeholder="Mot de passe">',
@@ -160,7 +160,7 @@
     // NAV
     var nav = ce('div', 'dash-nav');
     nav.innerHTML =
-      '<a href="/" class="dash-nav-brand">Lou Garou.</a>' +
+      '<a href="/" class="dash-nav-brand"><svg class="dash-logo-wolf" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" rx="12" fill="#0369a1"/><g transform="translate(8,6)"><path d="M4 34 L10 5 L16 16 L22 5 L28 34 L22 28 L16 32 L10 28 Z" fill="rgba(255,255,255,0.95)"/><circle cx="12.5" cy="21" r="2" fill="#0369a1"/><circle cx="19.5" cy="21" r="2" fill="#0369a1"/></g></svg>Lou Garou</a>' +
       '<div class="dash-nav-right">' +
         '<span class="dash-user-email">' + escapeHtml(USER.email || '') + '</span>' +
         '<button class="dash-logout-btn" id="logout-btn">Deconnexion</button>' +
@@ -546,7 +546,8 @@
 
       // Nav
       '.dash-nav{background:#0f172a;padding:14px 32px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100}',
-      '.dash-nav-brand{color:#fff;font-size:20px;font-weight:500;font-family:"Elvira Serif",Georgia,serif;text-decoration:none;letter-spacing:-0.4px}',
+      '.dash-nav-brand{color:#fff;font-size:20px;font-weight:800;font-family:"Elvira Serif",Georgia,serif;text-decoration:none;display:flex;align-items:center;gap:10px}',
+      '.dash-logo-wolf{width:30px;height:30px;flex-shrink:0}',
       '.dash-nav-right{display:flex;align-items:center;gap:16px}',
       '.dash-user-email{color:#94a3b8;font-size:13px}',
       '.dash-logout-btn{background:none;border:1px solid #475569;color:#94a3b8;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px;transition:all .2s}',
