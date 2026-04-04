@@ -1,7 +1,11 @@
 /**
  * Lou Garou — Frontend App (Single File)
- * Auth (login/signup) + Dashboard + Chat
+ * Auth (login/signup) overlay + Dashboard + Chat
  * Served from /static/app.js on Render
+ *
+ * IMPORTANT: Does NOT replace the Webflow landing page.
+ * - No token → adds "Connexion" button to nav, auth modal as overlay
+ * - Valid token → replaces page with dashboard + chat
  */
 
 (function () {
@@ -23,55 +27,72 @@
   function isJWT(t) { return t && t.split('.').length === 3; }
 
   // ============================================================
-  // AUTH — Login / Signup Modal
+  // AUTH — Login / Signup Modal (OVERLAY — keeps landing page)
   // ============================================================
-  function showAuth() {
-    document.body.innerHTML = '';
-    var css = ce('style', '', [
-      'body{margin:0;background:#0f172a;font-family:system-ui,sans-serif;color:#0f172a}',
-      '.auth-wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}',
-      '.auth-box{background:#fff;border-radius:16px;padding:36px;width:380px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,.3)}',
-      '.auth-box h2{font-size:24px;margin:0 0 4px;font-family:Georgia,serif}',
-      '.auth-box .sub{font-size:14px;color:#64748b;margin-bottom:20px}',
-      '.auth-box input{width:100%;padding:10px 14px;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:10px;font-size:14px;box-sizing:border-box;outline:none}',
-      '.auth-box input:focus{border-color:#0369a1}',
-      '.auth-box button{width:100%;padding:12px;border:none;border-radius:10px;background:#0369a1;color:#fff;font-size:15px;font-weight:600;cursor:pointer;transition:background .2s}',
-      '.auth-box button:hover{background:#0284c7}',
-      '.auth-switch{text-align:center;margin-top:14px;font-size:13px;color:#64748b}',
-      '.auth-switch a{color:#0369a1;cursor:pointer;text-decoration:underline}',
-      '.auth-err{color:#dc2626;font-size:13px;margin-top:8px;display:none;text-align:center}'
+  function injectAuthCSS() {
+    var s = ce('style', '', [
+      '.lou-overlay{position:fixed;inset:0;background:rgba(15,23,42,.7);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(4px)}',
+      '.lou-auth-box{background:#fff;border-radius:16px;padding:36px;width:380px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,.3);position:relative;color:#0f172a}',
+      '.lou-auth-box .close-btn{position:absolute;top:12px;right:16px;background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8}',
+      '.lou-auth-box .close-btn:hover{color:#0f172a}',
+      '.lou-auth-box h2{font-size:24px;margin:0 0 4px;font-family:Georgia,serif}',
+      '.lou-auth-box .sub{font-size:14px;color:#64748b;margin-bottom:20px}',
+      '.lou-auth-box input{width:100%;padding:10px 14px;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:10px;font-size:14px;box-sizing:border-box;outline:none}',
+      '.lou-auth-box input:focus{border-color:#0369a1}',
+      '.lou-auth-box .auth-submit{width:100%;padding:12px;border:none;border-radius:10px;background:#0369a1;color:#fff;font-size:15px;font-weight:600;cursor:pointer;transition:background .2s}',
+      '.lou-auth-box .auth-submit:hover{background:#0284c7}',
+      '.lou-auth-switch{text-align:center;margin-top:14px;font-size:13px;color:#64748b}',
+      '.lou-auth-switch a{color:#0369a1;cursor:pointer;text-decoration:underline}',
+      '.lou-auth-err{color:#dc2626;font-size:13px;margin-top:8px;display:none;text-align:center}',
+      '.lou-nav-btn{display:inline-block;padding:8px 20px;background:#0369a1;color:#fff!important;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;text-decoration:none!important;border:none;transition:background .2s;margin-left:8px}',
+      '.lou-nav-btn:hover{background:#0284c7}'
     ].join(''));
-    document.head.appendChild(css);
+    document.head.appendChild(s);
+  }
 
-    var wrap = ce('div', 'auth-wrap');
-    wrap.innerHTML = [
-      '<div class="auth-box">',
-      '<h2>Lou Garou</h2>',
+  function showAuthModal() {
+    // Remove existing overlay if any
+    var existing = document.querySelector('.lou-overlay');
+    if (existing) existing.remove();
+
+    var overlay = ce('div', 'lou-overlay');
+    overlay.innerHTML = [
+      '<div class="lou-auth-box">',
+      '<button class="close-btn" id="lou-auth-close">&times;</button>',
+      '<h2>🐺 Lou Garou</h2>',
       '<div class="sub">Votre chasseur immobilier IA en Suisse</div>',
-      '<input id="auth-email" type="email" placeholder="Email">',
-      '<input id="auth-pass" type="password" placeholder="Mot de passe">',
-      '<input id="auth-name" type="text" placeholder="Votre nom" style="display:none">',
-      '<button id="auth-btn">Se connecter</button>',
-      '<div class="auth-switch"><a id="auth-toggle">Créer un compte</a></div>',
-      '<div class="auth-err" id="auth-err"></div>',
+      '<input id="lou-auth-email" type="email" placeholder="Email">',
+      '<input id="lou-auth-pass" type="password" placeholder="Mot de passe">',
+      '<input id="lou-auth-name" type="text" placeholder="Votre nom" style="display:none">',
+      '<button class="auth-submit" id="lou-auth-btn">Se connecter</button>',
+      '<div class="lou-auth-switch"><a id="lou-auth-toggle">Créer un compte</a></div>',
+      '<div class="lou-auth-err" id="lou-auth-err"></div>',
       '</div>'
     ].join('');
-    document.body.appendChild(wrap);
+    document.body.appendChild(overlay);
+
+    // Close on overlay background click
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) overlay.remove();
+    });
+
+    // Close button
+    document.getElementById('lou-auth-close').onclick = function () { overlay.remove(); };
 
     var mode = 'login';
-    $('auth-toggle').onclick = function () {
+    document.getElementById('lou-auth-toggle').onclick = function () {
       mode = mode === 'login' ? 'signup' : 'login';
-      $('auth-name').style.display = mode === 'signup' ? 'block' : 'none';
-      $('auth-btn').textContent = mode === 'signup' ? "S'inscrire" : 'Se connecter';
+      document.getElementById('lou-auth-name').style.display = mode === 'signup' ? 'block' : 'none';
+      document.getElementById('lou-auth-btn').textContent = mode === 'signup' ? "S'inscrire" : 'Se connecter';
       this.textContent = mode === 'signup' ? 'Déjà un compte ? Se connecter' : 'Créer un compte';
-      $('auth-err').style.display = 'none';
+      document.getElementById('lou-auth-err').style.display = 'none';
     };
 
-    $('auth-btn').onclick = function () {
-      var email = $('auth-email').value.trim();
-      var pass = $('auth-pass').value;
-      var name = $('auth-name').value.trim();
-      var err = $('auth-err');
+    document.getElementById('lou-auth-btn').onclick = function () {
+      var email = document.getElementById('lou-auth-email').value.trim();
+      var pass = document.getElementById('lou-auth-pass').value;
+      var name = document.getElementById('lou-auth-name').value.trim();
+      var err = document.getElementById('lou-auth-err');
       var btn = this;
 
       if (!email || !pass) {
@@ -91,7 +112,6 @@
           if (data.ok) {
             localStorage.setItem('lou_token', data.token);
             localStorage.setItem('lou_user', JSON.stringify(data.user));
-            // Clear old fake data
             localStorage.removeItem('lou_profile');
             localStorage.removeItem('lou_bk');
             location.reload();
@@ -108,16 +128,56 @@
         });
     };
 
-    // Allow Enter key to submit
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && $('auth-btn')) $('auth-btn').click();
+    // Enter key
+    overlay.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') document.getElementById('lou-auth-btn').click();
+    });
+  }
+
+  // ============================================================
+  // LANDING — Add login button to Webflow nav
+  // ============================================================
+  function enhanceLanding() {
+    injectAuthCSS();
+
+    // Find the Webflow nav — look for the last link in the nav area
+    var navLinks = document.querySelectorAll('nav a, .nav a, [class*="nav"] a');
+    var lastNavLink = navLinks.length > 0 ? navLinks[navLinks.length - 1] : null;
+
+    // Create the Connexion button
+    var loginBtn = ce('a', 'lou-nav-btn', 'Connexion');
+    loginBtn.href = '#';
+    loginBtn.onclick = function (e) {
+      e.preventDefault();
+      showAuthModal();
+    };
+
+    // Insert after the last nav link, or append to nav
+    if (lastNavLink && lastNavLink.parentNode) {
+      lastNavLink.parentNode.appendChild(loginBtn);
+    } else {
+      // Fallback: add a floating login button
+      loginBtn.style.cssText = 'position:fixed;top:20px;right:20px;z-index:9000;';
+      document.body.appendChild(loginBtn);
+    }
+
+    // Also hook into any "Commencer ma recherche" or "Parler à Lou" links
+    var allLinks = document.querySelectorAll('a');
+    allLinks.forEach(function (a) {
+      var text = (a.textContent || '').trim().toLowerCase();
+      if (text.indexOf('commencer') > -1 || text.indexOf('parler') > -1) {
+        a.addEventListener('click', function (e) {
+          e.preventDefault();
+          showAuthModal();
+        });
+      }
     });
   }
 
   // ============================================================
   // CSS — Dashboard Styles
   // ============================================================
-  function injectCSS() {
+  function injectDashCSS() {
     var s = ce('style', '', [
       'body{margin:0;background:#fafbfc;color:#0f172a;font-family:system-ui,sans-serif}',
       '.nav{background:#0f172a;padding:14px 32px;display:flex;justify-content:space-between;align-items:center}',
@@ -161,7 +221,7 @@
   // DASHBOARD — Render
   // ============================================================
   function showDashboard() {
-    injectCSS();
+    injectDashCSS();
     document.body.innerHTML = '';
 
     var user = JSON.parse(localStorage.getItem('lou_user') || '{}');
@@ -177,7 +237,7 @@
 
     // Nav
     var nav = ce('div', 'nav');
-    nav.innerHTML = '<div class="nav-brand">Lou Garou</div>' +
+    nav.innerHTML = '<div class="nav-brand">🐺 Lou Garou</div>' +
       '<div class="nav-right"><span>' + (user.email || '') + '</span>' +
       '<button id="logout-btn">Déconnexion</button></div>';
     document.body.appendChild(nav);
@@ -287,11 +347,9 @@
   // CHAT — Chatbot Lou
   // ============================================================
   function initChat() {
-    // Toggle button
     var toggle = ce('button', 'chat-toggle', '🐺');
     document.body.appendChild(toggle);
 
-    // Chat panel
     var panel = ce('div', 'chat-panel');
     panel.innerHTML = [
       '<div class="chat-head"><span>Lou — Assistant IA</span><button id="chat-close">✕</button></div>',
@@ -320,7 +378,6 @@
         body.innerHTML += '<div class="chat-msg user">' + escapeHtml(msg) + '</div>';
         body.scrollTop = body.scrollHeight;
 
-        // Loading indicator
         var loading = ce('div', 'chat-msg bot', '...');
         body.appendChild(loading);
         body.scrollTop = body.scrollHeight;
@@ -336,7 +393,7 @@
           .then(function (r) { return r.json(); })
           .then(function (data) {
             loading.remove();
-            body.innerHTML += '<div class="chat-msg bot">' + escapeHtml(data.reply || data.response || 'Désolé, je n\'ai pas compris.') + '</div>';
+            body.innerHTML += '<div class="chat-msg bot">' + escapeHtml(data.message || data.reply || data.response || 'Désolé, je n\'ai pas compris.') + '</div>';
             body.scrollTop = body.scrollHeight;
           })
           .catch(function () {
@@ -361,8 +418,10 @@
   // INIT — Main Entry Point
   // ============================================================
   if (!isJWT(TOKEN)) {
-    showAuth();
+    // No valid token → keep landing page, add Connexion button
+    enhanceLanding();
   } else {
+    // Valid token → show dashboard
     window._LA = API;
     showDashboard();
   }
