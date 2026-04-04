@@ -646,49 +646,67 @@ def api_import():
 @app.route('/api/scrape/debug', methods=['GET'])
 def api_scrape_debug():
     """Test ScrapingBee with a single Homegate request."""
-    from scrapers import _sb_get, SCRAPINGBEE_KEY
-    import os
+    import traceback
+    try:
+        from scrapers import _sb_get, SCRAPINGBEE_KEY
+        import os
 
-    city = request.args.get('city', 'Lausanne')
-    sb_key = os.environ.get('SCRAPINGBEE_API_KEY', 'NOT SET')
+        city = request.args.get('city', 'Lausanne')
+        sb_key = os.environ.get('SCRAPINGBEE_API_KEY', 'NOT SET')
 
-    results = {
-        "scrapingbee_key_set": bool(sb_key and sb_key != 'NOT SET'),
-        "scrapingbee_key_start": sb_key[:8] + '...' if sb_key and sb_key != 'NOT SET' else 'NOT SET',
-        "key_from_scrapers": SCRAPINGBEE_KEY[:8] + '...' if SCRAPINGBEE_KEY else 'EMPTY',
-    }
+        results = {
+            "scrapingbee_key_set": bool(sb_key and sb_key != 'NOT SET'),
+            "scrapingbee_key_start": sb_key[:8] + '...' if sb_key and sb_key != 'NOT SET' else 'NOT SET',
+            "key_from_scrapers": SCRAPINGBEE_KEY[:8] + '...' if SCRAPINGBEE_KEY else 'EMPTY',
+        }
 
-    # Test ScrapingBee with Homegate - try both modes
-    url = f"https://www.homegate.ch/rent/real-estate/city-lausanne/matching-list"
+        # Test 1: Simple ScrapingBee connectivity test with httpbin
+        try:
+            status_test, html_test = _sb_get("https://httpbin.org/get", render_js=False)
+            results["httpbin_test"] = {
+                "http_status": status_test,
+                "html_size": len(html_test) if html_test else 0,
+                "html_start": html_test[:200] if html_test else '',
+            }
+        except Exception as e:
+            results["httpbin_test"] = {"error": str(e)}
 
-    # Test 1: stealth proxy WITHOUT JS
-    status1, html1 = _sb_get(url, render_js=False)
-    results["homegate_no_js"] = {
-        "http_status": status1,
-        "html_size": len(html1) if html1 else 0,
-        "has_NEXT_DATA": '__NEXT_DATA__' in html1 if html1 else False,
-        "has_cloudflare": 'Just a moment' in html1 if html1 else False,
-        "html_start": html1[:200] if html1 else '',
-    }
+        # Test 2: Homegate stealth proxy WITHOUT JS
+        url = f"https://www.homegate.ch/rent/real-estate/city-lausanne/matching-list"
+        try:
+            status1, html1 = _sb_get(url, render_js=False)
+            results["homegate_no_js"] = {
+                "http_status": status1,
+                "html_size": len(html1) if html1 else 0,
+                "has_NEXT_DATA": '__NEXT_DATA__' in html1 if html1 else False,
+                "has_cloudflare": 'Just a moment' in html1 if html1 else False,
+                "html_start": html1[:300] if html1 else '',
+            }
+        except Exception as e:
+            results["homegate_no_js"] = {"error": str(e)}
+            status1, html1 = 0, ''
 
-    # Test 2: stealth proxy WITH JS (only if test 1 failed)
-    status = status1
-    html = html1
-    if status1 != 200 or ('Just a moment' in html1 if html1 else True):
-        status, html = _sb_get(url, render_js=True)
+        # Test 3: Homegate stealth proxy WITH JS (only if test 2 failed)
+        if status1 != 200 or ('Just a moment' in html1 if html1 else True):
+            try:
+                status, html = _sb_get(url, render_js=True)
+                results["homegate_with_js"] = {
+                    "http_status": status,
+                    "html_size": len(html) if html else 0,
+                    "has_NEXT_DATA": '__NEXT_DATA__' in html if html else False,
+                    "has_cloudflare": 'Just a moment' in html if html else False,
+                    "html_start": html[:300] if html else '',
+                }
+            except Exception as e:
+                results["homegate_with_js"] = {"error": str(e)}
 
-    has_next = '__NEXT_DATA__' in html if html else False
-    has_cloudflare = 'Just a moment' in html if html else False
+        return jsonify(results)
 
-    results["homegate"] = {
-        "http_status": status,
-        "html_size": len(html) if html else 0,
-        "has_NEXT_DATA": has_next,
-        "has_cloudflare_block": has_cloudflare,
-        "html_start": html[:300] if html else '',
-    }
-
-    return jsonify(results)
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+        }), 500
 
 
 @app.route('/api/scrape/test', methods=['GET'])
