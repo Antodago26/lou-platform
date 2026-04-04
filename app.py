@@ -671,67 +671,42 @@ def api_scrape_debug():
         except Exception as e:
             results["httpbin_test"] = {"error": str(e)}
 
-        # Test 2: Homegate stealth proxy WITHOUT JS + HTML structure analysis
+        # Test 2: Homegate stealth proxy WITHOUT JS
         url = f"https://www.homegate.ch/rent/real-estate/city-lausanne/matching-list"
         try:
-            from bs4 import BeautifulSoup
+            import re as re2
             status1, html1 = _sb_get(url, render_js=False)
-            results["homegate_no_js"] = {
+            results["homegate"] = {
                 "http_status": status1,
                 "html_size": len(html1) if html1 else 0,
                 "has_NEXT_DATA": '__NEXT_DATA__' in html1 if html1 else False,
-                "has_cloudflare": 'Just a moment' in html1 if html1 else False,
             }
 
-            # Analyze HTML structure to find listing cards
             if status1 == 200 and html1:
-                soup = BeautifulSoup(html1, 'lxml')
+                # Find all unique data-test attributes
+                data_tests = list(set(re2.findall(r'data-test="([^"]+)"', html1)))[:20]
+                results["data_test_attrs"] = sorted(data_tests)
 
-                # Try various selectors
-                selectors = {
-                    'a[href*="/rent/"]': len(soup.select('a[href*="/rent/"]')),
-                    'a[href*="/buy/"]': len(soup.select('a[href*="/buy/"]')),
-                    'article': len(soup.select('article')),
-                    '[data-test]': len(soup.select('[data-test]')),
-                    '[class*="ListItem"]': len(soup.select('[class*="ListItem"]')),
-                    '[class*="listing"]': len(soup.select('[class*="listing"]')),
-                    '[class*="card"]': len(soup.select('[class*="card"]')),
-                    '[class*="Card"]': len(soup.select('[class*="Card"]')),
-                    '[class*="result"]': len(soup.select('[class*="result"]')),
-                    '[class*="Result"]': len(soup.select('[class*="Result"]')),
-                    '[class*="property"]': len(soup.select('[class*="property"]')),
-                    '[class*="Property"]': len(soup.select('[class*="Property"]')),
-                    '[class*="Hg"]': len(soup.select('[class*="Hg"]')),
-                    'h3': len(soup.select('h3')),
-                    'h2': len(soup.select('h2')),
-                }
-                results["selectors_count"] = selectors
+                # Find all href containing /rent/
+                rent_hrefs = re2.findall(r'href="(/rent/\d+)"', html1)[:10]
+                results["rent_links"] = rent_hrefs
 
-                # Show first few rent links
-                rent_links = soup.select('a[href*="/rent/"]')[:5]
-                results["sample_rent_links"] = [
-                    {"href": a.get('href', ''), "text": a.get_text(strip=True)[:100]}
-                    for a in rent_links
-                ]
+                # Find class names with keywords
+                all_classes = re2.findall(r'class="([^"]*(?:card|Card|list|List|item|Item|result|Result|Hg|property)[^"]*)"', html1)
+                unique_classes = list(set(all_classes))[:20]
+                results["interesting_classes"] = sorted(unique_classes)
 
-                # Show data-test attributes found
-                data_tests = set()
-                for el in soup.select('[data-test]')[:30]:
-                    data_tests.add(el.get('data-test', ''))
-                results["data_test_attrs"] = list(data_tests)[:20]
-
-                # Show first few class names containing "Hg" or "card" or "list"
-                interesting_classes = set()
-                for el in soup.select('[class]')[:500]:
-                    for cls in el.get('class', []):
-                        if any(kw in cls.lower() for kw in ['hg', 'card', 'list', 'item', 'result', 'property']):
-                            interesting_classes.add(cls)
-                results["interesting_classes"] = sorted(list(interesting_classes))[:30]
+                # Extract a chunk around first listing link to see structure
+                first_link = re2.search(r'href="/rent/\d+"', html1)
+                if first_link:
+                    start = max(0, first_link.start() - 500)
+                    end = min(len(html1), first_link.end() + 500)
+                    results["html_around_first_listing"] = html1[start:end]
 
         except Exception as e:
-            results["homegate_no_js"] = {"error": str(e)}
+            results["homegate"] = {"error": str(e)}
             import traceback
-            results["homegate_no_js_traceback"] = traceback.format_exc()
+            results["homegate_traceback"] = traceback.format_exc()
 
         return jsonify(results)
 
