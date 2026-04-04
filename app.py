@@ -19,7 +19,7 @@ import jwt
 import bcrypt
 import psycopg2
 import psycopg2.extras
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from anthropic import Anthropic
 
@@ -889,7 +889,12 @@ def _parse_rooms(s):
 
 @app.route('/')
 def index():
-    return jsonify({"service": "Lou Garou API", "version": "2.0.0", "status": "ok"})
+    return send_from_directory('static', 'index.html')
+
+
+@app.route('/dashboard')
+def dashboard():
+    return send_from_directory('static', 'dashboard.html')
 
 
 @app.route('/health')
