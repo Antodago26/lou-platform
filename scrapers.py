@@ -179,85 +179,78 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=2):
             log.warning(f"[Homegate] Page {page}: HTTP {status}")
             break
 
-        # Try __NEXT_DATA__ first
-        match = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html)
-        if match:
+        soup = BeautifulSoup(html, 'html.parser')
+        cards = soup.select('[data-test="result-list-item"]')
+        log.info(f"[Homegate] Page {page}: {len(cards)} cards")
+
+        for card in cards:
             try:
-                data = json.loads(match.group(1))
-                items = data.get('props', {}).get('pageProps', {}).get('resultList', {}).get('items', [])
-                log.info(f"[Homegate] Page {page}: {len(items)} items via __NEXT_DATA__")
+                # Link and ID
+                link_el = card.select_one('a[href]')
+                href = link_el.get('href', '') if link_el else ''
+                if href.startswith('/'):
+                    href = 'https://www.homegate.ch' + href
+                eid = re.search(r'/(\d+)', href)
+                lid = eid.group(1) if eid else ''
+                if not lid:
+                    continue
 
-                for item in items:
-                    listing = item.get('listing', item)
-                    lid = listing.get('id', '')
-                    loc = listing.get('address', {}) or {}
-                    chars = listing.get('characteristics', {}) or {}
-                    prices = listing.get('prices', {}) or {}
+                # Get all text from the card
+                card_text = card.get_text(' ', strip=True)
 
-                    price_val = (prices.get('rent', {}).get('gross') or prices.get('rent', {}).get('net')
-                                if transaction == 'location'
-                                else prices.get('buy', {}).get('price'))
+                # Price: look for CHF pattern or number followed by .–
+                price = None
+                price_match = re.search(r"(?:CHF|Fr\.?)\s*([\d'']+)", card_text)
+                if not price_match:
+                    price_match = re.search(r"([\d'']+)\s*(?:CHF|Fr|\.–|/mois|/m)", card_text)
+                if price_match:
+                    price = _clean_price(price_match.group(1))
 
-                    addr_parts = [loc.get('street', ''), loc.get('postalCode', ''), loc.get('locality', '')]
-                    address = ' '.join(p for p in addr_parts if p).strip()
+                # Rooms: look for X.5 pièces or X½ or similar
+                rooms = None
+                rooms_match = re.search(r'(\d+[.,]?5?)\s*(?:pièce|piece|room|Zimmer|pi\.)', card_text)
+                if not rooms_match:
+                    rooms_match = re.search(r'(\d+[.,]5)\b', card_text)
+                if rooms_match:
+                    rooms = _clean_rooms(rooms_match.group(1))
 
-                    results.append(_make_property(
-                        external_id=f"hg-{lid}", source='Homegate',
-                        source_url=f"https://www.homegate.ch/{tx}/{lid}",
-                        title=listing.get('title', ''),
-                        description=listing.get('description', ''),
-                        property_type=_guess_type(listing.get('title', '')),
-                        transaction=transaction,
-                        price=_clean_price(price_val),
-                        rooms=chars.get('numberOfRooms'),
-                        surface=chars.get('livingSpace'),
-                        floor=chars.get('floor'),
-                        address=address,
-                        city=loc.get('locality', city),
-                        canton=loc.get('region', CITY_CANTONS.get(city.lower(), '')),
-                        postal_code=str(loc.get('postalCode', '')) or None,
-                        latitude=loc.get('geoCoordinates', {}).get('latitude') if loc.get('geoCoordinates') else None,
-                        longitude=loc.get('geoCoordinates', {}).get('longitude') if loc.get('geoCoordinates') else None,
-                        features=[], images=[],
-                        published_at=listing.get('publishDate'),
-                    ))
+                # Surface: look for XX m²
+                surface = None
+                surface_match = re.search(r'(\d+)\s*m[²2]', card_text)
+                if surface_match:
+                    surface = int(surface_match.group(1))
+
+                # Address: look for postal code pattern (4 digits + city name)
+                address = ''
+                addr_match = re.search(r'(\d{4}\s+\w[\w\s-]+)', card_text)
+                if addr_match:
+                    address = addr_match.group(1).strip()
+
+                # Title: first meaningful text
+                title = ''
+                for el in card.select('h2, h3, [class*="title"], [class*="Title"]'):
+                    t = el.get_text(strip=True)
+                    if t and len(t) > 3:
+                        title = t
+                        break
+                if not title:
+                    title = f"{rooms or '?'} pièces" + (f", {surface} m²" if surface else '')
+
+                results.append(_make_property(
+                    external_id=f"hg-{lid}", source='Homegate',
+                    source_url=href,
+                    title=title, description='',
+                    property_type=_guess_type(card_text),
+                    transaction=transaction,
+                    price=price, rooms=rooms, surface=surface, floor=None,
+                    address=address, city=city,
+                    canton=CITY_CANTONS.get(city.lower(), ''),
+                    postal_code=_extract_postal(address),
+                    latitude=None, longitude=None,
+                    features=[], images=[], published_at=None,
+                ))
             except Exception as e:
-                log.error(f"[Homegate] Parse error: {e}")
-        else:
-            # Fallback: parse HTML with BeautifulSoup
-            soup = BeautifulSoup(html, 'lxml')
-            cards = soup.select('[data-test="result-list-item"], article, .HgCardElevated_card')
-            log.info(f"[Homegate] Page {page}: {len(cards)} cards via HTML")
-
-            for card in cards:
-                try:
-                    title_el = card.select_one('h3, [data-test="result-list-item-title"]')
-                    title = title_el.get_text(strip=True) if title_el else ''
-                    price_el = card.select_one('[data-test="result-list-item-price"], .HgListingCard_price')
-                    price = _clean_price(price_el.get_text(strip=True)) if price_el else None
-                    addr_el = card.select_one('[data-test="result-list-item-address"], .HgListingCard_address')
-                    address = addr_el.get_text(strip=True) if addr_el else ''
-                    link_el = card.select_one('a[href]')
-                    href = link_el.get('href', '') if link_el else ''
-                    if href.startswith('/'):
-                        href = 'https://www.homegate.ch' + href
-                    eid = re.search(r'/(\d+)', href)
-
-                    if title or price:
-                        results.append(_make_property(
-                            external_id=f"hg-{eid.group(1) if eid else hash(title)}",
-                            source='Homegate', source_url=href,
-                            title=title, description='',
-                            property_type=_guess_type(title), transaction=transaction,
-                            price=price, rooms=None, surface=None, floor=None,
-                            address=address, city=city,
-                            canton=CITY_CANTONS.get(city.lower(), ''),
-                            postal_code=_extract_postal(address),
-                            latitude=None, longitude=None,
-                            features=[], images=[], published_at=None,
-                        ))
-                except Exception:
-                    pass
+                log.debug(f"[Homegate] Card parse error: {e}")
 
         time.sleep(1)
 

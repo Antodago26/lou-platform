@@ -671,39 +671,27 @@ def api_scrape_debug():
         except Exception as e:
             results["httpbin_test"] = {"error": str(e)}
 
-        # Test 2: Homegate stealth proxy WITHOUT JS
-        url = f"https://www.homegate.ch/rent/real-estate/city-lausanne/matching-list"
+        # Test 2: Run actual Homegate scraper
         try:
-            import re as re2
-            status1, html1 = _sb_get(url, render_js=False)
-            results["homegate"] = {
-                "http_status": status1,
-                "html_size": len(html1) if html1 else 0,
-                "has_NEXT_DATA": '__NEXT_DATA__' in html1 if html1 else False,
+            from scrapers import scrape_homegate
+            listings = scrape_homegate(city=city, transaction="location", max_pages=1)
+            results["homegate_scraper"] = {
+                "total_listings": len(listings),
+                "sample": [
+                    {
+                        "id": l["external_id"],
+                        "title": l["title"][:80],
+                        "price": l["price"],
+                        "rooms": l["rooms"],
+                        "surface": l["surface"],
+                        "address": l["address"][:60],
+                        "url": l["source_url"],
+                    }
+                    for l in listings[:5]
+                ]
             }
-
-            if status1 == 200 and html1:
-                # Count result-list-items
-                results["total_cards"] = len(re2.findall(r'data-test="result-list-item"', html1))
-
-                # Find href patterns (just unique patterns, not full list)
-                rent_hrefs = re2.findall(r'href="(/rent/[^"]+)"', html1)[:3]
-                listing_hrefs = re2.findall(r'href="(/listing[^"]+)"', html1)[:3]
-                detail_hrefs = re2.findall(r'href="([^"]*\d{6,}[^"]*)"', html1)[:5]
-                results["hrefs"] = {
-                    "rent": rent_hrefs,
-                    "listing": listing_hrefs,
-                    "with_id": detail_hrefs,
-                }
-
-                # Extract SMALL chunk around first card (800 chars only)
-                marker = re2.search(r'data-test="result-list-item"', html1)
-                if marker:
-                    s = marker.start()
-                    results["card_sample"] = html1[s:s+800]
-
         except Exception as e:
-            results["homegate"] = {"error": str(e)}
+            results["homegate_scraper"] = {"error": str(e)}
             import traceback
             results["homegate_traceback"] = traceback.format_exc()
 
