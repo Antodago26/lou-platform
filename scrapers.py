@@ -58,6 +58,7 @@ def _sb_get(url, render_js=False):
         'api_key': SCRAPINGBEE_KEY,
         'url': url,
         'render_js': 'true' if render_js else 'false',
+        'premium_proxy': 'true',
         'country_code': 'ch',
     }
     if render_js:
