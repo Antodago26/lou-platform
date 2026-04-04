@@ -89,7 +89,16 @@
           if (data.ok) {
             localStorage.setItem('lou_token', data.token);
             localStorage.setItem('lou_user', JSON.stringify(data.user));
-            window.location.href = '/dashboard';
+            TOKEN = data.token;
+            USER = data.user;
+            // On external hosts (Webflow), render dashboard in place
+            var isRenderHost = window.location.hostname === 'lou-platform.onrender.com' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            if (isRenderHost) {
+              window.location.href = '/dashboard';
+            } else {
+              overlay.remove();
+              showDashboard();
+            }
           } else {
             err.textContent = data.error || 'Erreur de connexion';
             err.style.display = 'block';
@@ -113,7 +122,7 @@
   }
 
   // ============================================================
-  // LANDING PAGE — Hook CTAs
+  // LANDING PAGE — Hook CTAs (when HTML already exists, e.g. Render)
   // ============================================================
   function initLanding() {
     // Hook all CTA buttons to open auth modal
@@ -142,6 +151,223 @@
     // Chat bubble on landing page
     injectChatCSS();
     initChat();
+  }
+
+  // ============================================================
+  // LANDING PAGE — Full render (for Webflow / external hosts)
+  // ============================================================
+  function showLanding() {
+    document.title = 'Lou Garou — Chasseur Immobilier IA en Suisse';
+
+    // Inject fonts
+    if (!document.querySelector('link[href*="Playfair+Display"]')) {
+      var fontLink = document.createElement('link');
+      fontLink.rel = 'stylesheet';
+      fontLink.href = 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap';
+      document.head.appendChild(fontLink);
+    }
+
+    // Inject CSS
+    var style = ce('style', '', getLandingCSS());
+    document.head.appendChild(style);
+
+    // Replace body
+    document.body.innerHTML = '';
+    document.body.style.margin = '0';
+
+    // NAV
+    var nav = ce('nav', 'nav');
+    nav.innerHTML =
+      '<a href="/" class="nav-logo">' +
+        '<svg class="logo-wolf" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" rx="12" fill="#0369a1"/><g transform="translate(8,6)"><path d="M4 34 L10 5 L16 16 L22 5 L28 34 L22 28 L16 32 L10 28 Z" fill="rgba(255,255,255,0.95)"/><circle cx="12.5" cy="21" r="2" fill="#0369a1"/><circle cx="19.5" cy="21" r="2" fill="#0369a1"/></g></svg>' +
+        '<span class="logo-text">Lou Garou</span>' +
+      '</a>' +
+      '<div class="nav-links">' +
+        '<a href="#features">Fonctions</a>' +
+        '<a href="#how">Comment ca marche</a>' +
+        '<a href="#" class="btn btn-primary" id="nav-login-btn">Connexion</a>' +
+      '</div>';
+    document.body.appendChild(nav);
+
+    // HERO
+    var hero = ce('section', 'hero');
+    hero.innerHTML =
+      '<div class="hero-text">' +
+        '<h1>Votre <em>chasseur immobilier</em> intelligent en Suisse</h1>' +
+        '<p>Lou Garou scrute en continu les meilleures annonces de Suisse romande, les analyse avec l\'IA et vous presente uniquement les biens qui correspondent a vos criteres.</p>' +
+        '<div class="hero-ctas">' +
+          '<a href="#" class="btn btn-primary" id="hero-cta-1">Commencer ma recherche</a>' +
+          '<a href="#how" class="btn btn-outline">En savoir plus</a>' +
+        '</div>' +
+      '</div>' +
+      '<div class="hero-visual">' +
+        '<svg class="hero-wolf-icon" width="180" height="180" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg"><g transform="translate(14,10)"><path d="M6 56 L16 8 L26 26 L36 8 L46 56 L36 46 L26 52 L16 46 Z" fill="rgba(255,255,255,0.95)"/><circle cx="20" cy="34" r="3" fill="rgba(255,255,255,0.3)"/><circle cx="32" cy="34" r="3" fill="rgba(255,255,255,0.3)"/></g></svg>' +
+        '<div class="hero-badge">' +
+          '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:.8;flex-shrink:0"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>' +
+          '<div>8+ portails suisses<small>Homegate, ImmoScout24, Flatfox...</small></div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(hero);
+
+    // STATS BAR
+    var statsBar = ce('div', 'stats-bar');
+    statsBar.innerHTML =
+      '<div class="stats-bar-inner">' +
+        '<div><strong>8+</strong><span>Portails suisses</span></div>' +
+        '<div><strong>500+</strong><span>Annonces analysees</span></div>' +
+        '<div><strong>6</strong><span>Criteres de scoring</span></div>' +
+        '<div><strong>24/7</strong><span>Veille automatique</span></div>' +
+      '</div>';
+    document.body.appendChild(statsBar);
+
+    // FEATURES
+    var features = ce('section', 'features');
+    features.id = 'features';
+    features.innerHTML =
+      '<div class="features-header"><h2>Pourquoi Lou Garou ?</h2><p>Un assistant immobilier complet, de la recherche a la prise de contact.</p></div>' +
+      '<div class="features-grid">' +
+        featureCard('<circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>', 'Scraping multi-portails', 'Lou scrute automatiquement Homegate, ImmoScout24, Flatfox, Immobilier.ch, Properstar et bien d\'autres pour ne rien manquer.') +
+        featureCard('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>', 'Scoring intelligent', 'Chaque annonce est notee de A a D selon vos criteres : zone, budget, type, surface, equipements, fraicheur.') +
+        featureCard('<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>', 'Chatbot IA', 'Discutez avec Lou pour definir vos criteres de recherche de maniere naturelle. Il comprend vos besoins et affine votre profil.') +
+        featureCard('<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>', 'Recherche par zone', 'Definissez une ou plusieurs zones geographiques avec un rayon en km. Lou calcule la distance GPS pour chaque bien.') +
+        featureCard('<path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/>', 'Alertes en temps reel', 'Soyez averti des qu\'un nouveau bien correspondant a vos criteres apparait sur le marche.') +
+        featureCard('<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="2" width="4" height="19" rx="1"/>', 'Dashboard complet', 'Visualisez tous vos resultats, filtrez par score, triez par prix ou date, et gardez vos favoris.') +
+      '</div>';
+    document.body.appendChild(features);
+
+    // HOW IT WORKS
+    var how = ce('section', 'how');
+    how.id = 'how';
+    how.innerHTML =
+      '<div class="how-inner">' +
+        '<h2>Comment ca marche ?</h2>' +
+        '<div class="steps">' +
+          '<div class="step"><div class="step-num">1</div><h3>Parlez a Lou</h3><p>Dites-lui ce que vous cherchez : region, budget, type de bien, nombre de pieces...</p></div>' +
+          '<div class="step"><div class="step-num">2</div><h3>Lou chasse pour vous</h3><p>Notre moteur scrute 8+ portails immobiliers suisses en continu et collecte les nouvelles annonces.</p></div>' +
+          '<div class="step"><div class="step-num">3</div><h3>Scoring & analyse</h3><p>Chaque bien est note selon 6 criteres ponderes. Seuls les meilleurs vous sont presentes.</p></div>' +
+          '<div class="step"><div class="step-num">4</div><h3>Contactez & visitez</h3><p>Retrouvez les coordonnees du proprietaire, l\'annonce originale et tous les details en un clic.</p></div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(how);
+
+    // CTA
+    var ctaSection = ce('section', 'cta');
+    ctaSection.innerHTML =
+      '<h2>Pret a trouver votre bien ?</h2>' +
+      '<p>Rejoignez Lou Garou et laissez l\'IA faire le travail de recherche pour vous.</p>' +
+      '<a href="#" class="btn btn-primary" id="cta-bottom">Commencer gratuitement</a>';
+    document.body.appendChild(ctaSection);
+
+    // FOOTER
+    var footer = ce('footer', 'footer');
+    footer.innerHTML =
+      '<div class="footer-inner">' +
+        '<p>&copy; 2026 Lou Garou. Chasseur immobilier IA en Suisse.</p>' +
+        '<div class="footer-links"><a href="#">Confidentialite</a><a href="#">Conditions</a><a href="#">Contact</a></div>' +
+      '</div>';
+    document.body.appendChild(footer);
+
+    // Hook CTAs + chat
+    initLanding();
+  }
+
+  function featureCard(svgInner, title, desc) {
+    return '<div class="feature-card">' +
+      '<div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#0369a1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + svgInner + '</svg></div>' +
+      '<h3>' + title + '</h3>' +
+      '<p>' + desc + '</p>' +
+    '</div>';
+  }
+
+  // ============================================================
+  // LANDING CSS (for Webflow / external hosts)
+  // ============================================================
+  function getLandingCSS() {
+    return [
+      '*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}',
+      ':root{--dark:#0f172a;--blue:#0369a1;--blue-light:#0ea5e9;--gray-50:#f8fafc;--gray-100:#f1f5f9;--gray-300:#cbd5e1;--gray-500:#64748b;--gray-700:#334155;--white:#fff;--green:#059669;--radius:12px}',
+      'body{font-family:"Inter",system-ui,sans-serif;color:var(--dark);background:var(--white);-webkit-font-smoothing:antialiased}',
+      'h1,h2,h3{font-family:"Playfair Display",Georgia,serif}',
+
+      '.nav{display:flex;justify-content:space-between;align-items:center;padding:18px 5%;max-width:1280px;margin:0 auto}',
+      '.nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--dark)}',
+      '.nav-logo .logo-wolf{width:36px;height:36px;flex-shrink:0}',
+      '.nav-logo .logo-text{font-family:"Playfair Display",Georgia,serif;font-size:22px;font-weight:800}',
+      '.nav-links{display:flex;align-items:center;gap:32px}',
+      '.nav-links a{text-decoration:none;color:var(--gray-700);font-size:15px;font-weight:500;transition:color .2s}',
+      '.nav-links a:hover{color:var(--blue)}',
+      '.btn{display:inline-block;padding:10px 24px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;text-decoration:none;border:none;transition:all .2s}',
+      '.btn-primary{background:var(--blue);color:var(--white)}',
+      '.btn-primary:hover{background:var(--blue-light);transform:translateY(-1px);box-shadow:0 4px 16px rgba(3,105,161,.3)}',
+      '.btn-outline{background:transparent;color:var(--blue);border:2px solid var(--blue)}',
+      '.btn-outline:hover{background:var(--blue);color:var(--white)}',
+
+      '.hero{display:flex;align-items:center;justify-content:space-between;max-width:1280px;margin:0 auto;padding:60px 5% 80px;gap:60px}',
+      '.hero-text{max-width:560px}',
+      '.hero-text h1{font-size:52px;line-height:1.15;margin-bottom:20px;letter-spacing:-0.5px}',
+      '.hero-text h1 em{font-style:normal;color:var(--blue)}',
+      '.hero-text p{font-size:18px;line-height:1.7;color:var(--gray-500);margin-bottom:32px}',
+      '.hero-ctas{display:flex;gap:16px;align-items:center}',
+      '.hero-visual{flex-shrink:0;width:440px;height:380px;background:linear-gradient(135deg,var(--blue) 0%,#0c4a6e 100%);border-radius:24px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}',
+      '.hero-visual::before{content:"";position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cdefs%3E%3Cpattern id=\'g\' width=\'60\' height=\'60\' patternUnits=\'userSpaceOnUse\'%3E%3Cpath d=\'M0 30h60M30 0v60\' stroke=\'rgba(255,255,255,.06)\' stroke-width=\'1\'/%3E%3C/pattern%3E%3C/defs%3E%3Crect width=\'60\' height=\'60\' fill=\'url(%23g)\'/%3E%3C/svg%3E")}',
+      '.hero-wolf-icon{z-index:1;filter:drop-shadow(0 8px 32px rgba(0,0,0,.3))}',
+      '.hero-badge{position:absolute;bottom:24px;left:24px;background:rgba(255,255,255,.15);backdrop-filter:blur(8px);border-radius:12px;padding:12px 18px;color:var(--white);font-size:14px;font-weight:600;z-index:1;display:flex;align-items:center;gap:10px}',
+      '.hero-badge small{display:block;font-weight:400;font-size:12px;opacity:.8;margin-top:2px}',
+
+      '.stats-bar{background:var(--gray-50);border-top:1px solid var(--gray-100);border-bottom:1px solid var(--gray-100)}',
+      '.stats-bar-inner{max-width:1280px;margin:0 auto;padding:32px 5%;display:flex;justify-content:space-around;gap:24px;text-align:center}',
+      '.stats-bar-inner div strong{display:block;font-size:28px;font-family:"Playfair Display",serif;color:var(--blue)}',
+      '.stats-bar-inner div span{font-size:14px;color:var(--gray-500)}',
+
+      '.features{max-width:1280px;margin:0 auto;padding:80px 5%}',
+      '.features-header{text-align:center;margin-bottom:56px}',
+      '.features-header h2{font-size:36px;margin-bottom:12px}',
+      '.features-header p{font-size:16px;color:var(--gray-500);max-width:560px;margin:0 auto}',
+      '.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:32px}',
+      '.feature-card{background:var(--white);border:1px solid var(--gray-100);border-radius:16px;padding:32px;transition:all .3s}',
+      '.feature-card:hover{border-color:var(--blue);box-shadow:0 8px 32px rgba(3,105,161,.08);transform:translateY(-4px)}',
+      '.feature-icon{width:48px;height:48px;background:rgba(3,105,161,.1);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px}',
+      '.feature-icon svg{width:24px;height:24px}',
+      '.feature-card h3{font-size:20px;margin-bottom:8px;font-family:"Playfair Display",serif}',
+      '.feature-card p{font-size:14px;color:var(--gray-500);line-height:1.7}',
+
+      '.how{background:var(--dark);color:var(--white);padding:80px 5%}',
+      '.how-inner{max-width:1280px;margin:0 auto}',
+      '.how-inner h2{text-align:center;font-size:36px;margin-bottom:56px}',
+      '.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:32px}',
+      '.step{text-align:center}',
+      '.step-num{width:48px;height:48px;border-radius:50%;background:var(--blue);color:var(--white);display:inline-flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;margin-bottom:16px}',
+      '.step h3{font-size:18px;margin-bottom:8px;font-family:"Playfair Display",serif}',
+      '.step p{font-size:14px;color:var(--gray-300);line-height:1.6}',
+
+      '.cta{text-align:center;max-width:1280px;margin:0 auto;padding:80px 5%}',
+      '.cta h2{font-size:36px;margin-bottom:16px}',
+      '.cta p{font-size:16px;color:var(--gray-500);margin-bottom:32px;max-width:480px;margin-left:auto;margin-right:auto}',
+
+      '.footer{background:var(--gray-50);border-top:1px solid var(--gray-100);padding:40px 5%;text-align:center}',
+      '.footer-inner{max-width:1280px;margin:0 auto;display:flex;justify-content:space-between;align-items:center}',
+      '.footer p{font-size:13px;color:var(--gray-500)}',
+      '.footer-links{display:flex;gap:24px}',
+      '.footer-links a{font-size:13px;color:var(--gray-500);text-decoration:none}',
+      '.footer-links a:hover{color:var(--blue)}',
+
+      '.lou-overlay{position:fixed;inset:0;background:rgba(15,23,42,.7);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(4px)}',
+      '.lou-auth-box{background:#fff;border-radius:16px;padding:36px;width:400px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,.3);position:relative;color:#0f172a}',
+      '.lou-auth-box .close-btn{position:absolute;top:12px;right:16px;background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8}',
+      '.lou-auth-box .close-btn:hover{color:#0f172a}',
+      '.lou-auth-box h2{font-size:24px;margin:0 0 4px;font-family:"Playfair Display",Georgia,serif}',
+      '.lou-auth-box .sub{font-size:14px;color:#64748b;margin-bottom:20px}',
+      '.lou-auth-box input{width:100%;padding:12px 14px;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:12px;font-size:14px;box-sizing:border-box;outline:none;font-family:"Inter",sans-serif}',
+      '.lou-auth-box input:focus{border-color:#0369a1;box-shadow:0 0 0 3px rgba(3,105,161,.1)}',
+      '.auth-submit{width:100%;padding:13px;border:none;border-radius:10px;background:#0369a1;color:#fff;font-size:15px;font-weight:600;cursor:pointer;transition:background .2s;font-family:"Inter",sans-serif}',
+      '.auth-submit:hover{background:#0284c7}',
+      '.lou-auth-switch{text-align:center;margin-top:14px;font-size:13px;color:#64748b}',
+      '.lou-auth-switch a{color:#0369a1;cursor:pointer;text-decoration:underline}',
+      '.lou-auth-err{color:#dc2626;font-size:13px;margin-top:8px;display:none;text-align:center}',
+
+      '@media(max-width:900px){.hero{flex-direction:column;text-align:center;padding:40px 5% 60px}.hero-text h1{font-size:36px}.hero-ctas{justify-content:center}.hero-visual{width:100%;max-width:360px;height:280px}.features-grid{grid-template-columns:1fr}.steps{grid-template-columns:repeat(2,1fr)}.nav-links{gap:16px}.footer-inner{flex-direction:column;gap:12px}}',
+      '@media(max-width:600px){.nav-links a:not(.btn){display:none}.stats-bar-inner{flex-wrap:wrap}.steps{grid-template-columns:1fr}}'
+    ].join('');
   }
 
   // ============================================================
@@ -178,7 +404,7 @@
   // ============================================================
   function showDashboard() {
     if (!isJWT(TOKEN) || !USER) {
-      window.location.href = '/';
+      window.location.reload();
       return;
     }
 
@@ -242,7 +468,7 @@
     $('logout-btn').onclick = function () {
       localStorage.removeItem('lou_token');
       localStorage.removeItem('lou_user');
-      window.location.href = '/';
+      window.location.reload();
     };
 
     // Load data
@@ -708,11 +934,28 @@
   // ROUTER — Determine which page to show
   // ============================================================
   var path = window.location.pathname;
+  var isRender = window.location.hostname === 'lou-platform.onrender.com' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
   if (path === '/dashboard') {
     showDashboard();
+  } else if (!isRender) {
+    // External host (Webflow etc.)
+    // If user is logged in, show dashboard; otherwise show landing page
+    if (isJWT(TOKEN) && USER) {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', showDashboard);
+      } else {
+        showDashboard();
+      }
+    } else {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', showLanding);
+      } else {
+        showLanding();
+      }
+    }
   } else {
-    // Landing page — hook CTAs
+    // Render host — HTML already exists, just hook CTAs
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', initLanding);
     } else {
