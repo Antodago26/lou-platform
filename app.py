@@ -658,9 +658,25 @@ def api_scrape_debug():
         "key_from_scrapers": SCRAPINGBEE_KEY[:8] + '...' if SCRAPINGBEE_KEY else 'EMPTY',
     }
 
-    # Test ScrapingBee with Homegate (stealth proxy + JS)
+    # Test ScrapingBee with Homegate - try both modes
     url = f"https://www.homegate.ch/rent/real-estate/city-lausanne/matching-list"
-    status, html = _sb_get(url, render_js=True)
+
+    # Test 1: stealth proxy WITHOUT JS
+    status1, html1 = _sb_get(url, render_js=False)
+    results["homegate_no_js"] = {
+        "http_status": status1,
+        "html_size": len(html1) if html1 else 0,
+        "has_NEXT_DATA": '__NEXT_DATA__' in html1 if html1 else False,
+        "has_cloudflare": 'Just a moment' in html1 if html1 else False,
+        "html_start": html1[:200] if html1 else '',
+    }
+
+    # Test 2: stealth proxy WITH JS (only if test 1 failed)
+    status = status1
+    html = html1
+    if status1 != 200 or ('Just a moment' in html1 if html1 else True):
+        status, html = _sb_get(url, render_js=True)
+
     has_next = '__NEXT_DATA__' in html if html else False
     has_cloudflare = 'Just a moment' in html if html else False
 

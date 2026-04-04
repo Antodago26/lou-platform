@@ -65,9 +65,12 @@ def _sb_get(url, render_js=False):
         params['wait'] = 3000
 
     try:
-        r = requests.get(SCRAPINGBEE_URL, params=params, timeout=60)
+        r = requests.get(SCRAPINGBEE_URL, params=params, timeout=180)
         log.info(f"[ScrapingBee] {url[:60]}... → HTTP {r.status_code} ({len(r.text)} bytes)")
         return r.status_code, r.text
+    except requests.exceptions.Timeout:
+        log.error(f"[ScrapingBee] TIMEOUT fetching {url}")
+        return 0, ''
     except Exception as e:
         log.error(f"[ScrapingBee] Error fetching {url}: {e}")
         return 0, ''
