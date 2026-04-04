@@ -671,34 +671,67 @@ def api_scrape_debug():
         except Exception as e:
             results["httpbin_test"] = {"error": str(e)}
 
-        # Test 2: Homegate stealth proxy WITHOUT JS
+        # Test 2: Homegate stealth proxy WITHOUT JS + HTML structure analysis
         url = f"https://www.homegate.ch/rent/real-estate/city-lausanne/matching-list"
         try:
+            from bs4 import BeautifulSoup
             status1, html1 = _sb_get(url, render_js=False)
             results["homegate_no_js"] = {
                 "http_status": status1,
                 "html_size": len(html1) if html1 else 0,
                 "has_NEXT_DATA": '__NEXT_DATA__' in html1 if html1 else False,
                 "has_cloudflare": 'Just a moment' in html1 if html1 else False,
-                "html_start": html1[:300] if html1 else '',
             }
+
+            # Analyze HTML structure to find listing cards
+            if status1 == 200 and html1:
+                soup = BeautifulSoup(html1, 'lxml')
+
+                # Try various selectors
+                selectors = {
+                    'a[href*="/rent/"]': len(soup.select('a[href*="/rent/"]')),
+                    'a[href*="/buy/"]': len(soup.select('a[href*="/buy/"]')),
+                    'article': len(soup.select('article')),
+                    '[data-test]': len(soup.select('[data-test]')),
+                    '[class*="ListItem"]': len(soup.select('[class*="ListItem"]')),
+                    '[class*="listing"]': len(soup.select('[class*="listing"]')),
+                    '[class*="card"]': len(soup.select('[class*="card"]')),
+                    '[class*="Card"]': len(soup.select('[class*="Card"]')),
+                    '[class*="result"]': len(soup.select('[class*="result"]')),
+                    '[class*="Result"]': len(soup.select('[class*="Result"]')),
+                    '[class*="property"]': len(soup.select('[class*="property"]')),
+                    '[class*="Property"]': len(soup.select('[class*="Property"]')),
+                    '[class*="Hg"]': len(soup.select('[class*="Hg"]')),
+                    'h3': len(soup.select('h3')),
+                    'h2': len(soup.select('h2')),
+                }
+                results["selectors_count"] = selectors
+
+                # Show first few rent links
+                rent_links = soup.select('a[href*="/rent/"]')[:5]
+                results["sample_rent_links"] = [
+                    {"href": a.get('href', ''), "text": a.get_text(strip=True)[:100]}
+                    for a in rent_links
+                ]
+
+                # Show data-test attributes found
+                data_tests = set()
+                for el in soup.select('[data-test]')[:30]:
+                    data_tests.add(el.get('data-test', ''))
+                results["data_test_attrs"] = list(data_tests)[:20]
+
+                # Show first few class names containing "Hg" or "card" or "list"
+                interesting_classes = set()
+                for el in soup.select('[class]')[:500]:
+                    for cls in el.get('class', []):
+                        if any(kw in cls.lower() for kw in ['hg', 'card', 'list', 'item', 'result', 'property']):
+                            interesting_classes.add(cls)
+                results["interesting_classes"] = sorted(list(interesting_classes))[:30]
+
         except Exception as e:
             results["homegate_no_js"] = {"error": str(e)}
-            status1, html1 = 0, ''
-
-        # Test 3: Homegate stealth proxy WITH JS (only if test 2 failed)
-        if status1 != 200 or ('Just a moment' in html1 if html1 else True):
-            try:
-                status, html = _sb_get(url, render_js=True)
-                results["homegate_with_js"] = {
-                    "http_status": status,
-                    "html_size": len(html) if html else 0,
-                    "has_NEXT_DATA": '__NEXT_DATA__' in html if html else False,
-                    "has_cloudflare": 'Just a moment' in html if html else False,
-                    "html_start": html[:300] if html else '',
-                }
-            except Exception as e:
-                results["homegate_with_js"] = {"error": str(e)}
+            import traceback
+            results["homegate_no_js_traceback"] = traceback.format_exc()
 
         return jsonify(results)
 
