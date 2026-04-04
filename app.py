@@ -683,20 +683,24 @@ def api_scrape_debug():
             }
 
             if status1 == 200 and html1:
-                # Find all hrefs patterns
-                all_hrefs = re2.findall(r'href="(/[^"]{5,60})"', html1)
-                unique_hrefs = list(set(all_hrefs))[:30]
-                results["sample_hrefs"] = sorted(unique_hrefs)
+                # Count result-list-items
+                results["total_cards"] = len(re2.findall(r'data-test="result-list-item"', html1))
 
-                # Extract HTML around first result-list-item (2000 chars)
+                # Find href patterns (just unique patterns, not full list)
+                rent_hrefs = re2.findall(r'href="(/rent/[^"]+)"', html1)[:3]
+                listing_hrefs = re2.findall(r'href="(/listing[^"]+)"', html1)[:3]
+                detail_hrefs = re2.findall(r'href="([^"]*\d{6,}[^"]*)"', html1)[:5]
+                results["hrefs"] = {
+                    "rent": rent_hrefs,
+                    "listing": listing_hrefs,
+                    "with_id": detail_hrefs,
+                }
+
+                # Extract SMALL chunk around first card (800 chars only)
                 marker = re2.search(r'data-test="result-list-item"', html1)
                 if marker:
-                    start = max(0, marker.start() - 100)
-                    end = min(len(html1), marker.start() + 2000)
-                    results["first_card_html"] = html1[start:end]
-
-                # Count result-list-items
-                results["total_result_items"] = len(re2.findall(r'data-test="result-list-item"', html1))
+                    s = marker.start()
+                    results["card_sample"] = html1[s:s+800]
 
         except Exception as e:
             results["homegate"] = {"error": str(e)}
