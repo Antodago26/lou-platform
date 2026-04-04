@@ -643,6 +643,79 @@ def api_import():
     })
 
 
+@app.route('/api/score', methods=['POST'])
+@token_required
+def api_score():
+    """Score all properties for the current user's profile."""
+    import traceback
+    try:
+        from scoring_engine import score_property
+        conn = get_db()
+        cur = conn.cursor()
+
+        # Get user's active profile
+        cur.execute("""
+            SELECT * FROM search_profiles
+            WHERE user_id = %s AND is_active = TRUE
+            ORDER BY created_at DESC LIMIT 1
+        """, (request.user_id,))
+        profile = cur.fetchone()
+        if not profile:
+            return jsonify({"error": "Aucun profil trouvé"}), 400
+
+        profile = dict(profile)
+
+        # Get zones
+        cur.execute("SELECT * FROM search_zones WHERE profile_id = %s", (profile['id'],))
+        zones = [dict(z) for z in cur.fetchall()]
+
+        # Get all active properties
+        cur.execute("SELECT * FROM properties WHERE is_active = TRUE")
+        properties = cur.fetchall()
+
+        scored = 0
+        for prop in properties:
+            prop = dict(prop)
+            result = score_property(prop, profile, zones)
+
+            cur.execute("""
+                INSERT INTO scored_properties
+                    (property_id, profile_id, user_id, total_score, grade,
+                     score_zone, score_budget, score_type, score_surface,
+                     score_equipment, score_freshness, distance_km)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (property_id, profile_id)
+                DO UPDATE SET
+                    total_score = EXCLUDED.total_score,
+                    grade = EXCLUDED.grade,
+                    score_zone = EXCLUDED.score_zone,
+                    score_budget = EXCLUDED.score_budget,
+                    score_type = EXCLUDED.score_type,
+                    score_surface = EXCLUDED.score_surface,
+                    score_equipment = EXCLUDED.score_equipment,
+                    score_freshness = EXCLUDED.score_freshness,
+                    distance_km = EXCLUDED.distance_km,
+                    scored_at = NOW()
+            """, (
+                prop['id'], profile['id'], request.user_id,
+                result['total_score'], result['grade'],
+                result['score_zone'], result['score_budget'],
+                result['score_type'], result['score_surface'],
+                result['score_equipment'], result['score_freshness'],
+                result['distance_km']
+            ))
+            scored += 1
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        return jsonify({"ok": True, "scored": scored, "profile_id": profile['id']})
+
+    except Exception as e:
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+
+
 @app.route('/api/scrape/debug', methods=['GET'])
 def api_scrape_debug():
     """Test ScrapingBee with a single Homegate request."""
