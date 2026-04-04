@@ -552,6 +552,73 @@ def chat_reset():
 
 
 # ============================================================
+# SCRAPING
+# ============================================================
+
+@app.route('/api/scrape', methods=['POST'])
+@token_required
+def api_scrape():
+    """Trigger scraping based on user's search profile zones."""
+    from scrapers import scrape_all, save_to_db
+
+    data = request.json or {}
+    city = data.get('city')
+    transaction = data.get('transaction', 'location')
+
+    # If no city specified, use the user's profile zones
+    if not city:
+        conn = get_db()
+        cur = conn.cursor()
+        try:
+            cur.execute("""
+                SELECT sz.city FROM search_zones sz
+                JOIN search_profiles sp ON sp.id = sz.profile_id
+                WHERE sp.user_id = %s AND sp.is_active = TRUE
+            """, (request.user_id,))
+            rows = cur.fetchall()
+            cities = [r['city'] for r in rows if r['city']]
+            if not cities:
+                return jsonify({"error": "Aucune zone configuree. Ajoutez des zones dans votre profil."}), 400
+
+            # Also get transaction from profile
+            cur.execute("""
+                SELECT transaction FROM search_profiles
+                WHERE user_id = %s AND is_active = TRUE
+                ORDER BY created_at DESC LIMIT 1
+            """, (request.user_id,))
+            prof = cur.fetchone()
+            if prof and prof['transaction']:
+                transaction = prof['transaction']
+        finally:
+            cur.close()
+            conn.close()
+    else:
+        cities = [city]
+
+    # Scrape for each city
+    total_scraped = 0
+    total_saved = 0
+    details = []
+    conn = get_db()
+    try:
+        for c in cities:
+            listings = scrape_all(city=c, transaction=transaction)
+            total_scraped += len(listings)
+            saved = save_to_db(conn, listings)
+            total_saved += saved
+            details.append({"city": c, "scraped": len(listings), "saved": saved})
+    finally:
+        conn.close()
+
+    return jsonify({
+        "ok": True,
+        "total_scraped": total_scraped,
+        "total_saved": total_saved,
+        "details": details
+    })
+
+
+# ============================================================
 # HELPERS
 # ============================================================
 
