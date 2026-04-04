@@ -135,17 +135,34 @@ def scrape_flatfox(city="Lausanne", transaction="location", limit=30):
     results = []
 
     offer_type = 'RENT' if transaction == 'location' else 'SALE'
-    api_url = "https://flatfox.ch/api/v1/public/listings/"
+
+    # Try multiple API endpoints (Flatfox has changed their API over time)
+    endpoints = [
+        "https://flatfox.ch/api/v1/flat/",
+        "https://flatfox.ch/api/v1/public/listings/",
+        "https://flatfox.ch/api/v1/public/search/listings/",
+    ]
+
+    resp = None
+    for api_url in endpoints:
+        try:
+            resp = requests.get(api_url, headers=HEADERS, params={
+                'city': city,
+                'offer_type': offer_type,
+                'ordering': '-created',
+                'limit': limit,
+            }, timeout=20)
+            log.info(f"[Flatfox] {api_url} → HTTP {resp.status_code}")
+            if resp.status_code == 200 and resp.headers.get('content-type', '').startswith('application/json'):
+                break  # Found working endpoint
+        except Exception as e:
+            log.warning(f"[Flatfox] {api_url} failed: {e}")
+            resp = None
 
     try:
-        resp = requests.get(api_url, headers=HEADERS, params={
-            'city': city,
-            'offer_type': offer_type,
-            'ordering': '-created',
-            'limit': limit,
-        }, timeout=20)
-
-        log.info(f"[Flatfox] HTTP {resp.status_code}")
+        if not resp or resp.status_code != 200:
+            log.warning(f"[Flatfox] No working endpoint found")
+            return results
 
         if resp.status_code == 200:
             data = resp.json()

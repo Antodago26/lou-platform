@@ -632,16 +632,21 @@ def api_scrape_test():
     }
     results = {}
 
-    # 1. Flatfox
-    try:
-        r = req.get('https://flatfox.ch/api/v1/public/listings/',
-                     headers=headers,
-                     params={'city': city, 'offer_type': 'RENT', 'ordering': '-created', 'limit': 3},
-                     timeout=15)
-        body = r.text[:500]
-        results['Flatfox'] = {"http": r.status_code, "body_preview": body}
-    except Exception as e:
-        results['Flatfox'] = {"error": str(e)}
+    # 1. Flatfox — test multiple endpoints
+    for endpoint_name, url in [
+        ('Flatfox_v1_flat', 'https://flatfox.ch/api/v1/flat/'),
+        ('Flatfox_v1_public', 'https://flatfox.ch/api/v1/public/listings/'),
+        ('Flatfox_search', 'https://flatfox.ch/api/v1/public/search/listings/'),
+    ]:
+        try:
+            r = req.get(url, headers=headers,
+                        params={'city': city, 'offer_type': 'RENT', 'ordering': '-created', 'limit': 3},
+                        timeout=15)
+            body = r.text[:500]
+            is_json = r.headers.get('content-type', '').startswith('application/json')
+            results[endpoint_name] = {"http": r.status_code, "is_json": is_json, "body_preview": body}
+        except Exception as e:
+            results[endpoint_name] = {"error": str(e)}
 
     # 2. Homegate API
     try:
