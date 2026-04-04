@@ -34,7 +34,7 @@
     overlay.innerHTML = [
       '<div class="lou-auth-box">',
       '<button class="close-btn" id="lou-auth-close">&times;</button>',
-      '<h2>Lou Garou</h2>',
+      '<h2><svg style="width:28px;height:28px;vertical-align:middle;margin-right:8px" viewBox="0 0 28 28" fill="none"><rect width="28" height="28" rx="7" fill="#0369a1"/><path d="M7 20 L10.5 9 L12 14 L14 6 L16 14 L17.5 9 L21 20 Z" fill="#fff" opacity="0.95"/><circle cx="12" cy="15.5" r="1" fill="#0369a1"/><circle cx="16" cy="15.5" r="1" fill="#0369a1"/></svg>Lou Garou</h2>',
       '<div class="sub">Votre chasseur immobilier IA en Suisse</div>',
       '<input id="lou-auth-email" type="email" placeholder="Email">',
       '<input id="lou-auth-pass" type="password" placeholder="Mot de passe">',
@@ -160,7 +160,7 @@
     // NAV
     var nav = ce('div', 'dash-nav');
     nav.innerHTML =
-      '<a href="/" class="dash-nav-brand">Lou Garou</a>' +
+      '<a href="/" class="dash-nav-brand"><svg class="dash-logo-icon" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="28" height="28" rx="7" fill="#0369a1"/><path d="M7 20 L10.5 9 L12 14 L14 6 L16 14 L17.5 9 L21 20 Z" fill="#fff" opacity="0.95"/><circle cx="12" cy="15.5" r="1" fill="#0369a1"/><circle cx="16" cy="15.5" r="1" fill="#0369a1"/></svg> Lou Garou</a>' +
       '<div class="dash-nav-right">' +
         '<span class="dash-user-email">' + escapeHtml(USER.email || '') + '</span>' +
         '<button class="dash-logout-btn" id="logout-btn">Deconnexion</button>' +
@@ -454,7 +454,7 @@
   // CHAT WIDGET
   // ============================================================
   function initChat() {
-    var toggle = ce('button', 'chat-toggle', '&#x1F43A;');
+    var toggle = ce('button', 'chat-toggle', '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 18 L8.5 7 L10 12 L12 3 L14 12 L15.5 7 L19 18 Z" fill="#fff" opacity="0.95"/><circle cx="10" cy="13.5" r="1" fill="#fff" opacity="0.5"/><circle cx="14" cy="13.5" r="1" fill="#fff" opacity="0.5"/></svg>');
     document.body.appendChild(toggle);
 
     var panel = ce('div', 'chat-panel');
@@ -463,7 +463,7 @@
       '<div class="chat-body" id="chat-body">' +
         '<div class="chat-msg bot">Bonjour ! Je suis Lou, votre assistant immobilier. Comment puis-je vous aider ?</div>' +
       '</div>' +
-      '<div class="chat-input"><input id="chat-in" type="text" placeholder="Votre question..."><button id="chat-send">&#x27A4;</button></div>';
+      '<div class="chat-input"><input id="chat-in" type="text" placeholder="Votre question..."><button id="chat-send"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button></div>';
     document.body.appendChild(panel);
 
     toggle.onclick = function () {
@@ -546,7 +546,8 @@
 
       // Nav
       '.dash-nav{background:#0f172a;padding:14px 32px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100}',
-      '.dash-nav-brand{color:#fff;font-size:20px;font-weight:800;font-family:"Playfair Display",Georgia,serif;text-decoration:none}',
+      '.dash-nav-brand{color:#fff;font-size:20px;font-weight:800;font-family:"Playfair Display",Georgia,serif;text-decoration:none;display:flex;align-items:center;gap:10px}',
+      '.dash-logo-icon{width:30px;height:30px;flex-shrink:0}',
       '.dash-nav-right{display:flex;align-items:center;gap:16px}',
       '.dash-user-email{color:#94a3b8;font-size:13px}',
       '.dash-logout-btn{background:none;border:1px solid #475569;color:#94a3b8;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px;transition:all .2s}',
