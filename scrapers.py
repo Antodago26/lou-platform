@@ -1,27 +1,30 @@
 """
-Lou Garou — Scrapers immobiliers suisses (v2 — API-based)
-Utilise les APIs JSON des portails au lieu du scraping HTML.
+Lou Garou — Scrapers immobiliers suisses (v3 — ScrapingBee)
+Utilise ScrapingBee pour contourner Cloudflare et scraper tous les portails.
+
+Portails couverts:
+  - Homegate, ImmoScout24, Immobilier.ch, Anibis, Acheter-Louer
+  - Flatfox (API directe), Comparis, Properstar
 
 Usage:
     from scrapers import scrape_all
     results = scrape_all(city="Lausanne", transaction="location")
 """
 
+import os
 import re
 import json
 import time
 import logging
 import requests
+from bs4 import BeautifulSoup
 from datetime import datetime
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger('lou-scrapers')
 
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    'Accept-Language': 'fr-CH,fr;q=0.9',
-    'Accept': 'application/json, text/plain, */*',
-}
+SCRAPINGBEE_KEY = os.environ.get('SCRAPINGBEE_API_KEY', '')
+SCRAPINGBEE_URL = 'https://app.scrapingbee.com/api/v1'
 
 # Swiss city → canton mapping
 CITY_CANTONS = {
@@ -30,31 +33,49 @@ CITY_CANTONS = {
     'nyon': 'VD', 'morges': 'VD', 'yverdon': 'VD', 'yverdon-les-bains': 'VD',
     'la chaux-de-fonds': 'NE', 'bienne': 'BE', 'biel': 'BE',
     'delemont': 'JU', 'delémont': 'JU', 'berne': 'BE', 'bern': 'BE',
-    'peseux': 'NE', 'marin-epagnier': 'NE', 'vevey': 'VD',
-    'renens': 'VD', 'boudry': 'NE', 'colombier': 'NE', 'zurich': 'ZH',
-    'zürich': 'ZH', 'basel': 'BS', 'bâle': 'BS', 'lugano': 'TI',
-    'lucerne': 'LU', 'luzern': 'LU', 'winterthur': 'ZH', 'st. gallen': 'SG',
-    'thun': 'BE', 'biel/bienne': 'BE', 'köniz': 'BE', 'la chaux de fonds': 'NE',
-    'schaffhausen': 'SH', 'chur': 'GR', 'uster': 'ZH', 'vernier': 'GE',
-    'lancy': 'GE', 'emmen': 'LU', 'kriens': 'LU', 'rapperswil-jona': 'SG',
+    'vevey': 'VD', 'renens': 'VD', 'zurich': 'ZH', 'zürich': 'ZH',
+    'basel': 'BS', 'bâle': 'BS', 'lugano': 'TI', 'lucerne': 'LU',
+    'luzern': 'LU', 'winterthur': 'ZH', 'st. gallen': 'SG',
     'carouge': 'GE', 'meyrin': 'GE', 'prilly': 'VD', 'pully': 'VD',
     'ecublens': 'VD', 'sierre': 'VS', 'martigny': 'VS',
 }
 
-# City name → Homegate slug mapping (for URL construction)
-CITY_SLUGS_HG = {
-    'lausanne': 'lausanne', 'genève': 'geneve', 'geneve': 'geneve',
-    'neuchâtel': 'neuchatel', 'neuchatel': 'neuchatel',
-    'fribourg': 'fribourg', 'berne': 'bern', 'zürich': 'zurich',
-    'zurich': 'zurich', 'bâle': 'basel', 'basel': 'basel',
-}
+
+def _sb_get(url, render_js=False):
+    """Fetch a URL via ScrapingBee. Returns (status_code, html_text)."""
+    if not SCRAPINGBEE_KEY:
+        log.warning("SCRAPINGBEE_API_KEY not set — falling back to direct request")
+        try:
+            r = requests.get(url, headers={
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+            }, timeout=15)
+            return r.status_code, r.text
+        except Exception as e:
+            log.error(f"Direct request failed: {e}")
+            return 0, ''
+
+    params = {
+        'api_key': SCRAPINGBEE_KEY,
+        'url': url,
+        'render_js': 'true' if render_js else 'false',
+        'country_code': 'ch',
+    }
+    if render_js:
+        params['wait'] = 3000  # Wait 3s for JS to render
+
+    try:
+        r = requests.get(SCRAPINGBEE_URL, params=params, timeout=60)
+        log.info(f"[ScrapingBee] {url[:60]}... → HTTP {r.status_code} ({len(r.text)} bytes)")
+        return r.status_code, r.text
+    except Exception as e:
+        log.error(f"[ScrapingBee] Error fetching {url}: {e}")
+        return 0, ''
 
 
 def _make_property(external_id, source, source_url, title, description,
                    property_type, transaction, price, rooms, surface,
                    floor, address, city, canton, postal_code,
-                   latitude, longitude, features, images,
-                   published_at):
+                   latitude, longitude, features, images, published_at):
     """Create a standardized property dict."""
     return {
         'external_id': str(external_id),
@@ -72,22 +93,19 @@ def _make_property(external_id, source, source_url, title, description,
         'floor': floor,
         'address': address or '',
         'city': city,
-        'canton': canton or CITY_CANTONS.get(city.lower(), ''),
+        'canton': canton or CITY_CANTONS.get((city or '').lower(), ''),
         'postal_code': postal_code,
         'latitude': latitude,
         'longitude': longitude,
         'features': features or [],
         'images': images or [],
-        'contact_name': None,
-        'contact_phone': None,
-        'contact_email': None,
+        'contact_name': None, 'contact_phone': None, 'contact_email': None,
         'published_at': published_at,
         'scraped_at': datetime.now().isoformat(),
     }
 
 
 def _guess_type(text):
-    """Guess property type from title/category text."""
     if not text:
         return 'appartement'
     t = text.lower()
@@ -105,7 +123,6 @@ def _guess_type(text):
 
 
 def _extract_postal(address):
-    """Extract Swiss postal code (4 digits) from address."""
     if not address:
         return None
     m = re.search(r'\b(\d{4})\b', address)
@@ -113,394 +130,569 @@ def _extract_postal(address):
 
 
 def _clean_price(val):
-    """Parse price from various formats."""
     if val is None:
         return None
     if isinstance(val, (int, float)):
         return int(val) if val > 0 else None
-    text = str(val).replace('\u2019', "'").replace("'", "").replace(',', '').replace('.–', '')
+    text = str(val).replace('\u2019', "'").replace("'", "").replace(',', '').replace('.–', '').replace('.-', '')
     nums = re.findall(r'\d+', text)
     if nums:
-        return int(nums[0])
+        n = int(nums[0])
+        return n if n > 0 else None
     return None
 
 
+def _clean_rooms(text):
+    if not text:
+        return None
+    text = str(text).replace('½', '.5')
+    nums = re.findall(r'[\d.]+', text)
+    return float(nums[0]) if nums else None
+
+
+def _clean_surface(text):
+    if not text:
+        return None
+    nums = re.findall(r'(\d+)\s*m', str(text))
+    return int(nums[0]) if nums else None
+
+
 # ============================================================
-# FLATFOX — Public REST API (most reliable)
+# HOMEGATE — via ScrapingBee + __NEXT_DATA__
+# ============================================================
+
+def scrape_homegate(city="Lausanne", transaction="location", max_pages=2):
+    log.info(f"[Homegate] Searching {city} ({transaction})")
+    results = []
+    tx = "rent" if transaction == "location" else "buy"
+    slug = city.lower().replace(' ', '-').replace('â', 'a').replace('é', 'e').replace('è', 'e')
+
+    for page in range(1, max_pages + 1):
+        url = f"https://www.homegate.ch/{tx}/real-estate/city-{slug}/matching-list?ep={page}"
+        status, html = _sb_get(url, render_js=False)
+
+        if status != 200:
+            log.warning(f"[Homegate] Page {page}: HTTP {status}")
+            break
+
+        # Try __NEXT_DATA__ first
+        match = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html)
+        if match:
+            try:
+                data = json.loads(match.group(1))
+                items = data.get('props', {}).get('pageProps', {}).get('resultList', {}).get('items', [])
+                log.info(f"[Homegate] Page {page}: {len(items)} items via __NEXT_DATA__")
+
+                for item in items:
+                    listing = item.get('listing', item)
+                    lid = listing.get('id', '')
+                    loc = listing.get('address', {}) or {}
+                    chars = listing.get('characteristics', {}) or {}
+                    prices = listing.get('prices', {}) or {}
+
+                    price_val = (prices.get('rent', {}).get('gross') or prices.get('rent', {}).get('net')
+                                if transaction == 'location'
+                                else prices.get('buy', {}).get('price'))
+
+                    addr_parts = [loc.get('street', ''), loc.get('postalCode', ''), loc.get('locality', '')]
+                    address = ' '.join(p for p in addr_parts if p).strip()
+
+                    results.append(_make_property(
+                        external_id=f"hg-{lid}", source='Homegate',
+                        source_url=f"https://www.homegate.ch/{tx}/{lid}",
+                        title=listing.get('title', ''),
+                        description=listing.get('description', ''),
+                        property_type=_guess_type(listing.get('title', '')),
+                        transaction=transaction,
+                        price=_clean_price(price_val),
+                        rooms=chars.get('numberOfRooms'),
+                        surface=chars.get('livingSpace'),
+                        floor=chars.get('floor'),
+                        address=address,
+                        city=loc.get('locality', city),
+                        canton=loc.get('region', CITY_CANTONS.get(city.lower(), '')),
+                        postal_code=str(loc.get('postalCode', '')) or None,
+                        latitude=loc.get('geoCoordinates', {}).get('latitude') if loc.get('geoCoordinates') else None,
+                        longitude=loc.get('geoCoordinates', {}).get('longitude') if loc.get('geoCoordinates') else None,
+                        features=[], images=[],
+                        published_at=listing.get('publishDate'),
+                    ))
+            except Exception as e:
+                log.error(f"[Homegate] Parse error: {e}")
+        else:
+            # Fallback: parse HTML with BeautifulSoup
+            soup = BeautifulSoup(html, 'lxml')
+            cards = soup.select('[data-test="result-list-item"], article, .HgCardElevated_card')
+            log.info(f"[Homegate] Page {page}: {len(cards)} cards via HTML")
+
+            for card in cards:
+                try:
+                    title_el = card.select_one('h3, [data-test="result-list-item-title"]')
+                    title = title_el.get_text(strip=True) if title_el else ''
+                    price_el = card.select_one('[data-test="result-list-item-price"], .HgListingCard_price')
+                    price = _clean_price(price_el.get_text(strip=True)) if price_el else None
+                    addr_el = card.select_one('[data-test="result-list-item-address"], .HgListingCard_address')
+                    address = addr_el.get_text(strip=True) if addr_el else ''
+                    link_el = card.select_one('a[href]')
+                    href = link_el.get('href', '') if link_el else ''
+                    if href.startswith('/'):
+                        href = 'https://www.homegate.ch' + href
+                    eid = re.search(r'/(\d+)', href)
+
+                    if title or price:
+                        results.append(_make_property(
+                            external_id=f"hg-{eid.group(1) if eid else hash(title)}",
+                            source='Homegate', source_url=href,
+                            title=title, description='',
+                            property_type=_guess_type(title), transaction=transaction,
+                            price=price, rooms=None, surface=None, floor=None,
+                            address=address, city=city,
+                            canton=CITY_CANTONS.get(city.lower(), ''),
+                            postal_code=_extract_postal(address),
+                            latitude=None, longitude=None,
+                            features=[], images=[], published_at=None,
+                        ))
+                except Exception:
+                    pass
+
+        time.sleep(1)
+
+    log.info(f"[Homegate] Total: {len(results)} listings")
+    return results
+
+
+# ============================================================
+# IMMOSCOUT24 — via ScrapingBee
+# ============================================================
+
+def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
+    log.info(f"[ImmoScout24] Searching {city} ({transaction})")
+    results = []
+    tx = "louer" if transaction == "location" else "acheter"
+    slug = city.lower().replace(' ', '-').replace('â', 'a').replace('é', 'e').replace('è', 'e')
+
+    for page in range(1, max_pages + 1):
+        url = f"https://www.immoscout24.ch/fr/immobilier/{tx}/lieu-{slug}?pn={page}"
+        status, html = _sb_get(url, render_js=True)
+
+        if status != 200:
+            log.warning(f"[ImmoScout24] Page {page}: HTTP {status}")
+            break
+
+        # Try __NEXT_DATA__
+        match = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html)
+        if match:
+            try:
+                data = json.loads(match.group(1))
+                page_props = data.get('props', {}).get('pageProps', {})
+                # ImmoScout24 nests data differently
+                items = (page_props.get('listings', []) or
+                         page_props.get('resultList', {}).get('items', []) or [])
+                log.info(f"[ImmoScout24] Page {page}: {len(items)} items via __NEXT_DATA__")
+
+                for item in items:
+                    listing = item.get('listing', item)
+                    lid = listing.get('id', item.get('id', ''))
+                    addr = listing.get('address', {}) or {}
+                    chars = listing.get('characteristics', {}) or {}
+                    prices = listing.get('prices', {}) or {}
+
+                    if isinstance(prices, dict):
+                        price_val = (prices.get('rent', {}).get('gross') or
+                                    prices.get('buy', {}).get('price') or
+                                    prices.get('value'))
+                    else:
+                        price_val = prices
+
+                    results.append(_make_property(
+                        external_id=f"is24-{lid}", source='ImmoScout24',
+                        source_url=f"https://www.immoscout24.ch/fr/d/{lid}",
+                        title=listing.get('title', ''),
+                        description='',
+                        property_type=_guess_type(listing.get('propertyType', listing.get('title', ''))),
+                        transaction=transaction,
+                        price=_clean_price(price_val),
+                        rooms=chars.get('numberOfRooms'),
+                        surface=chars.get('livingSpace') or chars.get('surfaceLiving'),
+                        floor=chars.get('floor'),
+                        address=f"{addr.get('street', '')} {addr.get('postalCode', '')} {addr.get('locality', '')}".strip(),
+                        city=addr.get('locality', city),
+                        canton=addr.get('region', CITY_CANTONS.get(city.lower(), '')),
+                        postal_code=str(addr.get('postalCode', '')) or None,
+                        latitude=None, longitude=None,
+                        features=[], images=[],
+                        published_at=listing.get('publishDate'),
+                    ))
+            except Exception as e:
+                log.error(f"[ImmoScout24] Parse error: {e}")
+        else:
+            # Fallback: try __INITIAL_STATE__ or HTML parsing
+            match2 = re.search(r'window\.__INITIAL_STATE__\s*=\s*({.*?});', html)
+            if match2:
+                try:
+                    state = json.loads(match2.group(1))
+                    items = state.get('resultList', {}).get('search', {}).get('items', [])
+                    log.info(f"[ImmoScout24] Page {page}: {len(items)} items via __INITIAL_STATE__")
+                    for item in items:
+                        lid = item.get('id', '')
+                        results.append(_make_property(
+                            external_id=f"is24-{lid}", source='ImmoScout24',
+                            source_url=f"https://www.immoscout24.ch/fr/d/{lid}",
+                            title=item.get('title', ''), description='',
+                            property_type=_guess_type(item.get('title', '')),
+                            transaction=transaction,
+                            price=_clean_price(item.get('price')),
+                            rooms=_clean_rooms(item.get('rooms')),
+                            surface=_clean_surface(item.get('surface')),
+                            floor=None,
+                            address=item.get('address', ''), city=city,
+                            canton=CITY_CANTONS.get(city.lower(), ''),
+                            postal_code=_extract_postal(item.get('address', '')),
+                            latitude=None, longitude=None,
+                            features=[], images=[], published_at=None,
+                        ))
+                except Exception as e:
+                    log.error(f"[ImmoScout24] __INITIAL_STATE__ parse error: {e}")
+            else:
+                log.info(f"[ImmoScout24] Page {page}: No structured data found, HTML size: {len(html)}")
+
+        time.sleep(1)
+
+    log.info(f"[ImmoScout24] Total: {len(results)} listings")
+    return results
+
+
+# ============================================================
+# IMMOBILIER.CH — via ScrapingBee
+# ============================================================
+
+def scrape_immobilier_ch(city="Lausanne", transaction="location", max_pages=2):
+    log.info(f"[Immobilier.ch] Searching {city} ({transaction})")
+    results = []
+    tx = "louer" if transaction == "location" else "acheter"
+    slug = city.lower().replace(' ', '-').replace('â', 'a').replace('é', 'e')
+
+    for page in range(1, max_pages + 1):
+        url = f"https://www.immobilier.ch/fr/{tx}/appartement-maison/{slug}?page={page}"
+        status, html = _sb_get(url, render_js=True)
+
+        if status != 200:
+            break
+
+        soup = BeautifulSoup(html, 'lxml')
+        cards = soup.select('.filter-item, .item-listing, article, .property-item')
+        log.info(f"[Immobilier.ch] Page {page}: {len(cards)} cards")
+
+        for card in cards:
+            try:
+                title_el = card.select_one('h3, h2, .title, .item-title')
+                title = title_el.get_text(strip=True) if title_el else ''
+                price_el = card.select_one('.price, .item-price, [class*="price"]')
+                price = _clean_price(price_el.get_text(strip=True)) if price_el else None
+                addr_el = card.select_one('.address, .location, [class*="location"]')
+                address = addr_el.get_text(strip=True) if addr_el else ''
+                link_el = card.select_one('a[href]')
+                href = link_el.get('href', '') if link_el else ''
+                if href.startswith('/'):
+                    href = 'https://www.immobilier.ch' + href
+                eid = re.search(r'/(\d+)', href)
+
+                if title or price:
+                    results.append(_make_property(
+                        external_id=f"imch-{eid.group(1) if eid else hash(title+address)}",
+                        source='Immobilier.ch', source_url=href,
+                        title=title, description='',
+                        property_type=_guess_type(title), transaction=transaction,
+                        price=price, rooms=_clean_rooms(title),
+                        surface=None, floor=None,
+                        address=address, city=city,
+                        canton=CITY_CANTONS.get(city.lower(), ''),
+                        postal_code=_extract_postal(address),
+                        latitude=None, longitude=None,
+                        features=[], images=[], published_at=None,
+                    ))
+            except Exception:
+                pass
+
+        time.sleep(1)
+
+    log.info(f"[Immobilier.ch] Total: {len(results)} listings")
+    return results
+
+
+# ============================================================
+# ANIBIS — via ScrapingBee
+# ============================================================
+
+def scrape_anibis(city="Lausanne", transaction="location", max_pages=2):
+    log.info(f"[Anibis] Searching {city} ({transaction})")
+    results = []
+    tx = "louer" if transaction == "location" else "acheter"
+
+    for page in range(1, max_pages + 1):
+        url = f"https://www.anibis.ch/fr/immobilier--{tx}/{city.lower()}?page={page}"
+        status, html = _sb_get(url, render_js=True)
+
+        if status != 200:
+            break
+
+        soup = BeautifulSoup(html, 'lxml')
+        cards = soup.select('.listing-card, .ItemCard, article, [class*="listing"]')
+        log.info(f"[Anibis] Page {page}: {len(cards)} cards")
+
+        for card in cards:
+            try:
+                title_el = card.select_one('h3, h2, .title, [class*="title"]')
+                title = title_el.get_text(strip=True) if title_el else ''
+                price_el = card.select_one('[class*="price"], .price')
+                price = _clean_price(price_el.get_text(strip=True)) if price_el else None
+                addr_el = card.select_one('[class*="location"], .location')
+                address = addr_el.get_text(strip=True) if addr_el else city
+                link_el = card.select_one('a[href]')
+                href = link_el.get('href', '') if link_el else ''
+                if href.startswith('/'):
+                    href = 'https://www.anibis.ch' + href
+                eid = re.search(r'/(\d+)', href)
+
+                if title or price:
+                    results.append(_make_property(
+                        external_id=f"anibis-{eid.group(1) if eid else hash(title)}",
+                        source='Anibis', source_url=href,
+                        title=title, description='',
+                        property_type=_guess_type(title), transaction=transaction,
+                        price=price, rooms=_clean_rooms(title),
+                        surface=None, floor=None,
+                        address=address, city=city,
+                        canton=CITY_CANTONS.get(city.lower(), ''),
+                        postal_code=_extract_postal(address),
+                        latitude=None, longitude=None,
+                        features=[], images=[], published_at=None,
+                    ))
+            except Exception:
+                pass
+
+        time.sleep(1)
+
+    log.info(f"[Anibis] Total: {len(results)} listings")
+    return results
+
+
+# ============================================================
+# ACHETER-LOUER — via ScrapingBee
+# ============================================================
+
+def scrape_acheter_louer(city="Lausanne", transaction="location", max_pages=2):
+    log.info(f"[Acheter-Louer] Searching {city} ({transaction})")
+    results = []
+    tx = "louer" if transaction == "location" else "acheter"
+
+    for page in range(1, max_pages + 1):
+        url = f"https://www.acheter-louer.ch/{tx}/{city.lower()}?page={page}"
+        status, html = _sb_get(url, render_js=True)
+
+        if status != 200:
+            break
+
+        soup = BeautifulSoup(html, 'lxml')
+        cards = soup.select('.property-item, .listing-card, article, [class*="result"]')
+        log.info(f"[Acheter-Louer] Page {page}: {len(cards)} cards")
+
+        for card in cards:
+            try:
+                title_el = card.select_one('h3, h2, .title, [class*="title"]')
+                title = title_el.get_text(strip=True) if title_el else ''
+                price_el = card.select_one('[class*="price"], .price')
+                price = _clean_price(price_el.get_text(strip=True)) if price_el else None
+                link_el = card.select_one('a[href]')
+                href = link_el.get('href', '') if link_el else ''
+                if href.startswith('/'):
+                    href = 'https://www.acheter-louer.ch' + href
+
+                if title or price:
+                    results.append(_make_property(
+                        external_id=f"al-{hash(title+href)}",
+                        source='Acheter-Louer', source_url=href,
+                        title=title, description='',
+                        property_type=_guess_type(title), transaction=transaction,
+                        price=price, rooms=_clean_rooms(title),
+                        surface=None, floor=None,
+                        address=city, city=city,
+                        canton=CITY_CANTONS.get(city.lower(), ''),
+                        postal_code=None,
+                        latitude=None, longitude=None,
+                        features=[], images=[], published_at=None,
+                    ))
+            except Exception:
+                pass
+
+        time.sleep(1)
+
+    log.info(f"[Acheter-Louer] Total: {len(results)} listings")
+    return results
+
+
+# ============================================================
+# FLATFOX — Direct API (no ScrapingBee needed)
 # ============================================================
 
 def scrape_flatfox(city="Lausanne", transaction="location", limit=30):
-    """Scrape Flatfox via their public API."""
     log.info(f"[Flatfox] Searching {city} ({transaction})")
     results = []
-
     offer_type = 'RENT' if transaction == 'location' else 'SALE'
 
-    # Try multiple API endpoints (Flatfox has changed their API over time)
     endpoints = [
         "https://flatfox.ch/api/v1/flat/",
         "https://flatfox.ch/api/v1/public/listings/",
-        "https://flatfox.ch/api/v1/public/search/listings/",
     ]
 
-    resp = None
     for api_url in endpoints:
         try:
-            resp = requests.get(api_url, headers=HEADERS, params={
-                'city': city,
-                'offer_type': offer_type,
-                'ordering': '-created',
-                'limit': limit,
+            r = requests.get(api_url, params={
+                'city': city, 'offer_type': offer_type,
+                'ordering': '-created', 'limit': limit,
             }, timeout=20)
-            log.info(f"[Flatfox] {api_url} → HTTP {resp.status_code}")
-            if resp.status_code == 200 and resp.headers.get('content-type', '').startswith('application/json'):
-                break  # Found working endpoint
+            log.info(f"[Flatfox] {api_url} → HTTP {r.status_code}")
+
+            if r.status_code == 200 and 'application/json' in r.headers.get('content-type', ''):
+                data = r.json()
+                items = data.get('results', data) if isinstance(data, dict) else data
+                if not isinstance(items, list):
+                    continue
+
+                for item in items:
+                    pk = item.get('pk', item.get('id', ''))
+                    slug = item.get('slug', pk)
+                    price = item.get('rent_gross') or item.get('rent_net') or item.get('price_display')
+
+                    results.append(_make_property(
+                        external_id=f"ff-{pk}", source='Flatfox',
+                        source_url=f"https://flatfox.ch/fr/flat/{slug}/",
+                        title=item.get('title', ''),
+                        description=item.get('description', ''),
+                        property_type=_guess_type(item.get('object_category', '') + ' ' + item.get('title', '')),
+                        transaction=transaction,
+                        price=_clean_price(price),
+                        rooms=item.get('number_of_rooms'),
+                        surface=item.get('surface_living'),
+                        floor=item.get('floor'),
+                        address=(item.get('street', '') + ' ' + str(item.get('street_number', ''))).strip()
+                                + ', ' + item.get('city', city),
+                        city=item.get('city', city),
+                        canton=CITY_CANTONS.get(city.lower(), ''),
+                        postal_code=str(item.get('zipcode', '')) or None,
+                        latitude=item.get('latitude'), longitude=item.get('longitude'),
+                        features=item.get('attributes', []) or [],
+                        images=[img.get('url', '') for img in (item.get('images', []) or [])[:5]],
+                        published_at=item.get('created'),
+                    ))
+
+                if results:
+                    break  # Found working endpoint
         except Exception as e:
-            log.warning(f"[Flatfox] {api_url} failed: {e}")
-            resp = None
+            log.error(f"[Flatfox] {api_url} error: {e}")
 
-    try:
-        if not resp or resp.status_code != 200:
-            log.warning(f"[Flatfox] No working endpoint found")
-            return results
-
-        if resp.status_code == 200:
-            data = resp.json()
-            items = data.get('results', data) if isinstance(data, dict) else data
-            if not isinstance(items, list):
-                items = []
-
-            for item in items:
-                pk = item.get('pk', item.get('id', ''))
-                slug = item.get('slug', pk)
-                price = item.get('rent_gross') or item.get('rent_net') or item.get('price_display')
-
-                results.append(_make_property(
-                    external_id=f"ff-{pk}",
-                    source='Flatfox',
-                    source_url=f"https://flatfox.ch/fr/flat/{slug}/",
-                    title=item.get('title', ''),
-                    description=item.get('description', ''),
-                    property_type=_guess_type(
-                        (item.get('object_category', '') + ' ' + item.get('title', ''))
-                    ),
-                    transaction=transaction,
-                    price=_clean_price(price),
-                    rooms=item.get('number_of_rooms'),
-                    surface=item.get('surface_living'),
-                    floor=item.get('floor'),
-                    address=(
-                        (item.get('street', '') + ' ' + str(item.get('street_number', ''))).strip()
-                        + ', ' + item.get('city', city)
-                    ),
-                    city=item.get('city', city),
-                    canton=CITY_CANTONS.get(city.lower(), ''),
-                    postal_code=str(item.get('zipcode', '')) or None,
-                    latitude=item.get('latitude'),
-                    longitude=item.get('longitude'),
-                    features=item.get('attributes', []) or [],
-                    images=[img.get('url', '') for img in (item.get('images', []) or [])[:5]],
-                    published_at=item.get('created'),
-                ))
-
-    except Exception as e:
-        log.error(f"[Flatfox] Error: {e}")
-
-    log.info(f"[Flatfox] {len(results)} listings found")
+    log.info(f"[Flatfox] Total: {len(results)} listings")
     return results
 
 
 # ============================================================
-# HOMEGATE — Search API (JSON)
+# COMPARIS — via ScrapingBee
 # ============================================================
 
-def scrape_homegate(city="Lausanne", transaction="location", limit=20):
-    """Scrape Homegate via their internal search API."""
-    log.info(f"[Homegate] Searching {city} ({transaction})")
-    results = []
-
-    tx = "rent" if transaction == "location" else "buy"
-    city_slug = CITY_SLUGS_HG.get(city.lower(), city.lower().replace(' ', '-'))
-
-    # Homegate uses a ResultList API endpoint
-    search_url = f"https://www.homegate.ch/api/search/{tx}"
-
-    try:
-        params = {
-            'loc': city,
-            'ag': limit,  # amount
-            'o': 'dateCreated-desc',
-        }
-        resp = requests.get(search_url, headers={
-            **HEADERS,
-            'Referer': f'https://www.homegate.ch/{tx}/real-estate/city-{city_slug}/matching-list',
-        }, params=params, timeout=15)
-
-        log.info(f"[Homegate] API HTTP {resp.status_code}")
-
-        if resp.status_code == 200:
-            try:
-                data = resp.json()
-                items = data.get('results', data.get('items', []))
-                if isinstance(items, list):
-                    for item in items[:limit]:
-                        listing = item.get('listing', item)
-                        lid = listing.get('id', '')
-                        loc = listing.get('address', {}) or {}
-                        chars = listing.get('characteristics', {}) or {}
-                        prices = listing.get('prices', {}) or {}
-
-                        price_val = prices.get('rent', {}).get('gross') if transaction == 'location' else prices.get('buy', {}).get('price')
-
-                        results.append(_make_property(
-                            external_id=f"hg-{lid}",
-                            source='Homegate',
-                            source_url=f"https://www.homegate.ch/{tx}/{lid}",
-                            title=listing.get('title', ''),
-                            description=listing.get('description', ''),
-                            property_type=_guess_type(listing.get('categories', [''])[0] if listing.get('categories') else ''),
-                            transaction=transaction,
-                            price=_clean_price(price_val),
-                            rooms=chars.get('numberOfRooms'),
-                            surface=chars.get('livingSpace'),
-                            floor=chars.get('floor'),
-                            address=f"{loc.get('street', '')} {loc.get('streetAddition', '')}".strip() + f", {loc.get('postalCode', '')} {loc.get('locality', '')}".strip(),
-                            city=loc.get('locality', city),
-                            canton=loc.get('region', CITY_CANTONS.get(city.lower(), '')),
-                            postal_code=str(loc.get('postalCode', '')) or None,
-                            latitude=loc.get('geoCoordinates', {}).get('latitude') if loc.get('geoCoordinates') else None,
-                            longitude=loc.get('geoCoordinates', {}).get('longitude') if loc.get('geoCoordinates') else None,
-                            features=[],
-                            images=[],
-                            published_at=listing.get('publishDate'),
-                        ))
-            except (ValueError, KeyError) as e:
-                log.warning(f"[Homegate] JSON parse error: {e}")
-        else:
-            # Fallback: try the listing page and extract __NEXT_DATA__
-            log.info("[Homegate] API failed, trying __NEXT_DATA__ fallback")
-            page_url = f"https://www.homegate.ch/{tx}/real-estate/city-{city_slug}/matching-list"
-            resp2 = requests.get(page_url, headers=HEADERS, timeout=15)
-            if resp2.status_code == 200:
-                match = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', resp2.text)
-                if match:
-                    try:
-                        next_data = json.loads(match.group(1))
-                        page_props = next_data.get('props', {}).get('pageProps', {})
-                        items = page_props.get('resultList', {}).get('items', [])
-                        log.info(f"[Homegate] __NEXT_DATA__ found {len(items)} items")
-
-                        for item in items[:limit]:
-                            listing = item.get('listing', item)
-                            lid = listing.get('id', '')
-                            loc = listing.get('address', {}) or {}
-                            chars = listing.get('characteristics', {}) or {}
-                            prices = listing.get('prices', {}) or {}
-
-                            price_val = prices.get('rent', {}).get('gross') if transaction == 'location' else prices.get('buy', {}).get('price')
-
-                            results.append(_make_property(
-                                external_id=f"hg-{lid}",
-                                source='Homegate',
-                                source_url=f"https://www.homegate.ch/{tx}/{lid}",
-                                title=listing.get('title', ''),
-                                description='',
-                                property_type=_guess_type(listing.get('categories', [''])[0] if listing.get('categories') else ''),
-                                transaction=transaction,
-                                price=_clean_price(price_val),
-                                rooms=chars.get('numberOfRooms'),
-                                surface=chars.get('livingSpace'),
-                                floor=chars.get('floor'),
-                                address=f"{loc.get('street', '')} {loc.get('postalCode', '')} {loc.get('locality', '')}".strip(),
-                                city=loc.get('locality', city),
-                                canton=loc.get('region', CITY_CANTONS.get(city.lower(), '')),
-                                postal_code=str(loc.get('postalCode', '')) or None,
-                                latitude=loc.get('geoCoordinates', {}).get('latitude') if loc.get('geoCoordinates') else None,
-                                longitude=loc.get('geoCoordinates', {}).get('longitude') if loc.get('geoCoordinates') else None,
-                                features=[],
-                                images=[],
-                                published_at=listing.get('publishDate'),
-                            ))
-                    except json.JSONDecodeError as e:
-                        log.warning(f"[Homegate] __NEXT_DATA__ parse error: {e}")
-
-    except Exception as e:
-        log.error(f"[Homegate] Error: {e}")
-
-    log.info(f"[Homegate] {len(results)} listings found")
-    return results
-
-
-# ============================================================
-# IMMOSCOUT24 — Search API (JSON via __NEXT_DATA__)
-# ============================================================
-
-def scrape_immoscout(city="Lausanne", transaction="location", limit=20):
-    """Scrape ImmoScout24 via __NEXT_DATA__ or search endpoint."""
-    log.info(f"[ImmoScout24] Searching {city} ({transaction})")
-    results = []
-
-    tx = "louer" if transaction == "location" else "acheter"
-    city_slug = city.lower().replace(' ', '-').replace('â', 'a').replace('é', 'e').replace('è', 'e').replace('ü', 'u')
-    page_url = f"https://www.immoscout24.ch/fr/immobilier/{tx}/lieu-{city_slug}"
-
-    try:
-        resp = requests.get(page_url, headers=HEADERS, timeout=15)
-        log.info(f"[ImmoScout24] HTTP {resp.status_code}")
-
-        if resp.status_code == 200:
-            # Try extracting __NEXT_DATA__ or similar embedded JSON
-            match = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', resp.text)
-            if match:
-                try:
-                    next_data = json.loads(match.group(1))
-                    page_props = next_data.get('props', {}).get('pageProps', {})
-                    items = (page_props.get('listings', []) or
-                             page_props.get('resultList', {}).get('items', []) or
-                             page_props.get('searchResults', {}).get('items', []) or [])
-
-                    log.info(f"[ImmoScout24] __NEXT_DATA__ found {len(items)} items")
-
-                    for item in items[:limit]:
-                        listing = item.get('listing', item)
-                        lid = listing.get('id', item.get('id', ''))
-                        addr = listing.get('address', {}) or {}
-                        chars = listing.get('characteristics', {}) or {}
-                        prices = listing.get('prices', listing.get('price', {})) or {}
-
-                        if isinstance(prices, dict):
-                            price_val = (prices.get('rent', {}).get('gross') or
-                                        prices.get('value') or
-                                        prices.get('buy', {}).get('price'))
-                        else:
-                            price_val = _clean_price(prices)
-
-                        results.append(_make_property(
-                            external_id=f"is24-{lid}",
-                            source='ImmoScout24',
-                            source_url=f"https://www.immoscout24.ch/fr/d/{lid}",
-                            title=listing.get('title', ''),
-                            description='',
-                            property_type=_guess_type(listing.get('propertyType', '')),
-                            transaction=transaction,
-                            price=_clean_price(price_val),
-                            rooms=chars.get('numberOfRooms'),
-                            surface=chars.get('livingSpace') or chars.get('surfaceLiving'),
-                            floor=chars.get('floor'),
-                            address=f"{addr.get('street', '')} {addr.get('postalCode', '')} {addr.get('locality', '')}".strip(),
-                            city=addr.get('locality', city),
-                            canton=addr.get('region', CITY_CANTONS.get(city.lower(), '')),
-                            postal_code=str(addr.get('postalCode', '')) or None,
-                            latitude=addr.get('geoCoordinates', {}).get('latitude') if addr.get('geoCoordinates') else None,
-                            longitude=addr.get('geoCoordinates', {}).get('longitude') if addr.get('geoCoordinates') else None,
-                            features=[],
-                            images=[],
-                            published_at=listing.get('publishDate'),
-                        ))
-                except json.JSONDecodeError as e:
-                    log.warning(f"[ImmoScout24] JSON parse error: {e}")
-            else:
-                log.info("[ImmoScout24] No __NEXT_DATA__ found in page")
-
-    except Exception as e:
-        log.error(f"[ImmoScout24] Error: {e}")
-
-    log.info(f"[ImmoScout24] {len(results)} listings found")
-    return results
-
-
-# ============================================================
-# COMPARIS — Search API
-# ============================================================
-
-def scrape_comparis(city="Lausanne", transaction="location", limit=20):
-    """Scrape Comparis via their search API."""
+def scrape_comparis(city="Lausanne", transaction="location", max_pages=1):
     log.info(f"[Comparis] Searching {city} ({transaction})")
     results = []
+    tx = "mieten" if transaction == "location" else "kaufen"
 
-    deal_type = 10 if transaction == 'location' else 20
+    url = f"https://www.comparis.ch/immobilien/result/list?requestobject=%7B%22DealType%22%3A{10 if transaction == 'location' else 20}%2C%22Keyword%22%3A%22{city}%22%2C%22Sort%22%3A4%2C%22Page%22%3A1%7D"
+    status, html = _sb_get(url, render_js=True)
 
-    api_url = "https://api.comparis.ch/realestate/v1/search/list"
-    payload = {
-        'DealType': deal_type,
-        'SiteId': 0,
-        'RootPropertyTypes': [1],  # Apartment
-        'PropertyTypes': [],
-        'RoomsFrom': None,
-        'RoomsTo': None,
-        'FloorSearchType': 0,
-        'LivingSpaceFrom': None,
-        'LivingSpaceTo': None,
-        'PriceFrom': None,
-        'PriceTo': None,
-        'ComparisPointsMin': 0,
-        'AdAgeMax': 0,
-        'Keyword': city,
-        'LocationSearchString': city,
-        'Sort': 4,
-        'Page': 1,
-        'PageSize': limit,
-    }
+    if status == 200:
+        soup = BeautifulSoup(html, 'lxml')
+        cards = soup.select('[class*="ListItem"], [class*="result-item"], article, .property-item')
+        log.info(f"[Comparis] {len(cards)} cards found")
 
-    try:
-        # Try POST first (newer API)
-        resp = requests.post(api_url, headers={
-            **HEADERS,
-            'Content-Type': 'application/json',
-            'Referer': 'https://www.comparis.ch/immobilien/result/list',
-        }, json=payload, timeout=15)
-
-        log.info(f"[Comparis] POST API HTTP {resp.status_code}")
-
-        if resp.status_code != 200:
-            # Fallback: try GET with query params
-            get_url = "https://www.comparis.ch/immobilien/result/list"
-            resp = requests.get(get_url, headers={
-                **HEADERS,
-                'Referer': 'https://www.comparis.ch/immobilien',
-            }, params={'requestobject': json.dumps(payload)}, timeout=15)
-            log.info(f"[Comparis] GET fallback HTTP {resp.status_code}")
-
-        if resp.status_code == 200:
+        for card in cards:
             try:
-                data = resp.json()
-                items = (data.get('Items', []) or
-                        data.get('items', []) or
-                        data.get('SearchResults', []) or [])
+                title_el = card.select_one('h3, h2, [class*="title"]')
+                title = title_el.get_text(strip=True) if title_el else ''
+                price_el = card.select_one('[class*="price"]')
+                price = _clean_price(price_el.get_text(strip=True)) if price_el else None
+                addr_el = card.select_one('[class*="address"], [class*="location"]')
+                address = addr_el.get_text(strip=True) if addr_el else ''
+                link_el = card.select_one('a[href]')
+                href = link_el.get('href', '') if link_el else ''
+                if href.startswith('/'):
+                    href = 'https://www.comparis.ch' + href
 
-                log.info(f"[Comparis] Found {len(items)} items")
-
-                for item in items[:limit]:
+                if title or price:
                     results.append(_make_property(
-                        external_id=f"comp-{item.get('Id', item.get('id', ''))}",
-                        source='Comparis',
-                        source_url=f"https://www.comparis.ch/immobilien/angebot/show/{item.get('Id', item.get('id', ''))}",
-                        title=item.get('Title', item.get('title', '')),
-                        description=item.get('Description', item.get('description', '')),
-                        property_type=_guess_type(item.get('Title', item.get('title', ''))),
-                        transaction=transaction,
-                        price=_clean_price(item.get('Price', item.get('price'))),
-                        rooms=item.get('NumberOfRooms', item.get('numberOfRooms')),
-                        surface=item.get('LivingSpace', item.get('livingSpace')),
-                        floor=item.get('Floor', item.get('floor')),
-                        address=(item.get('Street', item.get('street', '')) + ', ' +
-                                item.get('CityName', item.get('cityName', city))),
-                        city=item.get('CityName', item.get('cityName', city)),
+                        external_id=f"comp-{hash(title+address)}",
+                        source='Comparis', source_url=href,
+                        title=title, description='',
+                        property_type=_guess_type(title), transaction=transaction,
+                        price=price, rooms=_clean_rooms(title),
+                        surface=None, floor=None,
+                        address=address, city=city,
                         canton=CITY_CANTONS.get(city.lower(), ''),
-                        postal_code=str(item.get('Zip', item.get('zip', ''))) or None,
-                        latitude=item.get('Latitude', item.get('latitude')),
-                        longitude=item.get('Longitude', item.get('longitude')),
-                        features=[],
-                        images=[item.get('ImageUrl', '')] if item.get('ImageUrl') else [],
-                        published_at=item.get('PublishDate', item.get('publishDate')),
+                        postal_code=_extract_postal(address),
+                        latitude=None, longitude=None,
+                        features=[], images=[], published_at=None,
                     ))
-            except (ValueError, KeyError) as e:
-                log.warning(f"[Comparis] JSON parse error: {e}")
+            except Exception:
+                pass
 
-    except Exception as e:
-        log.error(f"[Comparis] Error: {e}")
+    log.info(f"[Comparis] Total: {len(results)} listings")
+    return results
 
-    log.info(f"[Comparis] {len(results)} listings found")
+
+# ============================================================
+# PROPERSTAR — via ScrapingBee
+# ============================================================
+
+def scrape_properstar(city="Lausanne", transaction="location", max_pages=1):
+    log.info(f"[Properstar] Searching {city} ({transaction})")
+    results = []
+    tx = "rent" if transaction == "location" else "buy"
+    slug = city.lower().replace(' ', '-')
+
+    url = f"https://www.properstar.ch/switzerland/{slug}/{tx}/apartment"
+    status, html = _sb_get(url, render_js=True)
+
+    if status == 200:
+        soup = BeautifulSoup(html, 'lxml')
+        cards = soup.select('.listing-card, .property-card, article, [class*="listing"]')
+        log.info(f"[Properstar] {len(cards)} cards found")
+
+        for card in cards:
+            try:
+                title_el = card.select_one('h3, h2, [class*="title"]')
+                title = title_el.get_text(strip=True) if title_el else ''
+                price_el = card.select_one('[class*="price"]')
+                price = _clean_price(price_el.get_text(strip=True)) if price_el else None
+                link_el = card.select_one('a[href]')
+                href = link_el.get('href', '') if link_el else ''
+                if href.startswith('/'):
+                    href = 'https://www.properstar.ch' + href
+
+                if title or price:
+                    results.append(_make_property(
+                        external_id=f"ps-{hash(title+href)}",
+                        source='Properstar', source_url=href,
+                        title=title, description='',
+                        property_type=_guess_type(title), transaction=transaction,
+                        price=price, rooms=_clean_rooms(title),
+                        surface=None, floor=None,
+                        address=city, city=city,
+                        canton=CITY_CANTONS.get(city.lower(), ''),
+                        postal_code=None,
+                        latitude=None, longitude=None,
+                        features=[], images=[], published_at=None,
+                    ))
+            except Exception:
+                pass
+
+    log.info(f"[Properstar] Total: {len(results)} listings")
     return results
 
 
@@ -516,7 +708,11 @@ def scrape_all(city="Lausanne", transaction="location"):
         ('Flatfox', scrape_flatfox),
         ('Homegate', scrape_homegate),
         ('ImmoScout24', scrape_immoscout),
+        ('Immobilier.ch', scrape_immobilier_ch),
+        ('Anibis', scrape_anibis),
+        ('Acheter-Louer', scrape_acheter_louer),
         ('Comparis', scrape_comparis),
+        ('Properstar', scrape_properstar),
     ]
 
     for name, scraper in scrapers:
@@ -528,7 +724,7 @@ def scrape_all(city="Lausanne", transaction="location"):
             log.error(f"[{name}] FAILED: {e}")
         time.sleep(1)
 
-    # Deduplicate by external_id
+    # Deduplicate
     seen = set()
     unique = []
     for p in all_results:
@@ -537,7 +733,7 @@ def scrape_all(city="Lausanne", transaction="location"):
             seen.add(key)
             unique.append(p)
 
-    log.info(f"Total: {len(unique)} unique listings from {len(scrapers)} portals (before dedup: {len(all_results)})")
+    log.info(f"Total: {len(unique)} unique listings from {len(scrapers)} portals")
     return unique
 
 

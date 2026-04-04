@@ -618,6 +618,31 @@ def api_scrape():
     })
 
 
+@app.route('/api/import', methods=['POST'])
+@token_required
+def api_import():
+    """Import scraped listings from external source (e.g. local scraper)."""
+    from scrapers import save_to_db
+
+    data = request.json or {}
+    listings = data.get('listings', [])
+
+    if not listings:
+        return jsonify({"error": "No listings provided"}), 400
+
+    conn = get_db()
+    try:
+        saved = save_to_db(conn, listings)
+    finally:
+        conn.close()
+
+    return jsonify({
+        "ok": True,
+        "received": len(listings),
+        "saved": saved
+    })
+
+
 @app.route('/api/scrape/test', methods=['GET'])
 def api_scrape_test():
     """Debug endpoint: test raw HTTP responses from each portal."""
