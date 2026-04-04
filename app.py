@@ -658,9 +658,9 @@ def api_scrape_debug():
         "key_from_scrapers": SCRAPINGBEE_KEY[:8] + '...' if SCRAPINGBEE_KEY else 'EMPTY',
     }
 
-    # Test ScrapingBee with Homegate (premium proxy)
+    # Test ScrapingBee with Homegate (premium proxy, no JS)
     url = f"https://www.homegate.ch/rent/real-estate/city-lausanne/matching-list"
-    status, html = _sb_get(url, render_js=True)
+    status, html = _sb_get(url, render_js=False)
     has_next = '__NEXT_DATA__' in html if html else False
     has_cloudflare = 'Just a moment' in html if html else False
 
