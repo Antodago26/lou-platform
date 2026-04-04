@@ -60,9 +60,11 @@ def _sb_get(url, render_js=False):
         'render_js': 'true' if render_js else 'false',
         'premium_proxy': 'true',
         'country_code': 'ch',
+        'block_resources': 'false',
     }
     if render_js:
-        params['wait'] = 3000  # Wait 3s for JS to render
+        params['wait'] = 5000  # Wait 5s for JS to render
+        params['wait_browser'] = 'networkidle0'
 
     try:
         r = requests.get(SCRAPINGBEE_URL, params=params, timeout=60)
