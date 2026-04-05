@@ -947,12 +947,20 @@
       } else {
         showDashboard();
       }
-    } else {
-      // Webflow — HTML already exists, just hook CTAs
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initLanding);
-      } else {
+   } else {
+      // Webflow — build landing page then hook CTAs
+      function bootWebflow() {
+        showLanding();
         initLanding();
+        if (window.__chatCardHTML) {
+          var hv = document.querySelector('.hero-visual');
+          if (hv) hv.outerHTML = window.__chatCardHTML;
+        }
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootWebflow);
+      } else {
+        bootWebflow();
       }
     }
   } else {
