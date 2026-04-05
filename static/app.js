@@ -194,7 +194,7 @@
     hero.innerHTML =
       '<div class="hero-text">' +
         '<h1>Votre <em>chasseur immobilier</em> intelligent en Suisse</h1>' +
-        '<p>Lou Garou scrute en continu les meilleures annonces de Suisse romande, les analyse avec l\'IA et vous presente uniquement les biens qui correspondent a vos critères.</p>' +
+        '<p>Lou Garou scrute en continu les meilleures annonces de Suisse romande, les analyse avec l\'IA et vous présente uniquement les biens qui correspondent a vos critères.</p>' +
         '<div class="hero-ctas">' +
           '<a href="#" class="btn btn-primary" id="hero-cta-1">Commencer ma recherche</a>' +
           '<a href="#how" class="btn btn-outline">En savoir plus</a>' +
