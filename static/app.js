@@ -107,7 +107,7 @@
           }
         })
         .catch(function () {
-          err.textContent = 'Erreur reseau — reessayez';
+          err.textContent = 'Erreur réseau — réessayez';
           err.style.display = 'block';
           btn.textContent = mode === 'signup' ? "S'inscrire" : 'Se connecter';
           btn.disabled = false;
@@ -184,7 +184,7 @@
       '</a>' +
       '<div class="nav-links">' +
         '<a href="#features">Fonctions</a>' +
-        '<a href="#how">Comment ca marche</a>' +
+        '<a href="#how">Comment ça marche</a>' +
         '<a href="#" class="btn btn-primary" id="nav-login-btn">Connexion</a>' +
       '</div>';
     document.body.appendChild(nav);
@@ -194,7 +194,7 @@
     hero.innerHTML =
       '<div class="hero-text">' +
         '<h1>Votre <em>chasseur immobilier</em> intelligent en Suisse</h1>' +
-        '<p>Lou Garou scrute en continu les meilleures annonces de Suisse romande, les analyse avec l\'IA et vous presente uniquement les biens qui correspondent a vos criteres.</p>' +
+        '<p>Lou Garou scrute en continu les meilleures annonces de Suisse romande, les analyse avec l\'IA et vous presente uniquement les biens qui correspondent a vos critères.</p>' +
         '<div class="hero-ctas">' +
           '<a href="#" class="btn btn-primary" id="hero-cta-1">Commencer ma recherche</a>' +
           '<a href="#how" class="btn btn-outline">En savoir plus</a>' +
@@ -214,8 +214,8 @@
     statsBar.innerHTML =
       '<div class="stats-bar-inner">' +
         '<div><strong>8+</strong><span>Portails suisses</span></div>' +
-        '<div><strong>500+</strong><span>Annonces analysees</span></div>' +
-        '<div><strong>6</strong><span>Criteres de scoring</span></div>' +
+        '<div><strong>500+</strong><span>Annonces analysées</span></div>' +
+        '<div><strong>6</strong><span>Critères de scoring</span></div>' +
         '<div><strong>24/7</strong><span>Veille automatique</span></div>' +
       '</div>';
     document.body.appendChild(statsBar);
@@ -227,10 +227,10 @@
       '<div class="features-header"><h2>Pourquoi Lou Garou ?</h2><p>Un assistant immobilier complet, de la recherche a la prise de contact.</p></div>' +
       '<div class="features-grid">' +
         featureCard('<circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>', 'Scraping multi-portails', 'Lou scrute automatiquement Homegate, ImmoScout24, Flatfox, Immobilier.ch, Properstar et bien d\'autres pour ne rien manquer.') +
-        featureCard('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>', 'Scoring intelligent', 'Chaque annonce est notee de A a D selon vos criteres : zone, budget, type, surface, equipements, fraicheur.') +
-        featureCard('<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>', 'Chatbot IA', 'Discutez avec Lou pour definir vos criteres de recherche de maniere naturelle. Il comprend vos besoins et affine votre profil.') +
-        featureCard('<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>', 'Recherche par zone', 'Definissez une ou plusieurs zones geographiques avec un rayon en km. Lou calcule la distance GPS pour chaque bien.') +
-        featureCard('<path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/>', 'Alertes en temps reel', 'Soyez averti des qu\'un nouveau bien correspondant a vos criteres apparait sur le marche.') +
+        featureCard('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>', 'Scoring intelligent', 'Chaque annonce est notée de A a D selon vos critères : zone, budget, type, surface, equipements, fraîcheur.') +
+        featureCard('<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>', 'Chatbot IA', 'Discutez avec Lou pour definir vos critères de recherche de manière naturelle. Il comprend vos besoins et affine votre profil.') +
+        featureCard('<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>', 'Recherche par zone', 'Definissez une ou plusieurs zones géographiques avec un rayon en km. Lou calcule la distance GPS pour chaque bien.') +
+        featureCard('<path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/>', 'Alertes en temps reel', 'Soyez averti des qu\'un nouveau bien correspondant a vos critères apparait sur le marche.') +
         featureCard('<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="2" width="4" height="19" rx="1"/>', 'Dashboard complet', 'Visualisez tous vos resultats, filtrez par score, triez par prix ou date, et gardez vos favoris.') +
       '</div>';
     document.body.appendChild(features);
@@ -240,12 +240,12 @@
     how.id = 'how';
     how.innerHTML =
       '<div class="how-inner">' +
-        '<h2>Comment ca marche ?</h2>' +
+        '<h2>Comment ça marche ?</h2>' +
         '<div class="steps">' +
-          '<div class="step"><div class="step-num">1</div><h3>Parlez a Lou</h3><p>Dites-lui ce que vous cherchez : region, budget, type de bien, nombre de pieces...</p></div>' +
+          '<div class="step"><div class="step-num">1</div><h3>Parlez a Lou</h3><p>Dites-lui ce que vous cherchez : region, budget, type de bien, nombre de pièces...</p></div>' +
           '<div class="step"><div class="step-num">2</div><h3>Lou chasse pour vous</h3><p>Notre moteur scrute 8+ portails immobiliers suisses en continu et collecte les nouvelles annonces.</p></div>' +
-          '<div class="step"><div class="step-num">3</div><h3>Scoring & analyse</h3><p>Chaque bien est note selon 6 criteres ponderes. Seuls les meilleurs vous sont presentes.</p></div>' +
-          '<div class="step"><div class="step-num">4</div><h3>Contactez & visitez</h3><p>Retrouvez les coordonnees du proprietaire, l\'annonce originale et tous les details en un clic.</p></div>' +
+          '<div class="step"><div class="step-num">3</div><h3>Scoring & analyse</h3><p>Chaque bien est note selon 6 critères ponderes. Seuls les meilleurs vous sont présentés.</p></div>' +
+          '<div class="step"><div class="step-num">4</div><h3>Contactez & visitez</h3><p>Retrouvez les coordonnées du propriétaire, l\'annonce originale et tous les details en un clic.</p></div>' +
         '</div>' +
       '</div>';
     document.body.appendChild(how);
@@ -366,7 +366,7 @@
       '.lou-auth-err{color:#dc2626;font-size:13px;margin-top:8px;display:none;text-align:center}',
 
       '@media(max-width:900px){.hero{flex-direction:column;text-align:center;padding:40px 5% 60px}.hero-text h1{font-size:36px}.hero-ctas{justify-content:center}.hero-visual{width:100%;max-width:360px;height:280px}.features-grid{grid-template-columns:1fr}.steps{grid-template-columns:repeat(2,1fr)}.nav-links{gap:16px}.footer-inner{flex-direction:column;gap:12px}}',
-      '@media(max-width:600px){.nav-links a:not(.btn){display:none}.stats-bar-inner{flex-wrap:wrap}.steps{grid-template-columns:1fr}}'
+      '@media(max-width:600px){.nav-links a:not(.btn){display:none}.stats-bar-inner{flex-wrap:wrap;margin:0 auto}.steps{grid-template-columns:1fr}}'
     ].join('');
   }
 
@@ -422,7 +422,7 @@
       '<a href="/" class="dash-nav-brand"><svg class="dash-logo-wolf" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" rx="12" fill="#0369a1"/><g transform="translate(8,6)"><path d="M4 34 L10 5 L16 16 L22 5 L28 34 L22 28 L16 32 L10 28 Z" fill="rgba(255,255,255,0.95)"/><circle cx="12.5" cy="21" r="2" fill="#0369a1"/><circle cx="19.5" cy="21" r="2" fill="#0369a1"/></g></svg>Lou Garou</a>' +
       '<div class="dash-nav-right">' +
         '<span class="dash-user-email">' + escapeHtml(USER.email || '') + '</span>' +
-        '<button class="dash-logout-btn" id="logout-btn">Deconnexion</button>' +
+        '<button class="dash-logout-btn" id="logout-btn">Déconnexion</button>' +
       '</div>';
     document.body.appendChild(nav);
 
@@ -523,7 +523,7 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (!data.profile) {
-          $('profile-bar').innerHTML = '<div class="dash-profile-empty">Aucun profil de recherche. <a href="#" id="setup-profile">Parlez a Lou</a> pour configurer vos criteres.</div>';
+          $('profile-bar').innerHTML = '<div class="dash-profile-empty">Aucun profil de recherche. <a href="#" id="setup-profile">Parlez a Lou</a> pour configurer vos critères.</div>';
           var link = $('setup-profile');
           if (link) link.onclick = function (e) {
             e.preventDefault();
@@ -536,7 +536,7 @@
         if (p.transaction) tags.push(p.transaction === 'location' ? 'Location' : 'Achat');
         if (p.property_types && p.property_types.length) tags.push(p.property_types.join(', '));
         if (p.budget_max) tags.push('Max ' + formatPrice(p.budget_max) + ' CHF');
-        if (p.rooms_min) tags.push(p.rooms_min + '+ pieces');
+        if (p.rooms_min) tags.push(p.rooms_min + '+ pièces');
         if (p.surface_min) tags.push(p.surface_min + '+ m2');
 
         var zones = (p.zones || []).filter(function (z) { return z && z.city; });
@@ -603,7 +603,7 @@
         });
       })
       .catch(function (err) {
-        list.innerHTML = '<div class="dash-empty">Erreur de chargement. Le serveur est peut-etre en veille — reessayez dans 30 secondes.</div>';
+        list.innerHTML = '<div class="dash-empty">Erreur de chargement. Le serveur est peut-etre en veille — réessayez dans 30 secondes.</div>';
       });
   }
 
