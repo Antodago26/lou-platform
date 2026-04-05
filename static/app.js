@@ -948,10 +948,11 @@
         showDashboard();
       }
     } else {
+      // Webflow — HTML already exists, just hook CTAs
       if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', showLanding);
+        document.addEventListener('DOMContentLoaded', initLanding);
       } else {
-        showLanding();
+        initLanding();
       }
     }
   } else {
