@@ -508,12 +508,24 @@
           },
           body: JSON.stringify({})
         })
-          .then(function (r) { return r.json(); })
+          .then(function (r) {
+            if (!r.ok) {
+              return r.text().then(function (t) {
+                try { return JSON.parse(t); } catch (e) { return { ok: false, error: t }; }
+              });
+            }
+            return r.json();
+          })
           .then(function (data) {
             btn.disabled = false;
             btn.classList.remove('scraping');
             if (data.ok) {
-              btn.innerHTML = '&#10003; ' + (data.new_count || 0) + ' nouvelles annonces';
+              var saved = data.total_saved || 0;
+              var scraped = data.total_scraped || 0;
+              var msg = saved > 0
+                ? '&#10003; ' + saved + ' nouvelles annonces !'
+                : '&#10003; Recherche terminée (' + scraped + ' annonces vérifiées)';
+              btn.innerHTML = msg;
               btn.classList.add('scrape-success');
               // Refresh dashboard data
               loadStats();
@@ -521,17 +533,18 @@
               setTimeout(function () {
                 btn.innerHTML = 'Actualiser les annonces';
                 btn.classList.remove('scrape-success');
-              }, 4000);
+              }, 5000);
             } else {
-              btn.innerHTML = 'Erreur — Réessayer';
+              var errMsg = data.error || 'Erreur inconnue';
+              btn.innerHTML = 'Erreur: ' + errMsg.substring(0, 40);
               btn.classList.add('scrape-error');
               setTimeout(function () {
                 btn.innerHTML = 'Actualiser les annonces';
                 btn.classList.remove('scrape-error');
-              }, 3000);
+              }, 4000);
             }
           })
-          .catch(function () {
+          .catch(function (err) {
             btn.disabled = false;
             btn.classList.remove('scraping');
             btn.innerHTML = 'Erreur réseau — Réessayer';
@@ -539,7 +552,7 @@
             setTimeout(function () {
               btn.innerHTML = 'Actualiser les annonces';
               btn.classList.remove('scrape-error');
-            }, 3000);
+            }, 4000);
           });
       };
     }

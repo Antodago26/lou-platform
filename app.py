@@ -679,9 +679,52 @@ REGLES ABSOLUES:
             conversations[user_id] = history[-20:]
 
         # Save criteria to DB if any were extracted
-        if result.get("criteria") and result["criteria"]:
+        criteria_to_save = result.get("criteria") or {}
+
+        # Fallback: extract zone from user message if AI didn't put it in criteria
+        if not criteria_to_save.get('zones') and not criteria_to_save.get('zone'):
+            import re
+            zone_match = re.search(
+                r'(?:ajouter|ajout|zone|cherche[rz]?\s+[àa]|neuch[âa]tel|lausanne|gen[èe]ve|montreux|fribourg|sion|nyon|morges|yverdon|vevey|bienne)\s*(?:\+?\s*(\d+)\s*km)?',
+                message.lower()
+            )
+            if zone_match:
+                # Extract city name from known cities in the message
+                city_patterns = {
+                    'neuchâtel': 'Neuchâtel', 'neuchatel': 'Neuchâtel',
+                    'lausanne': 'Lausanne', 'genève': 'Genève', 'geneve': 'Genève',
+                    'montreux': 'Montreux', 'fribourg': 'Fribourg', 'sion': 'Sion',
+                    'nyon': 'Nyon', 'morges': 'Morges', 'yverdon': 'Yverdon',
+                    'vevey': 'Vevey', 'bienne': 'Bienne',
+                }
+                msg_lower = message.lower()
+                for key, city_name in city_patterns.items():
+                    if key in msg_lower:
+                        radius = int(zone_match.group(1)) if zone_match.group(1) else 5
+                        criteria_to_save['zones'] = [{'city': city_name, 'radius_km': radius}]
+                        print(f"[CHAT] Fallback zone extraction: {city_name} +{radius}km from message: {message}")
+                        break
+
+        if criteria_to_save:
             try:
-                _save_chat_criteria(db_uid, result["criteria"])
+                _save_chat_criteria(db_uid, criteria_to_save)
+                # Auto re-score after criteria change
+                try:
+                    from scoring_engine import score_all_for_profile
+                    conn_score = get_db()
+                    cur_score = conn_score.cursor()
+                    cur_score.execute(
+                        "SELECT id FROM search_profiles WHERE user_id = %s AND is_active = TRUE ORDER BY created_at DESC LIMIT 1",
+                        (db_uid,)
+                    )
+                    p_row = cur_score.fetchone()
+                    if p_row:
+                        scored = score_all_for_profile(conn_score, p_row['id'])
+                        print(f"[CHAT] Auto re-scored {scored} properties after criteria update")
+                    cur_score.close()
+                    conn_score.close()
+                except Exception as score_err:
+                    print(f"[CHAT] Auto re-score error: {score_err}")
             except Exception as save_err:
                 print(f"Criteria save error: {save_err}")
 
@@ -877,12 +920,23 @@ def api_scrape():
 
     # Auto-score after scraping
     try:
-        from scoring import score_all_for_profile
+        from scoring_engine import score_all_for_profile
         conn2 = get_db()
-        score_all_for_profile(conn2, request.user_id)
+        cur2 = conn2.cursor()
+        cur2.execute(
+            "SELECT id FROM search_profiles WHERE user_id = %s AND is_active = TRUE ORDER BY created_at DESC LIMIT 1",
+            (request.user_id,)
+        )
+        prof_row = cur2.fetchone()
+        if prof_row:
+            scored = score_all_for_profile(conn2, prof_row['id'])
+            print(f"[SCRAPE] Auto-scored {scored} properties for profile {prof_row['id']}")
+        cur2.close()
         conn2.close()
     except Exception as score_err:
+        import traceback
         print(f"Auto-score after scrape error: {score_err}")
+        traceback.print_exc()
 
     return jsonify({
         "ok": True,
@@ -943,8 +997,11 @@ def api_score():
         cur.execute("SELECT * FROM search_zones WHERE profile_id = %s", (profile['id'],))
         zones = [dict(z) for z in cur.fetchall()]
 
-        # Get all active properties
-        cur.execute("SELECT * FROM properties WHERE is_active = TRUE")
+        # Clean old scores and re-score with current profile
+        cur.execute("DELETE FROM scored_properties WHERE profile_id = %s", (profile['id'],))
+
+        # Get properties matching transaction type
+        cur.execute("SELECT * FROM properties WHERE is_active = TRUE AND transaction = %s", (profile['transaction'],))
         properties = cur.fetchall()
 
         scored = 0

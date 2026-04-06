@@ -333,6 +333,12 @@ def score_all_for_profile(db, profile_id):
         (profile_id,)
     ).fetchall()
 
+    # Clean old scores for this profile (removes stale data from previous transaction type, etc.)
+    db.execute(
+        "DELETE FROM scored_properties WHERE profile_id = %s",
+        (profile_id,)
+    )
+
     # Pre-filter properties
     query = """
         SELECT * FROM properties
