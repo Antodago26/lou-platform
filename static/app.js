@@ -125,29 +125,22 @@
   // LANDING PAGE — Hook CTAs (when HTML already exists, e.g. Render)
   // ============================================================
   function initLanding() {
-    // Hook all CTA buttons to open auth modal
+    // Hook all CTA buttons — open chat if logged in, otherwise auth modal
+    var isLoggedIn = isJWT(TOKEN) && USER;
     ['nav-login-btn', 'hero-cta-1', 'cta-bottom'].forEach(function (id) {
       var el = $(id);
       if (el) {
         el.addEventListener('click', function (e) {
           e.preventDefault();
-          showAuthModal();
+          if (isLoggedIn && (id === 'hero-cta-1' || id === 'cta-bottom')) {
+            var chatToggle = document.querySelector('.chat-toggle');
+            if (chatToggle) chatToggle.click();
+          } else {
+            showAuthModal();
+          }
         });
       }
     });
-
-    // If user is already logged in, hero CTA opens chat instead of auth
-    if (isJWT(TOKEN) && USER) {
-      var heroCta1 = $('hero-cta-1');
-      if (heroCta1) {
-        heroCta1.removeEventListener('click', heroCta1._authHandler);
-        heroCta1.addEventListener('click', function(e) {
-          e.preventDefault();
-          var chatToggle = document.querySelector('.chat-toggle');
-          if (chatToggle) chatToggle.click();
-        });
-      }
-    }
     // If user is already logged in, change nav button to "Mon Dashboard"
     if (isJWT(TOKEN) && USER) {
       var navBtn = $('nav-login-btn');
