@@ -1054,17 +1054,18 @@ def api_score():
 
 @app.route('/api/scrape/debug', methods=['GET'])
 def api_scrape_debug():
-    """Test each scraper individually with detailed error reporting."""
-    import traceback
+    """Test scrapers individually. Use ?portal=Flatfox to test one, or ?portal=all for all."""
+    import traceback, time as _time
     city = request.args.get('city', 'Lausanne')
     tx = request.args.get('transaction', 'achat')
+    portal_filter = request.args.get('portal', 'all')
 
     from scrapers import (scrape_flatfox, scrape_immoscout24, scrape_homegate,
                           scrape_comparis, scrape_anibis, scrape_immobilier_ch,
                           scrape_acheter_louer, scrape_properstar, scrape_newhome,
-                          scrape_tutti, scrape_realadvisor)
+                          scrape_tutti, scrape_realadvisor, SCRAPINGBEE_KEY)
 
-    scrapers = [
+    all_scrapers = [
         ('Flatfox', scrape_flatfox),
         ('ImmoScout24', scrape_immoscout24),
         ('Homegate', scrape_homegate),
@@ -1078,15 +1079,32 @@ def api_scrape_debug():
         ('RealAdvisor', scrape_realadvisor),
     ]
 
-    results = {"city": city, "transaction": tx, "portals": {}}
+    # Filter to specific portal(s)
+    if portal_filter != 'all':
+        names = [p.strip() for p in portal_filter.split(',')]
+        all_scrapers = [(n, s) for n, s in all_scrapers if n.lower() in [x.lower() for x in names]]
+
+    results = {
+        "city": city,
+        "transaction": tx,
+        "scrapingbee_active": bool(SCRAPINGBEE_KEY),
+        "portals": {},
+    }
     total = 0
 
-    for name, scraper in scrapers:
+    for name, scraper in all_scrapers:
+        start = _time.time()
         try:
-            items = scraper(city=city, transaction=tx, max_pages=1) if 'max_pages' in scraper.__code__.co_varnames else scraper(city=city, transaction=tx)
+            # All scrapers accept max_pages except flatfox (uses limit)
+            if name == 'Flatfox':
+                items = scraper(city=city, transaction=tx, limit=10)
+            else:
+                items = scraper(city=city, transaction=tx, max_pages=1)
+            elapsed = round(_time.time() - start, 1)
             results["portals"][name] = {
                 "count": len(items),
                 "status": "ok" if items else "empty",
+                "time_s": elapsed,
                 "sample": [
                     {
                         "id": l["external_id"],
@@ -1100,9 +1118,11 @@ def api_scrape_debug():
             }
             total += len(items)
         except Exception as e:
+            elapsed = round(_time.time() - start, 1)
             results["portals"][name] = {
                 "count": 0,
                 "status": "error",
+                "time_s": elapsed,
                 "error": str(e),
                 "traceback": traceback.format_exc()[-500:],
             }
