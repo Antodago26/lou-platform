@@ -34,7 +34,28 @@ from urllib.parse import quote, urlencode
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger('lou-scrapers')
 
-UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
+
+# Try to import curl_cffi for Cloudflare bypass (TLS fingerprint impersonation)
+_curl_session = None
+_cloudscraper_session = None
+
+try:
+    from curl_cffi.requests import Session as CurlSession
+    _curl_session = CurlSession(impersonate="chrome")
+    log.info("[Init] curl_cffi loaded — Chrome TLS impersonation active")
+except ImportError:
+    log.warning("[Init] curl_cffi not available, trying cloudscraper")
+
+if _curl_session is None:
+    try:
+        import cloudscraper
+        _cloudscraper_session = cloudscraper.create_scraper(
+            browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
+        )
+        log.info("[Init] cloudscraper loaded — Cloudflare JS challenge solver active")
+    except ImportError:
+        log.warning("[Init] cloudscraper not available, using plain requests (Cloudflare sites will fail)")
 
 # Swiss city → canton mapping
 CITY_CANTONS = {
@@ -55,17 +76,44 @@ CITY_CANTONS = {
 }
 
 
+BROWSER_HEADERS = {
+    'User-Agent': UA,
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'fr-CH,fr;q=0.9,de-CH;q=0.8,en;q=0.7',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Sec-Ch-Ua': '"Chromium";v="125", "Google Chrome";v="125", "Not.A/Brand";v="24"',
+    'Sec-Ch-Ua-Mobile': '?0',
+    'Sec-Ch-Ua-Platform': '"Windows"',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'none',
+    'Sec-Fetch-User': '?1',
+    'Upgrade-Insecure-Requests': '1',
+    'Cache-Control': 'max-age=0',
+}
+
+
 def _get(url, headers=None, timeout=20):
-    """Direct HTTP GET with standard headers."""
-    h = {
-        'User-Agent': UA,
-        'Accept-Language': 'fr-CH,fr;q=0.9,de-CH;q=0.8',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    }
+    """HTTP GET using best available client (curl_cffi > cloudscraper > requests)."""
+    h = {**BROWSER_HEADERS}
     if headers:
         h.update(headers)
     try:
+        # 1. curl_cffi with Chrome TLS impersonation
+        if _curl_session:
+            r = _curl_session.get(url, headers=h, timeout=timeout, allow_redirects=True)
+            log.info(f"[curl_cffi] {url[:70]} → {r.status_code} ({len(r.text)} bytes)")
+            return r.status_code, r.text
+
+        # 2. cloudscraper (Cloudflare JS challenge solver)
+        if _cloudscraper_session:
+            r = _cloudscraper_session.get(url, headers=h, timeout=timeout, allow_redirects=True)
+            log.info(f"[cloudscraper] {url[:70]} → {r.status_code} ({len(r.text)} bytes)")
+            return r.status_code, r.text
+
+        # 3. Plain requests (will fail on Cloudflare)
         r = requests.get(url, headers=h, timeout=timeout, allow_redirects=True)
+        log.info(f"[requests] {url[:70]} → {r.status_code} ({len(r.text)} bytes)")
         return r.status_code, r.text
     except Exception as e:
         log.error(f"GET {url[:80]}: {e}")
@@ -73,17 +121,25 @@ def _get(url, headers=None, timeout=20):
 
 
 def _get_json(url, headers=None, timeout=20):
-    """Direct HTTP GET expecting JSON response."""
+    """HTTP GET expecting JSON, using best available client."""
     h = {
         'User-Agent': UA,
-        'Accept': 'application/json',
+        'Accept': 'application/json, text/plain, */*',
         'Accept-Language': 'fr-CH,fr;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
     }
     if headers:
         h.update(headers)
     try:
-        r = requests.get(url, headers=h, timeout=timeout, allow_redirects=True)
-        if r.status_code == 200 and 'json' in r.headers.get('content-type', ''):
+        if _curl_session:
+            r = _curl_session.get(url, headers=h, timeout=timeout, allow_redirects=True)
+        elif _cloudscraper_session:
+            r = _cloudscraper_session.get(url, headers=h, timeout=timeout, allow_redirects=True)
+        else:
+            r = requests.get(url, headers=h, timeout=timeout, allow_redirects=True)
+
+        ct = r.headers.get('content-type', '')
+        if r.status_code == 200 and 'json' in ct:
             return r.status_code, r.json()
         return r.status_code, None
     except Exception as e:
@@ -243,21 +299,19 @@ def scrape_flatfox(city="Lausanne", transaction="location", limit=30):
     results = []
     offer_type = 'RENT' if transaction == 'location' else 'SALE'
 
+    # Try multiple API endpoints (Flatfox has changed their API over time)
     endpoints = [
+        "https://flatfox.ch/api/v1/public-listing/",
         "https://flatfox.ch/api/v1/flat/",
         "https://flatfox.ch/api/v1/public/listings/",
     ]
 
     for api_url in endpoints:
         try:
-            r = requests.get(api_url, params={
-                'city': city, 'offer_type': offer_type,
-                'ordering': '-created', 'limit': limit,
-            }, headers={'User-Agent': UA}, timeout=20)
-            log.info(f"[Flatfox] {api_url} → HTTP {r.status_code}")
+            status, data = _get_json(f"{api_url}?city={quote(city)}&offer_type={offer_type}&ordering=-created&limit={limit}")
+            log.info(f"[Flatfox] {api_url} → HTTP {status}")
 
-            if r.status_code == 200 and 'json' in r.headers.get('content-type', ''):
-                data = r.json()
+            if status == 200 and data:
                 items = data.get('results', data) if isinstance(data, dict) else data
                 if not isinstance(items, list):
                     continue
@@ -301,6 +355,50 @@ def scrape_flatfox(city="Lausanne", transaction="location", limit=30):
                     break
         except Exception as e:
             log.error(f"[Flatfox] {api_url} error: {e}")
+
+    # Fallback: scrape the search page
+    if not results:
+        try:
+            slug = _slugify(city)
+            tx_slug = "louer" if transaction == "location" else "acheter"
+            url = f"https://flatfox.ch/fr/search/?city={quote(city)}&offer_type={offer_type}"
+            status, html = _get(url)
+            log.info(f"[Flatfox] Search page: HTTP {status}, len={len(html)}")
+            if status == 200:
+                # Try __NEXT_DATA__
+                nd = _extract_next_data(html)
+                if nd:
+                    items = []
+                    try:
+                        pp = nd.get('props', {}).get('pageProps', {})
+                        for key in ['listings', 'flats', 'results']:
+                            if key in pp and isinstance(pp[key], list):
+                                items = pp[key]
+                                break
+                    except (KeyError, TypeError):
+                        pass
+                    if items:
+                        log.info(f"[Flatfox] {len(items)} via __NEXT_DATA__")
+                        for item in items:
+                            pk = item.get('pk', item.get('id', ''))
+                            results.append(_make_property(
+                                external_id=f"ff-{pk}", source='Flatfox',
+                                source_url=item.get('url', f"https://flatfox.ch/fr/flat/{pk}/"),
+                                title=item.get('title', ''), description='',
+                                property_type=_guess_type(item.get('title', '')),
+                                transaction=transaction,
+                                price=_clean_price(item.get('rent_gross') or item.get('price')),
+                                rooms=item.get('number_of_rooms'),
+                                surface=item.get('surface_living'),
+                                floor=item.get('floor'),
+                                address=item.get('city', city), city=item.get('city', city),
+                                canton=CITY_CANTONS.get(item.get('city', city).lower(), ''),
+                                postal_code=None, latitude=item.get('latitude'), longitude=item.get('longitude'),
+                                features=[], images=[],
+                                published_at=item.get('created'),
+                            ))
+        except Exception as e:
+            log.error(f"[Flatfox] Search page error: {e}")
 
     log.info(f"[Flatfox] Total: {len(results)} listings")
     return results
@@ -1018,45 +1116,64 @@ def scrape_immobilier_ch(city="Lausanne", transaction="location", max_pages=2):
 
             # HTML parsing fallback
             soup = BeautifulSoup(html, 'html.parser')
-            cards = soup.select('.filter-item, .item-listing, article, .property-item, [class*="listing"], [class*="result"]')
+            # immobilier.ch uses .filter-item for listing cards — be specific
+            cards = soup.select('.filter-item, .item-listing, .object-list .object-item')
+            if not cards:
+                # broader fallback but filter aggressively
+                cards = soup.select('article, .property-item')
             log.info(f"[Immobilier.ch] Page {page}: {len(cards)} cards via HTML")
 
             for card in cards:
                 try:
-                    title_el = card.select_one('h3, h2, .title, .item-title, [class*="title"]')
-                    title = title_el.get_text(strip=True) if title_el else ''
-                    price_el = card.select_one('.price, .item-price, [class*="price"]')
-                    price = _clean_price(price_el.get_text(strip=True)) if price_el else None
-                    addr_el = card.select_one('.address, .location, [class*="location"], [class*="address"]')
-                    address = addr_el.get_text(strip=True) if addr_el else ''
                     link_el = card.select_one('a[href]')
                     href = link_el.get('href', '') if link_el else ''
+                    # Skip non-listing links (javascript:, city-guide, etc.)
+                    if not href or href.startswith('javascript:') or 'city-guide' in href or 'guide' in href:
+                        continue
                     if href.startswith('/'):
                         href = 'https://www.immobilier.ch' + href
+                    # Must be an actual property URL
+                    if '/fr/' not in href and '/de/' not in href and 'immobilier.ch' not in href:
+                        continue
+
+                    title_el = card.select_one('h3, h2, .title, .item-title')
+                    title = title_el.get_text(strip=True) if title_el else ''
+                    # Skip navigation/filter elements
+                    if title and any(skip in title.lower() for skip in ['critère', 'recherche', 'filtre', 'aperçu', 'city guide']):
+                        continue
+
+                    price_el = card.select_one('.price, .item-price, [class*="price"]')
+                    price_text = price_el.get_text(strip=True) if price_el else ''
+                    price = _clean_price(price_text)
+                    # Must have a price to be a real listing
+                    if not price:
+                        continue
+
+                    addr_el = card.select_one('.address, .location, [class*="location"], [class*="address"]')
+                    address = addr_el.get_text(strip=True) if addr_el else ''
                     eid = re.search(r'/(\d+)', href)
 
-                    if title or price:
-                        imgs = []
-                        for img_el in card.select('img[src], img[data-src]'):
-                            src = img_el.get('data-src') or img_el.get('src') or ''
-                            if src and not src.startswith('data:') and 'placeholder' not in src.lower():
-                                if src.startswith('//'):
-                                    src = 'https:' + src
-                                imgs.append(src)
+                    imgs = []
+                    for img_el in card.select('img[src], img[data-src]'):
+                        src = img_el.get('data-src') or img_el.get('src') or ''
+                        if src and not src.startswith('data:') and 'placeholder' not in src.lower():
+                            if src.startswith('//'):
+                                src = 'https:' + src
+                            imgs.append(src)
 
-                        results.append(_make_property(
-                            external_id=f"imch-{eid.group(1) if eid else hash(title + address)}",
-                            source='Immobilier.ch', source_url=href,
-                            title=title, description='',
-                            property_type=_guess_type(title), transaction=transaction,
-                            price=price, rooms=_clean_rooms(title),
-                            surface=None, floor=None,
-                            address=address or city, city=city,
-                            canton=CITY_CANTONS.get(city.lower(), ''),
-                            postal_code=_extract_postal(address),
-                            latitude=None, longitude=None,
-                            features=[], images=imgs[:5], published_at=None,
-                        ))
+                    results.append(_make_property(
+                        external_id=f"imch-{eid.group(1) if eid else hash(title + address)}",
+                        source='Immobilier.ch', source_url=href,
+                        title=title, description='',
+                        property_type=_guess_type(title), transaction=transaction,
+                        price=price, rooms=_clean_rooms(title),
+                        surface=None, floor=None,
+                        address=address or city, city=city,
+                        canton=CITY_CANTONS.get(city.lower(), ''),
+                        postal_code=_extract_postal(address),
+                        latitude=None, longitude=None,
+                        features=[], images=imgs[:5], published_at=None,
+                    ))
                 except Exception:
                     pass
 

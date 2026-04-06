@@ -1054,135 +1054,130 @@ def api_score():
 
 @app.route('/api/scrape/debug', methods=['GET'])
 def api_scrape_debug():
-    """Test scrapers with a single request per portal."""
+    """Test each scraper individually with detailed error reporting."""
     import traceback
-    try:
-        from scrapers import scrape_all
-        city = request.args.get('city', 'Lausanne')
-        tx = request.args.get('transaction', 'achat')
+    city = request.args.get('city', 'Lausanne')
+    tx = request.args.get('transaction', 'achat')
 
-        results = {"city": city, "transaction": tx, "portals": {}}
+    from scrapers import (scrape_flatfox, scrape_immoscout24, scrape_homegate,
+                          scrape_comparis, scrape_anibis, scrape_immobilier_ch,
+                          scrape_acheter_louer, scrape_properstar, scrape_newhome,
+                          scrape_tutti, scrape_realadvisor)
 
-        # Run full scrape with 1 page each
+    scrapers = [
+        ('Flatfox', scrape_flatfox),
+        ('ImmoScout24', scrape_immoscout24),
+        ('Homegate', scrape_homegate),
+        ('Comparis', scrape_comparis),
+        ('Anibis', scrape_anibis),
+        ('Immobilier.ch', scrape_immobilier_ch),
+        ('Acheter-Louer', scrape_acheter_louer),
+        ('Properstar', scrape_properstar),
+        ('Newhome', scrape_newhome),
+        ('Tutti', scrape_tutti),
+        ('RealAdvisor', scrape_realadvisor),
+    ]
+
+    results = {"city": city, "transaction": tx, "portals": {}}
+    total = 0
+
+    for name, scraper in scrapers:
         try:
-            listings = scrape_all(city=city, transaction=tx)
-            # Group by source
-            by_source = {}
-            for l in listings:
-                src = l['source']
-                if src not in by_source:
-                    by_source[src] = []
-                by_source[src].append(l)
-
-            for src, items in by_source.items():
-                results["portals"][src] = {
-                    "count": len(items),
-                    "sample": [
-                        {
-                            "id": l["external_id"],
-                            "title": l["title"][:80],
-                            "price": l["price"],
-                            "rooms": l["rooms"],
-                            "surface": l["surface"],
-                            "address": l["address"][:60],
-                            "url": l["source_url"][:100],
-                        }
-                        for l in items[:3]
-                    ]
-                }
-
-            results["total"] = len(listings)
+            items = scraper(city=city, transaction=tx, max_pages=1) if 'max_pages' in scraper.__code__.co_varnames else scraper(city=city, transaction=tx)
+            results["portals"][name] = {
+                "count": len(items),
+                "status": "ok" if items else "empty",
+                "sample": [
+                    {
+                        "id": l["external_id"],
+                        "title": l["title"][:80],
+                        "price": l["price"],
+                        "rooms": l["rooms"],
+                        "url": l["source_url"][:120],
+                    }
+                    for l in items[:3]
+                ]
+            }
+            total += len(items)
         except Exception as e:
-            results["error"] = str(e)
-            results["traceback"] = traceback.format_exc()
+            results["portals"][name] = {
+                "count": 0,
+                "status": "error",
+                "error": str(e),
+                "traceback": traceback.format_exc()[-500:],
+            }
 
-        return jsonify(results)
-
-    except Exception as e:
-        return jsonify({
-            "error": str(e),
-            "traceback": traceback.format_exc(),
-        }), 500
+    results["total"] = total
+    return jsonify(results)
 
 
 @app.route('/api/scrape/test', methods=['GET'])
 def api_scrape_test():
-    """Debug endpoint: test raw HTTP responses from each portal."""
-    import requests as req
+    """Debug endpoint: test raw HTTP connectivity to each portal using scrapers' HTTP client."""
+    import re as re_mod
+    from scrapers import _get, _get_json, _curl_session, _cloudscraper_session
 
     city = request.args.get('city', 'Lausanne')
-    tx = request.args.get('transaction', 'location')
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'fr-CH,fr;q=0.9',
-    }
-    results = {}
+    slug = city.lower().replace(' ', '-').replace('â', 'a').replace('é', 'e')
 
-    # 1. Flatfox — test multiple endpoints
-    for endpoint_name, url in [
-        ('Flatfox_v1_flat', 'https://flatfox.ch/api/v1/flat/'),
-        ('Flatfox_v1_public', 'https://flatfox.ch/api/v1/public/listings/'),
-        ('Flatfox_search', 'https://flatfox.ch/api/v1/public/search/listings/'),
-    ]:
+    # Report which HTTP client is active
+    http_client = "requests (no Cloudflare bypass)"
+    if _curl_session:
+        http_client = "curl_cffi (Chrome TLS impersonation)"
+    elif _cloudscraper_session:
+        http_client = "cloudscraper (Cloudflare JS solver)"
+
+    results = {"http_client": http_client}
+
+    # Test each portal
+    portals = [
+        ("Flatfox_API", f"https://flatfox.ch/api/v1/public-listing/?city={city}&offer_type=SALE&limit=3"),
+        ("ImmoScout24", f"https://www.immoscout24.ch/fr/immobilier/acheter/lieu-{slug}"),
+        ("Homegate", f"https://www.homegate.ch/buy/real-estate/city-{slug}/matching-list"),
+        ("Comparis", f"https://www.comparis.ch/immobilien/result/list?requestobject=%7B%22DealType%22%3A20%2C%22LocationSearchString%22%3A%22{city}%22%2C%22Sort%22%3A3%2C%22Page%22%3A1%7D"),
+        ("Anibis", f"https://www.anibis.ch/fr/immobilier--acheter/{slug}"),
+        ("Immobilier.ch", f"https://www.immobilier.ch/fr/acheter/appartement-maison/{slug}"),
+        ("Acheter-Louer", f"https://www.acheter-louer.ch/acheter/{slug}"),
+        ("Properstar", f"https://www.properstar.ch/switzerland/{slug}/buy/apartment"),
+        ("Newhome", f"https://www.newhome.ch/fr/acheter/immobilier/{slug}/liste"),
+        ("Tutti", f"https://www.tutti.ch/fr/immobilier/{slug}"),
+        ("RealAdvisor", f"https://realadvisor.ch/fr/acheter/{slug}"),
+    ]
+
+    for name, url in portals:
         try:
-            r = req.get(url, headers=headers,
-                        params={'city': city, 'offer_type': 'RENT', 'ordering': '-created', 'limit': 3},
-                        timeout=15)
-            body = r.text[:500]
-            is_json = r.headers.get('content-type', '').startswith('application/json')
-            results[endpoint_name] = {"http": r.status_code, "is_json": is_json, "body_preview": body}
+            status, html = _get(url, timeout=15)
+            has_next = '__NEXT_DATA__' in html
+            has_init = '__INITIAL_STATE__' in html
+            is_cloudflare = 'Just a moment' in html[:500] or 'cf-browser-verification' in html[:2000]
+
+            info = {
+                "http": status,
+                "page_size": len(html),
+                "has_NEXT_DATA": has_next,
+                "has_INITIAL_STATE": has_init,
+                "cloudflare_blocked": is_cloudflare,
+            }
+
+            # Show snippet of what we got
+            if has_next:
+                m = re_mod.search(r'<script id="__NEXT_DATA__"[^>]*>(.{0,200})', html)
+                info["next_data_start"] = m.group(1)[:200] if m else ''
+            elif has_init:
+                m = re_mod.search(r'window\.__INITIAL_STATE__\s*=\s*(.{0,200})', html)
+                info["init_state_start"] = m.group(1)[:200] if m else ''
+            elif is_cloudflare:
+                info["note"] = "Cloudflare challenge page — TLS bypass not working for this site"
+            else:
+                # Show title for debugging
+                m = re_mod.search(r'<title>(.*?)</title>', html[:2000])
+                info["page_title"] = m.group(1)[:100] if m else html[:200]
+
+            results[name] = info
         except Exception as e:
-            results[endpoint_name] = {"error": str(e)}
+            results[name] = {"error": str(e)}
 
-    # 2. Homegate API
-    try:
-        r = req.get(f'https://www.homegate.ch/api/search/rent',
-                     headers={**headers, 'Referer': 'https://www.homegate.ch/'},
-                     params={'loc': city, 'ag': 3, 'o': 'dateCreated-desc'},
-                     timeout=15)
-        body = r.text[:500]
-        results['Homegate_API'] = {"http": r.status_code, "body_preview": body}
-    except Exception as e:
-        results['Homegate_API'] = {"error": str(e)}
-
-    # 3. Homegate __NEXT_DATA__
-    try:
-        slug = city.lower().replace(' ', '-')
-        r = req.get(f'https://www.homegate.ch/rent/real-estate/city-{slug}/matching-list',
-                     headers=headers, timeout=15)
-        has_next = '__NEXT_DATA__' in r.text
-        next_snippet = ''
-        if has_next:
-            import re
-            m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.{0,300})', r.text)
-            next_snippet = m.group(1) if m else ''
-        results['Homegate_Page'] = {"http": r.status_code, "has_NEXT_DATA": has_next, "snippet": next_snippet[:300], "page_size": len(r.text)}
-    except Exception as e:
-        results['Homegate_Page'] = {"error": str(e)}
-
-    # 4. ImmoScout24
-    try:
-        slug = city.lower().replace(' ', '-')
-        r = req.get(f'https://www.immoscout24.ch/fr/immobilier/louer/lieu-{slug}',
-                     headers=headers, timeout=15)
-        has_next = '__NEXT_DATA__' in r.text
-        results['ImmoScout24'] = {"http": r.status_code, "has_NEXT_DATA": has_next, "page_size": len(r.text)}
-    except Exception as e:
-        results['ImmoScout24'] = {"error": str(e)}
-
-    # 5. Comparis API
-    try:
-        payload = {'DealType': 10, 'Keyword': city, 'LocationSearchString': city, 'Sort': 4, 'Page': 1, 'PageSize': 3, 'RootPropertyTypes': [1]}
-        r = req.post('https://api.comparis.ch/realestate/v1/search/list',
-                      headers={**headers, 'Content-Type': 'application/json'},
-                      json=payload, timeout=15)
-        body = r.text[:500]
-        results['Comparis_API'] = {"http": r.status_code, "body_preview": body}
-    except Exception as e:
-        results['Comparis_API'] = {"error": str(e)}
-
-    return jsonify({"city": city, "transaction": tx, "results": results})
+    return jsonify({"city": city, "results": results})
 
 
 # ============================================================
