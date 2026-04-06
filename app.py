@@ -561,8 +561,15 @@ def api_chat():
         if existing_profile.get('transaction'):
             known_parts.append(f"Transaction: {existing_profile['transaction']}")
         if existing_profile.get('zones'):
-            zones_str = ', '.join([z.get('city', '?') for z in existing_profile['zones']])
-            known_parts.append(f"Zones: {zones_str}")
+            zones_list = []
+            for z in existing_profile['zones']:
+                city = z.get('city', '?')
+                radius = z.get('radius_km', 5)
+                canton = z.get('canton', '')
+                zones_list.append(f"{city} ({canton}, rayon {radius}km)")
+            known_parts.append(f"Zones: {', '.join(zones_list)}")
+        if existing_profile.get('budget_min'):
+            known_parts.append(f"Budget min: {existing_profile['budget_min']} CHF")
         if existing_profile.get('budget_max'):
             known_parts.append(f"Budget max: {existing_profile['budget_max']} CHF")
         if existing_profile.get('property_types'):
@@ -573,6 +580,8 @@ def api_chat():
                 known_parts.append(f"Types: {types}")
         if existing_profile.get('rooms_min'):
             known_parts.append(f"Pièces min: {existing_profile['rooms_min']}")
+        if existing_profile.get('rooms_max'):
+            known_parts.append(f"Pièces max: {existing_profile['rooms_max']}")
         if existing_profile.get('surface_min'):
             known_parts.append(f"Surface min: {existing_profile['surface_min']} m²")
         if existing_profile.get('priorities'):
@@ -581,8 +590,33 @@ def api_chat():
                 known_parts.append(f"Priorités: {', '.join(prios)}")
 
         known_summary = '\n'.join(known_parts) if known_parts else 'Aucun critère'
-        print(f"[CHAT] user_id={user_id} profile loaded: {known_summary}")
-        sys_prompt += f"\n\n=== PROFIL ACTUEL DE L'UTILISATEUR (DEJA ENREGISTRE — NE JAMAIS REDEMANDER CES INFOS) ===\n{known_summary}\n\nJSON: {json.dumps(existing_profile, ensure_ascii=False, default=str)}\n\nIMPORTANT: L'utilisateur a DEJA défini ces critères. Ne les redemande PAS. Passe directement au PROCHAIN critère manquant, ou propose de modifier le profil existant."
+        # Check which criteria are still missing
+        missing = []
+        if not existing_profile.get('zones'):
+            missing.append('zone (ville + rayon)')
+        if not existing_profile.get('transaction'):
+            missing.append('transaction (location ou achat)')
+        if not existing_profile.get('property_types'):
+            missing.append('type de bien')
+        if not existing_profile.get('budget_max') and not existing_profile.get('budget_min'):
+            missing.append('budget')
+
+        missing_str = ', '.join(missing) if missing else 'AUCUN - profil complet'
+
+        print(f"[CHAT] user_id={user_id} profile loaded: {known_summary} | missing: {missing_str}")
+        sys_prompt += f"""
+
+=== PROFIL ACTUEL (SOURCE DE VERITE — BASE DE DONNEES) ===
+{known_summary}
+
+Critères MANQUANTS: {missing_str}
+
+REGLES ABSOLUES:
+1. Les critères ci-dessus sont DEJA en base de données. NE LES REDEMANDE JAMAIS.
+2. Si un critère est listé ci-dessus, il est CONNU. Ne pose pas de question dessus.
+3. Si "Zones" apparait ci-dessus, la zone est CONNUE. Ne demande PAS la zone.
+4. Si tous les critères sont remplis, dis simplement que le profil est complet et propose de le modifier ou de voir les résultats.
+5. Ne demande QUE les critères listés comme MANQUANTS."""
 
     # Build messages
     messages = list(history[-10:])
@@ -639,7 +673,7 @@ def api_chat():
         # Save criteria to DB if any were extracted
         if result.get("criteria") and result["criteria"]:
             try:
-                _save_chat_criteria(user_id, result["criteria"])
+                _save_chat_criteria(db_uid, result["criteria"])
             except Exception as save_err:
                 print(f"Criteria save error: {save_err}")
 
@@ -660,6 +694,7 @@ def api_chat():
 
 def _save_chat_criteria(user_id, criteria):
     """Save criteria extracted from chat to the user's search profile."""
+    print(f"[SAVE] user_id={user_id} (type={type(user_id).__name__}) criteria={json.dumps(criteria, ensure_ascii=False, default=str)}")
     conn = get_db()
     cur = conn.cursor()
     # Get existing profile
@@ -703,6 +738,7 @@ def _save_chat_criteria(user_id, criteria):
     if 'zones' in criteria and criteria['zones']:
         for zone in criteria['zones']:
             if isinstance(zone, dict) and zone.get('city'):
+                print(f"[SAVE] Saving zone: city={zone.get('city')}, canton={zone.get('canton')}, radius={zone.get('radius_km', 5)}")
                 cur.execute("""
                     INSERT INTO search_zones (profile_id, city, canton, radius_km)
                     VALUES (%s, %s, %s, %s)
@@ -714,8 +750,15 @@ def _save_chat_criteria(user_id, criteria):
                     zone.get('canton'),
                     zone.get('radius_km', 5)
                 ))
+            else:
+                print(f"[SAVE] Skipping invalid zone: {zone}")
+    elif 'zones' in criteria:
+        print(f"[SAVE] Zones key present but empty: {criteria['zones']}")
 
     conn.commit()
+    cur.close()
+    conn.close()
+    print(f"[SAVE] Done for user_id={user_id}")
 
 
 @app.route('/api/chat/reset', methods=['POST'])
