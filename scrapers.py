@@ -390,76 +390,139 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
 
 
 def scrape_immoscout_api(city="Lausanne", transaction="location", max_pages=3):
-    """Scrape ImmoScout24 via their public REST API (no JS rendering needed)."""
+    """Scrape ImmoScout24 via __INITIAL_STATE__ in server-rendered HTML (no JS needed)."""
     log.info(f"[ImmoScout24-API] Searching {city} ({transaction})")
     results = []
-    tx_code = 2 if transaction == 'location' else 1  # 1=buy, 2=rent
+    tx = "louer" if transaction == "location" else "acheter"
+    slug = city.lower().replace(' ', '-').replace('â', 'a').replace('é', 'e').replace('è', 'e')
 
     for page in range(1, max_pages + 1):
         try:
-            r = requests.get(
-                'https://rest-api.immoscout24.ch/v4.3.1/fr/recherche/annonces',
-                params={
-                    's': tx_code,
-                    'l': f"geo-city-{city.lower()}",
-                    'se': 16,  # 16 items per page
-                    'p': page,
-                    'sk': 'd' if transaction == 'location' else 'ad',
-                },
-                headers={
-                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-                    'Accept': 'application/json',
-                },
-                timeout=20,
-            )
-            log.info(f"[ImmoScout24-API] Page {page}: HTTP {r.status_code}")
+            url = f"https://www.immoscout24.ch/fr/immobilier/{tx}/lieu-{slug}?pn={page}"
+            r = requests.get(url, headers={
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                'Accept-Language': 'fr-CH,fr;q=0.9',
+            }, timeout=20)
+            log.info(f"[ImmoScout24-API] Page {page}: HTTP {r.status_code}, HTML size: {len(r.text)}")
 
             if r.status_code != 200:
                 break
 
-            data = r.json()
-            items = data.get('items', [])
-            if not items:
+            # Extract __INITIAL_STATE__ from HTML
+            match = re.search(r'window\.__INITIAL_STATE__\s*=\s*(\{.*?\});\s*$', r.text, re.MULTILINE | re.DOTALL)
+            if not match:
+                log.warning(f"[ImmoScout24-API] Page {page}: No __INITIAL_STATE__ found")
                 break
 
-            for item in items:
+            try:
+                state = json.loads(match.group(1))
+            except json.JSONDecodeError as e:
+                log.error(f"[ImmoScout24-API] Page {page}: JSON parse error: {e}")
+                break
+
+            # Navigate: resultList.search.fullSearch.result.listings
+            listings = []
+            try:
+                listings = state['resultList']['search']['fullSearch']['result']['listings']
+            except (KeyError, TypeError):
+                # Try alternative paths
                 try:
-                    eid = str(item.get('id', ''))
+                    listings = state['resultList']['search']['preSearch']['result']['listings']
+                except (KeyError, TypeError):
+                    log.warning(f"[ImmoScout24-API] Page {page}: Could not find listings in state")
+                    break
+
+            if not listings:
+                log.info(f"[ImmoScout24-API] Page {page}: No listings, stopping")
+                break
+
+            log.info(f"[ImmoScout24-API] Page {page}: {len(listings)} listings found")
+
+            for item in listings:
+                try:
+                    listing = item.get('listing', item)
+                    eid = str(item.get('id', listing.get('id', '')))
                     if not eid:
                         continue
-                    title = item.get('title', '')
-                    price = _clean_price(item.get('price', {}).get('value') or item.get('price', ''))
-                    rooms_val = item.get('numberOfRooms') or _clean_rooms(title)
-                    surface_val = item.get('surfaceLiving') or item.get('surface')
-                    address_parts = []
-                    if item.get('street'):
-                        address_parts.append(item['street'])
-                    if item.get('zip'):
-                        address_parts.append(str(item['zip']))
-                    if item.get('cityName'):
-                        address_parts.append(item['cityName'])
-                    address = ' '.join(address_parts)
-                    source_url = f"https://www.immoscout24.ch/fr/annonce/{eid}"
 
+                    # Localized content (French)
+                    loc = listing.get('localization', {})
+                    fr = loc.get('fr', loc.get('primary', {}))
+                    title = ''
+                    description = ''
+                    if isinstance(fr, dict):
+                        text = fr.get('text', fr)
+                        if isinstance(text, dict):
+                            title = text.get('title', '')
+                            description = text.get('description', '')
+                        else:
+                            title = fr.get('title', '')
+
+                    # Price
+                    prices = listing.get('prices', {})
+                    price = None
+                    if transaction == 'achat':
+                        buy_price = prices.get('buy', {})
+                        price = buy_price.get('price') if isinstance(buy_price, dict) else None
+                    else:
+                        rent_price = prices.get('rent', {})
+                        price = rent_price.get('gross') or rent_price.get('net') if isinstance(rent_price, dict) else None
+                    if price is None:
+                        # Fallback
+                        for key in ['buy', 'rent']:
+                            p = prices.get(key, {})
+                            if isinstance(p, dict) and p.get('price'):
+                                price = p['price']
+                                break
+
+                    # Characteristics
+                    chars = listing.get('characteristics', {})
+                    rooms = chars.get('numberOfRooms')
+                    surface = chars.get('livingSpace') or chars.get('totalFloorSpace')
+                    floor = chars.get('floor')
+
+                    # Address
+                    addr = listing.get('address', {})
+                    locality = addr.get('locality', city)
+                    postal = addr.get('postalCode')
+                    geo = addr.get('geoCoordinates', {})
+                    lat = geo.get('latitude')
+                    lon = geo.get('longitude')
+                    address_str = f"{postal} {locality}" if postal else locality
+
+                    # Images
                     imgs = []
-                    for pic in (item.get('pictures', []) or [])[:5]:
-                        url = pic.get('url', pic.get('small', pic.get('medium', '')))
-                        if url:
-                            imgs.append(url)
+                    attachments = fr.get('attachments', []) if isinstance(fr, dict) else []
+                    for att in (attachments or [])[:5]:
+                        if isinstance(att, dict):
+                            img_url = att.get('url', att.get('file', ''))
+                            if img_url:
+                                imgs.append(img_url)
+
+                    # Features
+                    features = []
+                    if chars.get('hasParking'): features.append('parking')
+                    if chars.get('hasBalcony'): features.append('balcon')
+                    if chars.get('hasGarden'): features.append('jardin')
+                    if chars.get('hasElevator') or chars.get('hasLift'): features.append('ascenseur')
+                    if chars.get('isQuiet'): features.append('calme')
+
+                    source_url = f"https://www.immoscout24.ch/fr/annonce/{tx}/{eid}"
 
                     results.append(_make_property(
                         external_id=f"is24-{eid}", source='ImmoScout24',
                         source_url=source_url, title=title,
-                        description=item.get('description', ''),
-                        property_type=_guess_type(title), transaction=transaction,
-                        price=price, rooms=rooms_val,
-                        surface=surface_val, floor=item.get('floor'),
-                        address=address, city=item.get('cityName', city),
-                        canton=item.get('cantonId', CITY_CANTONS.get(city.lower(), '')),
-                        postal_code=item.get('zip'),
-                        latitude=item.get('latitude'), longitude=item.get('longitude'),
-                        features=item.get('characteristics', []) or [],
-                        images=imgs, published_at=item.get('publishDate'),
+                        description=description[:500],
+                        property_type=_guess_type(title + ' ' + ' '.join(listing.get('categories', []))),
+                        transaction=transaction,
+                        price=price, rooms=rooms,
+                        surface=surface, floor=floor,
+                        address=address_str, city=locality,
+                        canton=CITY_CANTONS.get(locality.lower(), ''),
+                        postal_code=postal,
+                        latitude=lat, longitude=lon,
+                        features=features, images=imgs,
+                        published_at=listing.get('meta', {}).get('createdAt'),
                     ))
                 except Exception as e:
                     log.error(f"[ImmoScout24-API] Item parse error: {e}")
