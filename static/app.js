@@ -451,6 +451,7 @@
             '<option value="70">Classe B+ (70+)</option>' +
             '<option value="55">Classe C+ (55+)</option>' +
           '</select>' +
+          '<button id="btn-scrape" class="dash-btn-scrape" title="Lancer une recherche maintenant">Actualiser les annonces</button>' +
         '</div>' +
       '</div>' +
       // Stats row
@@ -488,6 +489,59 @@
     $('grade-filter').onchange = function () {
       loadProperties(1, $('sort-select').value, parseInt(this.value));
     };
+
+    // Scrape button
+    var scrapeBtn = $('btn-scrape');
+    if (scrapeBtn) {
+      scrapeBtn.onclick = function () {
+        var btn = this;
+        if (btn.disabled) return;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="scrape-spinner"></span> Recherche en cours...';
+        btn.classList.add('scraping');
+
+        fetch(API + '/api/scrape', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + TOKEN
+          }
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            btn.disabled = false;
+            btn.classList.remove('scraping');
+            if (data.ok) {
+              btn.innerHTML = '&#10003; ' + (data.new_count || 0) + ' nouvelles annonces';
+              btn.classList.add('scrape-success');
+              // Refresh dashboard data
+              loadStats();
+              loadProperties(1, $('sort-select').value, parseInt($('grade-filter').value));
+              setTimeout(function () {
+                btn.innerHTML = 'Actualiser les annonces';
+                btn.classList.remove('scrape-success');
+              }, 4000);
+            } else {
+              btn.innerHTML = 'Erreur — Réessayer';
+              btn.classList.add('scrape-error');
+              setTimeout(function () {
+                btn.innerHTML = 'Actualiser les annonces';
+                btn.classList.remove('scrape-error');
+              }, 3000);
+            }
+          })
+          .catch(function () {
+            btn.disabled = false;
+            btn.classList.remove('scraping');
+            btn.innerHTML = 'Erreur réseau — Réessayer';
+            btn.classList.add('scrape-error');
+            setTimeout(function () {
+              btn.innerHTML = 'Actualiser les annonces';
+              btn.classList.remove('scrape-error');
+            }, 3000);
+          });
+      };
+    }
 
     // Init chat widget
     initChat();
@@ -842,6 +896,14 @@
       '.dash-actions{display:flex;gap:10px}',
       '.dash-select{padding:8px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;background:#fff;cursor:pointer;color:#334155;outline:none}',
       '.dash-select:focus{border-color:#0369a1}',
+      '.dash-btn-scrape{padding:8px 16px;border:1px solid #0369a1;border-radius:8px;font-size:13px;background:#fff;color:#0369a1;cursor:pointer;font-weight:600;transition:all .2s;display:flex;align-items:center;gap:6px;white-space:nowrap}',
+      '.dash-btn-scrape:hover{background:#0369a1;color:#fff}',
+      '.dash-btn-scrape:disabled{opacity:.7;cursor:wait}',
+      '.dash-btn-scrape.scraping{background:#0369a1;color:#fff}',
+      '.dash-btn-scrape.scrape-success{background:#059669;color:#fff;border-color:#059669}',
+      '.dash-btn-scrape.scrape-error{background:#dc2626;color:#fff;border-color:#dc2626}',
+      '.scrape-spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin 0.8s linear infinite}',
+      '@keyframes spin{to{transform:rotate(360deg)}}',
 
       // Stats
       '.dash-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}',

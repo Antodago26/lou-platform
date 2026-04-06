@@ -828,6 +828,15 @@ def api_scrape():
     finally:
         conn.close()
 
+    # Auto-score after scraping
+    try:
+        from scoring import score_all_for_profile
+        conn2 = get_db()
+        score_all_for_profile(conn2, request.user_id)
+        conn2.close()
+    except Exception as score_err:
+        print(f"Auto-score after scrape error: {score_err}")
+
     return jsonify({
         "ok": True,
         "total_scraped": total_scraped,
