@@ -236,6 +236,16 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=2):
                 if not title:
                     title = f"{rooms or '?'} pièces" + (f", {surface} m²" if surface else '')
 
+                # Extract images from card
+                imgs = []
+                for img_el in card.select('img[src], img[data-src]'):
+                    src = img_el.get('data-src') or img_el.get('src') or ''
+                    if src and not src.startswith('data:') and 'placeholder' not in src.lower():
+                        if src.startswith('//'):
+                            src = 'https:' + src
+                        imgs.append(src)
+                imgs = imgs[:5]
+
                 results.append(_make_property(
                     external_id=f"hg-{lid}", source='Homegate',
                     source_url=href,
@@ -247,7 +257,7 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=2):
                     canton=CITY_CANTONS.get(city.lower(), ''),
                     postal_code=_extract_postal(address),
                     latitude=None, longitude=None,
-                    features=[], images=[], published_at=None,
+                    features=[], images=imgs, published_at=None,
                 ))
             except Exception as e:
                 log.debug(f"[Homegate] Card parse error: {e}")
@@ -301,6 +311,16 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
                     else:
                         price_val = prices
 
+                    # Extract images from listing
+                    imgs_raw = listing.get('images') or listing.get('pictures') or []
+                    imgs = []
+                    for img in imgs_raw[:5]:
+                        if isinstance(img, str):
+                            imgs.append(img)
+                        elif isinstance(img, dict):
+                            imgs.append(img.get('url') or img.get('src') or img.get('original') or img.get('medium') or '')
+                    imgs = [u for u in imgs if u]
+
                     results.append(_make_property(
                         external_id=f"is24-{lid}", source='ImmoScout24',
                         source_url=f"https://www.immoscout24.ch/fr/d/{lid}",
@@ -317,7 +337,7 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
                         canton=addr.get('region', CITY_CANTONS.get(city.lower(), '')),
                         postal_code=str(addr.get('postalCode', '')) or None,
                         latitude=None, longitude=None,
-                        features=[], images=[],
+                        features=[], images=imgs,
                         published_at=listing.get('publishDate'),
                     ))
             except Exception as e:
@@ -332,6 +352,16 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
                     log.info(f"[ImmoScout24] Page {page}: {len(items)} items via __INITIAL_STATE__")
                     for item in items:
                         lid = item.get('id', '')
+                        # Extract images
+                        imgs_raw = item.get('images') or item.get('pictures') or []
+                        imgs = []
+                        for img in imgs_raw[:5]:
+                            if isinstance(img, str):
+                                imgs.append(img)
+                            elif isinstance(img, dict):
+                                imgs.append(img.get('url') or img.get('src') or img.get('original') or '')
+                        imgs = [u for u in imgs if u]
+
                         results.append(_make_property(
                             external_id=f"is24-{lid}", source='ImmoScout24',
                             source_url=f"https://www.immoscout24.ch/fr/d/{lid}",
@@ -346,7 +376,7 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
                             canton=CITY_CANTONS.get(city.lower(), ''),
                             postal_code=_extract_postal(item.get('address', '')),
                             latitude=None, longitude=None,
-                            features=[], images=[], published_at=None,
+                            features=[], images=imgs, published_at=None,
                         ))
                 except Exception as e:
                     log.error(f"[ImmoScout24] __INITIAL_STATE__ parse error: {e}")
@@ -395,6 +425,16 @@ def scrape_immobilier_ch(city="Lausanne", transaction="location", max_pages=2):
                 eid = re.search(r'/(\d+)', href)
 
                 if title or price:
+                    # Extract images from card
+                    imgs = []
+                    for img_el in card.select('img[src], img[data-src]'):
+                        src = img_el.get('data-src') or img_el.get('src') or ''
+                        if src and not src.startswith('data:') and 'placeholder' not in src.lower():
+                            if src.startswith('//'):
+                                src = 'https:' + src
+                            imgs.append(src)
+                    imgs = imgs[:5]
+
                     results.append(_make_property(
                         external_id=f"imch-{eid.group(1) if eid else hash(title+address)}",
                         source='Immobilier.ch', source_url=href,
@@ -406,7 +446,7 @@ def scrape_immobilier_ch(city="Lausanne", transaction="location", max_pages=2):
                         canton=CITY_CANTONS.get(city.lower(), ''),
                         postal_code=_extract_postal(address),
                         latitude=None, longitude=None,
-                        features=[], images=[], published_at=None,
+                        features=[], images=imgs, published_at=None,
                     ))
             except Exception:
                 pass

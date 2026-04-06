@@ -463,7 +463,8 @@ CRITERES A COLLECTER (saute ceux déjà connus):
 9. Date emménagement (optionnel)
 
 COMPORTEMENT:
-- Commence par te présenter et demander la région
+- Si un PROFIL ACTUEL est fourni ci-dessous, NE REDEMANDE AUCUN critère déjà connu. Salue et propose de modifier ou confirmer.
+- Si aucun profil n'existe, commence par te présenter et demander la région
 - Quand tu as zone + type + transaction + budget, propose de créer l'espace
 - Ne force pas les critères optionnels
 - Si le profil est déjà complet, demande si l'utilisateur veut modifier quelque chose
@@ -486,7 +487,13 @@ conversations = {}
 @app.route('/api/chat', methods=['POST'])
 def api_chat():
     data = request.json or {}
-    user_id = str(data.get('user_id', 'anon'))
+    user_id_raw = data.get('user_id', 'anon')
+    user_id = str(user_id_raw)
+    # Keep numeric version for DB queries
+    try:
+        user_id_int = int(user_id_raw)
+    except (ValueError, TypeError):
+        user_id_int = None
     message = data.get('message', '').strip()
 
     if not message:
@@ -505,6 +512,7 @@ def api_chat():
 
     # Load existing profile from DB to give context to Claude
     existing_profile = {}
+    db_uid = user_id_int if user_id_int is not None else user_id
     try:
         conn = get_db()
         cur = conn.cursor()
@@ -514,7 +522,7 @@ def api_chat():
             FROM search_profiles
             WHERE user_id = %s AND is_active = TRUE
             ORDER BY created_at DESC LIMIT 1
-        """, (user_id,))
+        """, (db_uid,))
         row = cur.fetchone()
         if row:
             if row['transaction']: existing_profile['transaction'] = row['transaction']
@@ -531,12 +539,14 @@ def api_chat():
                 FROM search_zones sz
                 JOIN search_profiles sp ON sp.id = sz.profile_id
                 WHERE sp.user_id = %s AND sp.is_active = TRUE
-            """, (user_id,))
+            """, (db_uid,))
             zones = cur.fetchall()
             if zones:
                 existing_profile['zones'] = [dict(z) for z in zones]
     except Exception as e:
         print(f"Profile load error: {e}")
+
+    print(f"[CHAT] user_id={user_id} existing_profile={existing_profile}")
 
     # Build system prompt with profile context
     sys_prompt = LOU_SYSTEM_PROMPT
@@ -565,7 +575,8 @@ def api_chat():
                 known_parts.append(f"Priorités: {', '.join(prios)}")
 
         known_summary = '\n'.join(known_parts) if known_parts else 'Aucun critère'
-        sys_prompt += f"\n\n=== PROFIL ACTUEL (NE PAS REDEMANDER) ===\n{known_summary}\n\nJSON: {json.dumps(existing_profile, ensure_ascii=False, default=str)}\n\nPasse directement au PROCHAIN critère manquant."
+        print(f"[CHAT] user_id={user_id} profile loaded: {known_summary}")
+        sys_prompt += f"\n\n=== PROFIL ACTUEL DE L'UTILISATEUR (DEJA ENREGISTRE — NE JAMAIS REDEMANDER CES INFOS) ===\n{known_summary}\n\nJSON: {json.dumps(existing_profile, ensure_ascii=False, default=str)}\n\nIMPORTANT: L'utilisateur a DEJA défini ces critères. Ne les redemande PAS. Passe directement au PROCHAIN critère manquant, ou propose de modifier le profil existant."
 
     # Build messages
     messages = list(history[-10:])
