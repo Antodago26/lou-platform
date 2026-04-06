@@ -79,7 +79,7 @@ BROWSER_HEADERS = {
     'User-Agent': UA,
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
     'Accept-Language': 'fr-CH,fr;q=0.9,de-CH;q=0.8,en;q=0.7',
-    'Accept-Encoding': 'gzip, deflate, br',
+    'Accept-Encoding': 'gzip, deflate',  # No brotli — avoids garbled responses
     'Sec-Ch-Ua': '"Chromium";v="125", "Google Chrome";v="125", "Not.A/Brand";v="24"',
     'Sec-Ch-Ua-Mobile': '?0',
     'Sec-Ch-Ua-Platform': '"Windows"',
@@ -91,10 +91,37 @@ BROWSER_HEADERS = {
     'Cache-Control': 'max-age=0',
 }
 
+# ScrapingBee for hard-Cloudflare sites (optional paid service)
+SCRAPINGBEE_KEY = os.environ.get('SCRAPINGBEE_API_KEY', '')
+SCRAPINGBEE_URL = 'https://app.scrapingbee.com/api/v1'
 
-def _get(url, headers=None, timeout=20):
-    """HTTP GET with automatic fallback: curl_cffi → cloudscraper → requests.
-    If curl_cffi returns 403, retries with cloudscraper (JS challenge solver)."""
+
+def _sb_get(url, render_js=False):
+    """Fetch via ScrapingBee (paid). Returns (status_code, html_text)."""
+    if not SCRAPINGBEE_KEY:
+        return 0, ''
+    params = {
+        'api_key': SCRAPINGBEE_KEY,
+        'url': url,
+        'stealth_proxy': 'true',
+        'country_code': 'ch',
+    }
+    if render_js:
+        params['render_js'] = 'true'
+        params['wait'] = 3000
+    try:
+        r = requests.get(SCRAPINGBEE_URL, params=params, timeout=60)
+        log.info(f"[ScrapingBee] {url[:60]} → HTTP {r.status_code} ({len(r.text)} bytes)")
+        return r.status_code, r.text
+    except Exception as e:
+        log.error(f"[ScrapingBee] {url[:60]}: {e}")
+        return 0, ''
+
+
+def _get(url, headers=None, timeout=20, use_sb=False):
+    """HTTP GET with automatic fallback: curl_cffi → cloudscraper → requests → ScrapingBee.
+    If curl_cffi returns 403, retries with cloudscraper (JS challenge solver).
+    Set use_sb=True to also try ScrapingBee as last resort (for hard-Cloudflare sites)."""
     h = {**BROWSER_HEADERS}
     if headers:
         h.update(headers)
@@ -110,18 +137,32 @@ def _get(url, headers=None, timeout=20):
     for name, client in clients:
         try:
             r = client.get(url, headers=h, timeout=timeout, allow_redirects=True)
-            log.info(f"[{name}] {url[:70]} → {r.status_code} ({len(r.text)} bytes)")
+            text = r.text if isinstance(r.text, str) else r.content.decode('utf-8', errors='replace')
+            log.info(f"[{name}] {url[:70]} → {r.status_code} ({len(text)} bytes)")
 
             # If 403 and we have more clients to try, continue
             if r.status_code == 403 and name != clients[-1][0]:
-                is_cf = 'Just a moment' in r.text[:500] or 'cf-' in r.text[:2000]
+                is_cf = 'Just a moment' in text[:500] or 'cf-' in text[:2000]
                 log.info(f"[{name}] 403 received{' (Cloudflare)' if is_cf else ''}, trying next client...")
                 continue
 
-            return r.status_code, r.text
+            # If still 403 after all clients, try ScrapingBee
+            if r.status_code == 403 and use_sb and SCRAPINGBEE_KEY:
+                log.info(f"[{name}] 403 — falling back to ScrapingBee")
+                sb_status, sb_html = _sb_get(url, render_js=True)
+                if sb_status == 200:
+                    return sb_status, sb_html
+
+            return r.status_code, text
         except Exception as e:
             log.error(f"[{name}] GET {url[:70]}: {e}")
             continue
+
+    # Last resort: ScrapingBee
+    if use_sb and SCRAPINGBEE_KEY:
+        sb_status, sb_html = _sb_get(url, render_js=True)
+        if sb_status == 200:
+            return sb_status, sb_html
 
     return 0, ''
 
@@ -132,7 +173,7 @@ def _get_json(url, headers=None, timeout=20):
         'User-Agent': UA,
         'Accept': 'application/json, text/plain, */*',
         'Accept-Language': 'fr-CH,fr;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
+        'Accept-Encoding': 'gzip, deflate',
     }
     if headers:
         h.update(headers)
@@ -430,7 +471,7 @@ def scrape_immoscout24(city="Lausanne", transaction="location", max_pages=3):
     for page in range(1, max_pages + 1):
         try:
             url = f"https://www.immoscout24.ch/fr/immobilier/{tx}/lieu-{slug}?pn={page}"
-            status, html = _get(url)
+            status, html = _get(url, use_sb=True)
             log.info(f"[ImmoScout24] Page {page}: HTTP {status}, len={len(html)}")
 
             if status != 200:
@@ -618,7 +659,7 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=2):
     for page in range(1, max_pages + 1):
         try:
             url = f"https://www.homegate.ch/{tx}/real-estate/city-{slug}/matching-list?ep={page}"
-            status, html = _get(url, headers={'Accept-Language': 'fr-CH,fr;q=0.9,de-CH;q=0.8'})
+            status, html = _get(url, headers={'Accept-Language': 'fr-CH,fr;q=0.9,de-CH;q=0.8'}, use_sb=True)
             log.info(f"[Homegate] Page {page}: HTTP {status}, len={len(html)}")
 
             if status != 200:
@@ -823,7 +864,7 @@ def scrape_comparis(city="Lausanne", transaction="location", max_pages=2):
                 "Page": page,
             }, separators=(',', ':'))
             url = f"https://www.comparis.ch/immobilien/result/list?requestobject={quote(request_obj)}"
-            status, html = _get(url)
+            status, html = _get(url, use_sb=True)
             log.info(f"[Comparis] Page {page}: HTTP {status}, len={len(html)}")
 
             if status != 200:
@@ -1211,8 +1252,20 @@ def scrape_acheter_louer(city="Lausanne", transaction="location", max_pages=2):
 
     for page in range(1, max_pages + 1):
         try:
-            url = f"https://www.acheter-louer.ch/{tx}/{city.lower()}?page={page}"
-            status, html = _get(url)
+            # Try multiple URL patterns (acheter-louer.ch changes their routing)
+            urls_to_try = [
+                f"https://www.acheter-louer.ch/fr/{tx}/appartement/{city.lower()}?page={page}",
+                f"https://www.acheter-louer.ch/{tx}/{city.lower()}?page={page}",
+                f"https://www.acheter-louer.ch/fr/{tx}/{city.lower()}?page={page}",
+            ]
+            status, html = 0, ''
+            for try_url in urls_to_try:
+                status, html = _get(try_url, use_sb=True)
+                if status == 200:
+                    url = try_url
+                    break
+            if status != 200:
+                url = urls_to_try[0]
             log.info(f"[Acheter-Louer] Page {page}: HTTP {status}, len={len(html)}")
 
             if status != 200:
@@ -1311,7 +1364,7 @@ def scrape_properstar(city="Lausanne", transaction="location", max_pages=1):
 
     try:
         url = f"https://www.properstar.ch/switzerland/{slug}/{tx}/apartment"
-        status, html = _get(url)
+        status, html = _get(url, use_sb=True)
         log.info(f"[Properstar] HTTP {status}, len={len(html)}")
 
         if status != 200:
@@ -1453,7 +1506,7 @@ def scrape_newhome(city="Lausanne", transaction="location", max_pages=2):
     for page in range(1, max_pages + 1):
         try:
             url = f"https://www.newhome.ch/fr/{tx}/immobilier/{slug}/liste?page={page}"
-            status, html = _get(url)
+            status, html = _get(url, use_sb=True)
             log.info(f"[Newhome] Page {page}: HTTP {status}, len={len(html)}")
 
             if status != 200:
