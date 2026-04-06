@@ -1004,6 +1004,11 @@ def api_score():
         cur.execute("SELECT * FROM properties WHERE is_active = TRUE AND transaction = %s", (profile['transaction'],))
         properties = cur.fetchall()
 
+        # Fallback: if no matching properties, score all
+        if not properties:
+            cur.execute("SELECT * FROM properties WHERE is_active = TRUE")
+            properties = cur.fetchall()
+
         scored = 0
         for prop in properties:
             prop = dict(prop)

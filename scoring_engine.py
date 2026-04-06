@@ -333,13 +333,13 @@ def score_all_for_profile(db, profile_id):
         (profile_id,)
     ).fetchall()
 
-    # Clean old scores for this profile (removes stale data from previous transaction type, etc.)
+    # Clean old scores for this profile
     db.execute(
         "DELETE FROM scored_properties WHERE profile_id = %s",
         (profile_id,)
     )
 
-    # Pre-filter properties
+    # Pre-filter properties — prefer matching transaction, but include all if none match
     query = """
         SELECT * FROM properties
         WHERE is_active = TRUE
@@ -351,6 +351,17 @@ def score_all_for_profile(db, profile_id):
     if profile['budget_max']:
         query += " AND (price IS NULL OR price <= %s)"
         params.append(int(profile['budget_max'] * 1.3))
+
+    properties = db.execute(query, params).fetchall()
+
+    # Fallback: if no properties match the transaction type, score ALL properties
+    if not properties:
+        query = "SELECT * FROM properties WHERE is_active = TRUE"
+        params = []
+        if profile['budget_max']:
+            query += " AND (price IS NULL OR price <= %s)"
+            params.append(int(profile['budget_max'] * 1.3))
+        properties = db.execute(query, params).fetchall()
 
     properties = db.execute(query, params).fetchall()
 
