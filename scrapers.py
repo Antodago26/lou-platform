@@ -137,15 +137,7 @@ def _get(url, headers=None, timeout=20, use_sb=False):
     for name, client in clients:
         try:
             r = client.get(url, headers=h, timeout=timeout, allow_redirects=True)
-            # Handle text — fix double UTF-8 encoding from ScrapingBee
             text = r.text if isinstance(r.text, str) else r.content.decode('utf-8', errors='replace')
-            # Detect and fix double-encoded UTF-8 (Ã© instead of é)
-            if '\u00c3' in text[:500] and ('\u00a9' in text[:500] or '\u00a2' in text[:500] or '\u00a8' in text[:500]):
-                try:
-                    text = text.encode('latin-1').decode('utf-8')
-                    log.info(f"[{name}] Fixed double UTF-8 encoding")
-                except (UnicodeDecodeError, UnicodeEncodeError):
-                    pass
             log.info(f"[{name}] {url[:70]} → {r.status_code} ({len(text)} bytes)")
 
             # If 403 and we have more clients to try, continue
