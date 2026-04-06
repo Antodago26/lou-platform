@@ -92,7 +92,7 @@
             TOKEN = data.token;
             USER = data.user;
             // On external hosts (Webflow), render dashboard in place
-            var isRenderHost = window.location.hostname === 'lou-platform.onrender.com' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            var isRenderHost = window.location.hostname === 'lou-platform.onrender.com' || window.location.hostname === 'garou.ch' || window.location.hostname === 'www.garou.ch' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
             if (isRenderHost) {
               window.location.href = '/dashboard';
             } else {
@@ -136,6 +136,18 @@
       }
     });
 
+    // If user is already logged in, hero CTA opens chat instead of auth
+    if (isJWT(TOKEN) && USER) {
+      var heroCta1 = $('hero-cta-1');
+      if (heroCta1) {
+        heroCta1.removeEventListener('click', heroCta1._authHandler);
+        heroCta1.addEventListener('click', function(e) {
+          e.preventDefault();
+          var chatToggle = document.querySelector('.chat-toggle');
+          if (chatToggle) chatToggle.click();
+        });
+      }
+    }
     // If user is already logged in, change nav button to "Mon Dashboard"
     if (isJWT(TOKEN) && USER) {
       var navBtn = $('nav-login-btn');
@@ -196,7 +208,7 @@
         '<h1>Votre <em>chasseur immobilier</em> intelligent en Suisse</h1>' +
         '<p>Lou Garou scrute en continu les meilleures annonces de Suisse romande, les analyse avec l\'IA et vous présente uniquement les biens qui correspondent a vos critères.</p>' +
         '<div class="hero-ctas">' +
-          '<a href="#" class="btn btn-primary" id="hero-cta-1">Commencer ma recherche</a>' +
+          '<a href="#" class="btn btn-primary" id="hero-cta-1">Démarrer ma recherche</a>' +
           '<a href="#how" class="btn btn-outline">En savoir plus</a>' +
         '</div>' +
       '</div>' +
@@ -366,7 +378,7 @@
       '.lou-auth-err{color:#dc2626;font-size:13px;margin-top:8px;display:none;text-align:center}',
 
       '@media(max-width:900px){.hero{flex-direction:column;text-align:center;padding:40px 5% 60px}.hero-text h1{font-size:36px}.hero-ctas{justify-content:center}.hero-visual{width:100%;max-width:360px;height:280px}.features-grid{grid-template-columns:1fr}.steps{grid-template-columns:repeat(2,1fr)}.nav-links{gap:16px}.footer-inner{flex-direction:column;gap:12px}}',
-      '@media(max-width:600px){.nav-links a:not(.btn){display:none}.stats-bar-inner{flex-wrap:wrap;margin:0 auto}.steps{grid-template-columns:1fr}}'
+      '@media(max-width:600px){.nav-links a:not(.btn){display:none}.stats-bar-inner{flex-wrap:wrap;margin:0 auto;display:grid;grid-template-columns:repeat(2,1fr);gap:16px}.steps{grid-template-columns:1fr}.hero-visual{display:none}.hero-text{max-width:100%}.hero-text h1{font-size:28px}.hero-ctas{flex-direction:column}.hero-ctas .btn{width:100%;text-align:center}.footer-inner{flex-direction:column;gap:12px}}'
     ].join('');
   }
 
@@ -550,7 +562,15 @@
           '<div class="dash-profile-tags">' +
             tags.map(function (t) { return '<span class="ptag">' + escapeHtml(t) + '</span>'; }).join('') +
             priorities.map(function (t) { return '<span class="ptag blue">' + escapeHtml(t) + '</span>'; }).join('') +
+            '<button class="ptag edit-criteria-btn" id="edit-criteria-btn" title="Modifier mes crit\u00e8res">\u270F\uFE0F Modifier</button>' +
           '</div>';
+        var editBtn = $('edit-criteria-btn');
+        if (editBtn) {
+          editBtn.onclick = function() {
+            var chatToggle = document.querySelector('.chat-toggle');
+            if (chatToggle) chatToggle.click();
+          };
+        }
       })
       .catch(function () {});
   }
@@ -612,8 +632,8 @@
     var gc = gradeColors[p.grade] || '#94a3b8';
 
     var img = (p.images && p.images.length > 0)
-      ? '<img src="' + escapeHtml(p.images[0]) + '" alt="" class="prop-img" onerror="this.style.display=\'none\'">'
-      : '';
+      ? '<img src="' + escapeHtml(p.images[0]) + '" alt="' + escapeHtml(p.title || '') + '" class="prop-img" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=prop-img-placeholder><svg width=48 height=48 viewBox=&quot;0 0 24 24&quot; fill=none stroke=#94a3b8 stroke-width=1.5><rect x=3 y=3 width=18 height=18 rx=2/><circle cx=8.5 cy=8.5 r=1.5/><path d=&quot;M21 15l-5-5L5 21&quot;/></svg></div>\'">'
+      : '<div class="prop-img-placeholder"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>';
 
     var priceText = p.price ? formatPrice(p.price) + ' CHF' : 'Prix sur demande';
     if (p.unit && p.price) priceText += '<small>/' + escapeHtml(p.unit.split('/')[1] || 'mois') + '</small>';
@@ -757,7 +777,7 @@
         .then(function (r) { return r.json(); })
         .then(function (data) {
           loading.remove();
-          var reply = data.message || data.reply || 'Desole, je n\'ai pas compris.';
+          var reply = data.message || data.reply || 'Désolé, je n\'ai pas compris.';
           body.innerHTML += '<div class="chat-msg bot">' + escapeHtml(reply) + '</div>';
 
           // Show suggestions
@@ -776,6 +796,10 @@
             });
           }
           body.scrollTop = body.scrollHeight;
+          // Refresh profile bar if criteria were updated
+          if (data.criteria && Object.keys(data.criteria).length > 0 && typeof loadProfileBar === 'function') {
+            loadProfileBar();
+          }
         })
         .catch(function () {
           loading.remove();
@@ -843,12 +867,14 @@
       '.prop-card:hover{box-shadow:0 8px 24px rgba(0,0,0,.08);border-color:#cbd5e1;transform:translateY(-2px)}',
       '.prop-card-top{position:relative;height:180px;background:#e2e8f0;overflow:hidden}',
       '.prop-img{width:100%;height:100%;object-fit:cover}',
-      '.prop-img-placeholder{width:100%;height:100%;background:linear-gradient(135deg,#e2e8f0,#cbd5e1);display:flex;align-items:center;justify-content:center}',
+      '.prop-img-placeholder{width:100%;height:100%;background:linear-gradient(135deg,#e2e8f0,#f1f5f9);display:flex;align-items:center;justify-content:center}',
       '.prop-score{position:absolute;top:12px;left:12px;display:flex;align-items:center;gap:4px;padding:6px 12px;border-radius:8px;color:#fff;font-weight:700}',
       '.prop-score-num{font-size:18px}',
       '.prop-score-grade{font-size:12px;opacity:.9}',
       '.fav-btn{position:absolute;top:12px;right:12px;background:rgba(255,255,255,.9);border:none;width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;color:#94a3b8;display:flex;align-items:center;justify-content:center;transition:all .2s}',
       '.fav-btn:hover,.fav-btn.active{color:#dc2626;background:#fff}',
+      '.edit-criteria-btn{background:#0369a1;color:#fff;cursor:pointer;border:none;padding:6px 14px;border-radius:50px;font-size:13px;transition:background .2s}',
+      '.edit-criteria-btn:hover{background:#0284c7}',
 
       // Card body
       '.prop-card-body{padding:16px}',
@@ -920,12 +946,23 @@
 
       // Responsive
       '@media(max-width:768px){',
-        '.dash-stats{grid-template-columns:repeat(2,1fr)}',
+        '.dash-stats{grid-template-columns:repeat(2,1fr);gap:10px}',
+        '.dash-stat{padding:14px}',
+        '.dash-stat-num{font-size:24px}',
         '.dash-wrap{padding:16px}',
         '.prop-grid{grid-template-columns:1fr}',
+        '.prop-card-top{height:140px}',
         '.dash-header{flex-direction:column;align-items:flex-start}',
+        '.dash-header h1{font-size:22px}',
         '.dash-nav{padding:12px 16px}',
+        '.dash-user-email{display:none}',
         '.chat-panel{width:calc(100vw - 32px);right:16px;bottom:80px;height:60vh}',
+      '}',
+      '@media(max-width:480px){',
+        '.dash-actions{flex-direction:column;width:100%}',
+        '.dash-select{width:100%}',
+        '.chat-toggle{width:48px;height:48px;bottom:16px;right:16px}',
+        '.chat-panel{height:70vh;bottom:72px}',
       '}'
     ].join('');
   }
@@ -934,7 +971,7 @@
   // ROUTER — Determine which page to show
   // ============================================================
   var path = window.location.pathname;
-  var isRender = window.location.hostname === 'lou-platform.onrender.com' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  var isRender = window.location.hostname === 'lou-platform.onrender.com' || window.location.hostname === 'garou.ch' || window.location.hostname === 'www.garou.ch' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
   if (path === '/dashboard') {
     showDashboard();

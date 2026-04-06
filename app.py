@@ -439,37 +439,45 @@ def toggle_favorite(property_id):
 # CHATBOT IA ENDPOINT
 # ============================================================
 
-LOU_SYSTEM_PROMPT = """Tu es Lou, un chasseur immobilier digital suisse. Tu es un loup sympathique et efficace.
+LOU_SYSTEM_PROMPT = """Tu es Lou, un chasseur immobilier digital suisse. Tu es un loup sympathique, attentif et efficace.
 
-TON ROLE: Aider les gens a definir leur recherche immobiliere en Suisse romande via une conversation naturelle.
+TON ROLE: Aider les gens à définir leur recherche immobilière en Suisse romande via une conversation naturelle et fluide.
 
-REGLES:
-- Parle en francais, tutoie, sois chaleureux mais pro
-- UNE question a la fois
-- Si l'utilisateur donne plusieurs infos d'un coup, enregistre tout
+REGLES CRITIQUES:
+- Parle en français, tutoie, sois chaleureux mais pro
+- UNE question à la fois
+- JAMAIS reposer une question dont tu connais déjà la réponse
+- Si l'utilisateur donne plusieurs infos d'un coup, enregistre-les TOUTES
+- Prends en compte CHAQUE message — ne l'ignore jamais
 - Sois bref: 1-3 phrases max
-- Emojis avec parcimonie
 
-CRITERES A COLLECTER:
+CRITERES A COLLECTER (saute ceux déjà connus):
 1. Zone: ville(s), canton, rayon km
 2. Type: appartement, maison, villa, studio, loft, attique, duplex
 3. Transaction: location ou achat
 4. Budget: min et/ou max CHF
-5. Pieces: min et/ou max
-6. Surface: m2 min
-7. Priorites: balcon, parking, vue, calme, transports, animaux, cave, jardin, ascenseur
-8. Etage (optionnel)
-9. Date emmenagement (optionnel)
+5. Pièces: min et/ou max
+6. Surface: m² min
+7. Priorités: balcon, parking, vue, calme, transports, animaux, cave, jardin, ascenseur
+8. Étage (optionnel)
+9. Date emménagement (optionnel)
 
 COMPORTEMENT:
-- Commence par te presenter et demander la region
-- Quand tu as zone + type + transaction + budget, propose de creer l'espace
-- Ne force pas les criteres optionnels
+- Commence par te présenter et demander la région
+- Quand tu as zone + type + transaction + budget, propose de créer l'espace
+- Ne force pas les critères optionnels
+- Si le profil est déjà complet, demande si l'utilisateur veut modifier quelque chose
 
 REPONSE: JSON uniquement:
 {"message":"texte","suggestions":["btn1","btn2"],"criteria":{"zones":[{"city":"X","canton":"XX","radius_km":3}],"property_types":["appartement"],"transaction":"location","budget_min":null,"budget_max":2500,"currency":"CHF","rooms_min":3,"rooms_max":null,"surface_min":null,"floor_preference":null,"priorities":["vue"],"move_date":null},"profile_ready":false,"confirmed":false}
 
-Cantons romands: VD, GE, NE, FR, VS, JU, BE"""
+criteria contient UNIQUEMENT les champs qui changent dans ce message.
+profile_ready = true quand zone + type + transaction + budget sont remplis.
+confirmed = true quand l'utilisateur confirme explicitement.
+REPONDS UNIQUEMENT DU JSON VALIDE, RIEN D'AUTRE.
+
+Cantons romands: VD, GE, NE, FR, VS, JU, BE
+Villes principales: Genève, Lausanne, Montreux, Vevey, Nyon, Morges, Yverdon, Neuchâtel, Fribourg, Sion, Bienne"""
 
 # Conversation store (in-memory, use Redis for production)
 conversations = {}
@@ -486,7 +494,7 @@ def api_chat():
 
     if not ANTHROPIC_KEY:
         return jsonify({
-            "message": "Chatbot IA non configure. Ajoutez ANTHROPIC_API_KEY.",
+            "message": "Chatbot IA non configuré. Ajoutez ANTHROPIC_API_KEY.",
             "suggestions": [], "criteria": {}, "profile_ready": False, "confirmed": False
         })
 
@@ -495,16 +503,80 @@ def api_chat():
         conversations[user_id] = []
     history = conversations[user_id]
 
+    # Load existing profile from DB to give context to Claude
+    existing_profile = {}
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT transaction, property_types, budget_min, budget_max,
+                   rooms_min, rooms_max, surface_min, priorities
+            FROM search_profiles
+            WHERE user_id = %s AND is_active = TRUE
+            ORDER BY created_at DESC LIMIT 1
+        """, (user_id,))
+        row = cur.fetchone()
+        if row:
+            if row['transaction']: existing_profile['transaction'] = row['transaction']
+            if row['property_types']: existing_profile['property_types'] = row['property_types']
+            if row['budget_min']: existing_profile['budget_min'] = row['budget_min']
+            if row['budget_max']: existing_profile['budget_max'] = row['budget_max']
+            if row['rooms_min']: existing_profile['rooms_min'] = row['rooms_min']
+            if row['rooms_max']: existing_profile['rooms_max'] = row['rooms_max']
+            if row['surface_min']: existing_profile['surface_min'] = row['surface_min']
+            if row['priorities']: existing_profile['priorities'] = row['priorities']
+            # Also load zones
+            cur.execute("""
+                SELECT sz.city, sz.canton, sz.radius_km
+                FROM search_zones sz
+                JOIN search_profiles sp ON sp.id = sz.profile_id
+                WHERE sp.user_id = %s AND sp.is_active = TRUE
+            """, (user_id,))
+            zones = cur.fetchall()
+            if zones:
+                existing_profile['zones'] = [dict(z) for z in zones]
+    except Exception as e:
+        print(f"Profile load error: {e}")
+
+    # Build system prompt with profile context
+    sys_prompt = LOU_SYSTEM_PROMPT
+    if existing_profile:
+        known_parts = []
+        if existing_profile.get('transaction'):
+            known_parts.append(f"Transaction: {existing_profile['transaction']}")
+        if existing_profile.get('zones'):
+            zones_str = ', '.join([z.get('city', '?') for z in existing_profile['zones']])
+            known_parts.append(f"Zones: {zones_str}")
+        if existing_profile.get('budget_max'):
+            known_parts.append(f"Budget max: {existing_profile['budget_max']} CHF")
+        if existing_profile.get('property_types'):
+            types = existing_profile['property_types']
+            if isinstance(types, list):
+                known_parts.append(f"Types: {', '.join(types)}")
+            else:
+                known_parts.append(f"Types: {types}")
+        if existing_profile.get('rooms_min'):
+            known_parts.append(f"Pièces min: {existing_profile['rooms_min']}")
+        if existing_profile.get('surface_min'):
+            known_parts.append(f"Surface min: {existing_profile['surface_min']} m²")
+        if existing_profile.get('priorities'):
+            prios = existing_profile['priorities']
+            if isinstance(prios, list):
+                known_parts.append(f"Priorités: {', '.join(prios)}")
+
+        known_summary = '\n'.join(known_parts) if known_parts else 'Aucun critère'
+        sys_prompt += f"\n\n=== PROFIL ACTUEL (NE PAS REDEMANDER) ===\n{known_summary}\n\nJSON: {json.dumps(existing_profile, ensure_ascii=False, default=str)}\n\nPasse directement au PROCHAIN critère manquant."
+
     # Build messages
-    messages = list(history)
+    messages = list(history[-10:])
     messages.append({"role": "user", "content": message})
 
     try:
         client = Anthropic(api_key=ANTHROPIC_KEY)
         response = client.messages.create(
             model="claude-sonnet-4-20250514",
-            max_tokens=500,
-            system=LOU_SYSTEM_PROMPT,
+            max_tokens=800,
+            system=sys_prompt,
             messages=messages
         )
         raw = response.content[0].text.strip()
@@ -522,11 +594,21 @@ def api_chat():
         result.setdefault("profile_ready", False)
         result.setdefault("confirmed", False)
 
-        # Store history
+        # Store history — use the message text (not raw JSON) for better context
         history.append({"role": "user", "content": message})
-        history.append({"role": "assistant", "content": raw})
+        assistant_text = result.get("message", raw)
+        if result.get("criteria"):
+            assistant_text += f" [Critères mis à jour: {json.dumps(result['criteria'], ensure_ascii=False, default=str)}]"
+        history.append({"role": "assistant", "content": assistant_text})
         if len(history) > 20:
             conversations[user_id] = history[-20:]
+
+        # Save criteria to DB if any were extracted
+        if result.get("criteria") and result["criteria"]:
+            try:
+                _save_chat_criteria(user_id, result["criteria"])
+            except Exception as save_err:
+                print(f"Criteria save error: {save_err}")
 
         return jsonify(result)
 
@@ -541,6 +623,66 @@ def api_chat():
             "suggestions": ["Reessayer"], "criteria": {},
             "profile_ready": False, "confirmed": False, "error": str(e)
         })
+
+
+def _save_chat_criteria(user_id, criteria):
+    """Save criteria extracted from chat to the user's search profile."""
+    conn = get_db()
+    cur = conn.cursor()
+    # Get existing profile
+    cur.execute(
+        "SELECT id FROM search_profiles WHERE user_id = %s AND is_active = TRUE ORDER BY created_at DESC LIMIT 1",
+        (user_id,)
+    )
+    row = cur.fetchone()
+    if not row:
+        # Create a new profile
+        cur.execute(
+            "INSERT INTO search_profiles (user_id, is_active) VALUES (%s, TRUE) RETURNING id",
+            (user_id,)
+        )
+        row = cur.fetchone()
+    profile_id = row['id']
+
+    # Update fields that were provided
+    updates = []
+    values = []
+    field_map = {
+        'transaction': 'transaction',
+        'property_types': 'property_types',
+        'budget_min': 'budget_min',
+        'budget_max': 'budget_max',
+        'rooms_min': 'rooms_min',
+        'rooms_max': 'rooms_max',
+        'surface_min': 'surface_min',
+        'priorities': 'priorities',
+    }
+    for chat_key, db_col in field_map.items():
+        if chat_key in criteria and criteria[chat_key] is not None:
+            updates.append(f"{db_col} = %s")
+            values.append(criteria[chat_key])
+
+    if updates:
+        values.append(profile_id)
+        cur.execute(f"UPDATE search_profiles SET {', '.join(updates)}, updated_at = NOW() WHERE id = %s", values)
+
+    # Handle zones separately
+    if 'zones' in criteria and criteria['zones']:
+        for zone in criteria['zones']:
+            if isinstance(zone, dict) and zone.get('city'):
+                cur.execute("""
+                    INSERT INTO search_zones (profile_id, city, canton, radius_km)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (profile_id, city) DO UPDATE SET
+                        canton = EXCLUDED.canton, radius_km = EXCLUDED.radius_km
+                """, (
+                    profile_id,
+                    zone.get('city'),
+                    zone.get('canton'),
+                    zone.get('radius_km', 5)
+                ))
+
+    conn.commit()
 
 
 @app.route('/api/chat/reset', methods=['POST'])
