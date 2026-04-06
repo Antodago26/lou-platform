@@ -91,7 +91,11 @@ BROWSER_HEADERS = {
     'Cache-Control': 'max-age=0',
 }
 
-# ScrapingBee for hard-Cloudflare sites (optional paid service)
+# Residential proxy (Decodo/SmartProxy) — set PROXY_URL in env
+# Format: http://username:password@gate.decodo.com:10001
+PROXY_URL = os.environ.get('PROXY_URL', '')
+
+# ScrapingBee (legacy fallback, can be removed once proxy is active)
 SCRAPINGBEE_KEY = os.environ.get('SCRAPINGBEE_API_KEY', '')
 SCRAPINGBEE_URL = 'https://app.scrapingbee.com/api/v1'
 
@@ -110,7 +114,7 @@ def _sb_get(url, render_js=False):
         params['render_js'] = 'true'
         params['wait'] = 3000
     try:
-        r = requests.get(SCRAPINGBEE_URL, params=params, timeout=60)
+        r = requests.get(SCRAPINGBEE_URL, params=params, timeout=20)
         log.info(f"[ScrapingBee] {url[:60]} → HTTP {r.status_code} ({len(r.text)} bytes)")
         return r.status_code, r.text
     except Exception as e:
@@ -119,14 +123,32 @@ def _sb_get(url, render_js=False):
 
 
 def _get(url, headers=None, timeout=20, use_sb=False):
-    """HTTP GET with automatic fallback: curl_cffi → cloudscraper → requests → ScrapingBee.
-    If curl_cffi returns 403, retries with cloudscraper (JS challenge solver).
-    Set use_sb=True to also try ScrapingBee as last resort (for hard-Cloudflare sites)."""
+    """HTTP GET with fallback chain:
+    1. Residential proxy (if PROXY_URL set) — best success rate
+    2. curl_cffi (Chrome TLS impersonation)
+    3. cloudscraper (Cloudflare JS solver)
+    4. requests (plain)
+    5. ScrapingBee (legacy fallback, if use_sb=True)
+    """
     h = {**BROWSER_HEADERS}
     if headers:
         h.update(headers)
 
-    # Try each client in order, retry on 403
+    proxies = {'http': PROXY_URL, 'https': PROXY_URL} if PROXY_URL else None
+
+    # Strategy 1: Try with residential proxy first (highest success rate)
+    if proxies:
+        try:
+            r = requests.get(url, headers=h, timeout=timeout, proxies=proxies, allow_redirects=True)
+            text = r.text if isinstance(r.text, str) else r.content.decode('utf-8', errors='replace')
+            log.info(f"[proxy] {url[:70]} → {r.status_code} ({len(text)} bytes)")
+            if r.status_code != 403:
+                return r.status_code, text
+            log.info(f"[proxy] 403 received, trying direct clients...")
+        except Exception as e:
+            log.error(f"[proxy] GET {url[:70]}: {e}")
+
+    # Strategy 2: Direct clients (curl_cffi → cloudscraper → requests)
     clients = []
     if _curl_session:
         clients.append(('curl_cffi', _curl_session))
@@ -140,13 +162,12 @@ def _get(url, headers=None, timeout=20, use_sb=False):
             text = r.text if isinstance(r.text, str) else r.content.decode('utf-8', errors='replace')
             log.info(f"[{name}] {url[:70]} → {r.status_code} ({len(text)} bytes)")
 
-            # If 403 and we have more clients to try, continue
             if r.status_code == 403 and name != clients[-1][0]:
                 is_cf = 'Just a moment' in text[:500] or 'cf-' in text[:2000]
                 log.info(f"[{name}] 403 received{' (Cloudflare)' if is_cf else ''}, trying next client...")
                 continue
 
-            # If still 403 after all clients, try ScrapingBee
+            # If still 403 after all direct clients, try ScrapingBee
             if r.status_code == 403 and use_sb and SCRAPINGBEE_KEY:
                 log.info(f"[{name}] 403 — falling back to ScrapingBee")
                 sb_status, sb_html = _sb_get(url, render_js=True)
@@ -178,6 +199,23 @@ def _get_json(url, headers=None, timeout=20):
     if headers:
         h.update(headers)
 
+    proxies = {'http': PROXY_URL, 'https': PROXY_URL} if PROXY_URL else None
+
+    # Try residential proxy first
+    if proxies:
+        try:
+            r = requests.get(url, headers=h, timeout=timeout, proxies=proxies, allow_redirects=True)
+            ct = r.headers.get('content-type', '')
+            if r.status_code == 200 and 'json' in ct:
+                log.info(f"[proxy-json] {url[:70]} → 200")
+                return r.status_code, r.json()
+            if r.status_code != 403:
+                return r.status_code, None
+            log.info(f"[proxy-json] {url[:70]} → 403, trying direct...")
+        except Exception as e:
+            log.error(f"[proxy-json] GET {url[:70]}: {e}")
+
+    # Direct clients fallback
     clients = []
     if _curl_session:
         clients.append(('curl_cffi', _curl_session))
@@ -1938,15 +1976,28 @@ def scrape_all(city="Lausanne", transaction="location"):
     """Scrape all portals for a given city and transaction type."""
     all_results = []
 
-    # Only run scrapers confirmed working from Render servers
-    # Others (ImmoScout24, Anibis, Tutti, Newhome, Properstar, Acheter-Louer, RealAdvisor)
-    # are blocked by Cloudflare/WAF and just waste time causing timeouts
-    scrapers = [
-        ('Homegate', scrape_homegate),
-        ('Comparis', scrape_comparis),
-        ('Immobilier.ch', scrape_immobilier_ch),
-        ('Flatfox', scrape_flatfox),
-    ]
+    # With residential proxy (PROXY_URL), all scrapers should work
+    # Without proxy, only Comparis (via SB), Immobilier.ch, Flatfox work
+    if PROXY_URL:
+        scrapers = [
+            ('Flatfox', scrape_flatfox),
+            ('ImmoScout24', scrape_immoscout24),
+            ('Homegate', scrape_homegate),
+            ('Comparis', scrape_comparis),
+            ('Anibis', scrape_anibis),
+            ('Immobilier.ch', scrape_immobilier_ch),
+            ('Acheter-Louer', scrape_acheter_louer),
+            ('Newhome', scrape_newhome),
+            ('Tutti', scrape_tutti),
+            ('RealAdvisor', scrape_realadvisor),
+        ]
+    else:
+        # No proxy — only run scrapers that work without it
+        scrapers = [
+            ('Comparis', scrape_comparis),
+            ('Immobilier.ch', scrape_immobilier_ch),
+            ('Flatfox', scrape_flatfox),
+        ]
 
     for name, scraper in scrapers:
         try:

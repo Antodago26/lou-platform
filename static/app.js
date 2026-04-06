@@ -451,7 +451,7 @@
             '<option value="70">Classe B+ (70+)</option>' +
             '<option value="55">Classe C+ (55+)</option>' +
           '</select>' +
-          '<button id="btn-scrape" class="dash-btn-scrape" title="Lancer une recherche maintenant">Actualiser les annonces</button>' +
+          '<button id="btn-scrape" class="dash-btn-scrape" title="Recalculer les scores selon vos crit\u00e8res">Actualiser mes r\u00e9sultats</button>' +
         '</div>' +
       '</div>' +
       // Stats row
@@ -497,7 +497,7 @@
         var btn = this;
         if (btn.disabled) return;
         btn.disabled = true;
-        btn.innerHTML = '<span class="scrape-spinner"></span> Recherche en cours...';
+        btn.innerHTML = '<span class="scrape-spinner"></span> Mise \u00e0 jour...';
         btn.classList.add('scraping');
 
         fetch(API + '/api/scrape', {
@@ -522,16 +522,15 @@
             if (data.ok) {
               var saved = data.total_saved || 0;
               var scraped = data.total_scraped || 0;
-              var msg = saved > 0
-                ? '&#10003; ' + saved + ' nouvelles annonces !'
-                : '&#10003; Recherche terminée (' + scraped + ' annonces vérifiées)';
+              var scored = data.scored || scraped;
+              var msg = '&#10003; ' + scored + ' annonces analys\u00e9es';
               btn.innerHTML = msg;
               btn.classList.add('scrape-success');
               // Refresh dashboard data
               loadStats();
               loadProperties(1, $('sort-select').value, parseInt($('grade-filter').value));
               setTimeout(function () {
-                btn.innerHTML = 'Actualiser les annonces';
+                btn.innerHTML = 'Actualiser mes r\u00e9sultats';
                 btn.classList.remove('scrape-success');
               }, 5000);
             } else {
@@ -539,7 +538,7 @@
               btn.innerHTML = 'Erreur: ' + errMsg.substring(0, 40);
               btn.classList.add('scrape-error');
               setTimeout(function () {
-                btn.innerHTML = 'Actualiser les annonces';
+                btn.innerHTML = 'Actualiser mes r\u00e9sultats';
                 btn.classList.remove('scrape-error');
               }, 4000);
             }
@@ -550,7 +549,7 @@
             btn.innerHTML = 'Erreur réseau — Réessayer';
             btn.classList.add('scrape-error');
             setTimeout(function () {
-              btn.innerHTML = 'Actualiser les annonces';
+              btn.innerHTML = 'Actualiser mes r\u00e9sultats';
               btn.classList.remove('scrape-error');
             }, 4000);
           });

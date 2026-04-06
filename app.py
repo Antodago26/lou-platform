@@ -871,84 +871,132 @@ def chat_reset():
 @app.route('/api/scrape', methods=['POST'])
 @token_required
 def api_scrape():
-    """Trigger scraping based on user's search profile zones."""
-    from scrapers import scrape_all, save_to_db
+    """Re-score listings for the user's profile (scraping is handled by cron job)."""
+    from scoring_engine import score_all_for_profile
+    import time as _time
 
-    data = request.json or {}
-    city = data.get('city')
-    transaction = data.get('transaction', 'location')
+    start = _time.time()
 
-    # If no city specified, use the user's profile zones
-    if not city:
-        conn = get_db()
-        cur = conn.cursor()
-        try:
-            cur.execute("""
-                SELECT sz.city FROM search_zones sz
-                JOIN search_profiles sp ON sp.id = sz.profile_id
-                WHERE sp.user_id = %s AND sp.is_active = TRUE
-            """, (request.user_id,))
-            rows = cur.fetchall()
-            cities = [r['city'] for r in rows if r['city']]
-            if not cities:
-                return jsonify({"error": "Aucune zone configuree. Ajoutez des zones dans votre profil."}), 400
-
-            # Also get transaction from profile
-            cur.execute("""
-                SELECT transaction FROM search_profiles
-                WHERE user_id = %s AND is_active = TRUE
-                ORDER BY created_at DESC LIMIT 1
-            """, (request.user_id,))
-            prof = cur.fetchone()
-            if prof and prof['transaction']:
-                transaction = prof['transaction']
-        finally:
-            cur.close()
-            conn.close()
-    else:
-        cities = [city]
-
-    # Scrape for each city
-    total_scraped = 0
-    total_saved = 0
-    details = []
     conn = get_db()
+    cur = conn.cursor()
     try:
-        for c in cities:
-            listings = scrape_all(city=c, transaction=transaction)
-            total_scraped += len(listings)
-            saved = save_to_db(conn, listings)
-            total_saved += saved
-            details.append({"city": c, "scraped": len(listings), "saved": saved})
-    finally:
-        conn.close()
-
-    # Auto-score after scraping
-    try:
-        from scoring_engine import score_all_for_profile
-        conn2 = get_db()
-        cur2 = conn2.cursor()
-        cur2.execute(
+        # Get user's active profile
+        cur.execute(
             "SELECT id FROM search_profiles WHERE user_id = %s AND is_active = TRUE ORDER BY created_at DESC LIMIT 1",
             (request.user_id,)
         )
-        prof_row = cur2.fetchone()
-        if prof_row:
-            scored = score_all_for_profile(conn2, prof_row['id'])
-            print(f"[SCRAPE] Auto-scored {scored} properties for profile {prof_row['id']}")
-        cur2.close()
-        conn2.close()
-    except Exception as score_err:
-        import traceback
-        print(f"Auto-score after scrape error: {score_err}")
-        traceback.print_exc()
+        prof_row = cur.fetchone()
+        if not prof_row:
+            return jsonify({"error": "Aucun profil de recherche. Parlez a Lou pour configurer vos critères."}), 400
 
-    return jsonify({
-        "ok": True,
-        "total_scraped": total_scraped,
-        "total_saved": total_saved,
-        "details": details
-    })
+        # Re-score all properties against user's current criteria
+        scored = score_all_for_profile(conn, prof_row['id'])
+        elapsed = _time.time() - start
+        print(f"[REFRESH] Re-scored {scored} properties for profile {prof_row['id']} in {elapsed:.1f}s")
+
+        return jsonify({
+            "ok": True,
+            "total_scraped": scored,
+            "total_saved": 0,
+            "scored": scored,
+            "time_s": round(elapsed, 1)
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/cron/scrape', methods=['POST'])
+def api_cron_scrape():
+    """Centralized scraping endpoint — called by Render Cron Job or manually.
+    Protected by CRON_SECRET env var. Scrapes all active cities and re-scores all profiles."""
+    import time as _time
+    from scrapers import scrape_all, save_to_db
+    from scoring_engine import score_all_for_profile
+
+    # Auth: require CRON_SECRET header or param
+    cron_secret = os.environ.get('CRON_SECRET', '')
+    provided = request.headers.get('X-Cron-Secret') or request.args.get('secret', '')
+    if not cron_secret or provided != cron_secret:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    start = _time.time()
+    conn = get_db()
+    cur = conn.cursor()
+
+    try:
+        # Step 1: Get all unique cities from active profiles
+        cur.execute("""
+            SELECT DISTINCT sz.city, sp.transaction
+            FROM search_zones sz
+            JOIN search_profiles sp ON sp.id = sz.profile_id
+            WHERE sp.is_active = TRUE AND sz.city IS NOT NULL AND sz.city != ''
+        """)
+        targets = [(r['city'], r['transaction'] or 'location') for r in cur.fetchall()]
+
+        if not targets:
+            return jsonify({"ok": True, "message": "No active profiles/cities", "time_s": 0})
+
+        # Step 2: Scrape each city/transaction combo
+        total_scraped = 0
+        total_saved = 0
+        details = []
+        for city, transaction in targets:
+            try:
+                listings = scrape_all(city=city, transaction=transaction)
+                saved = save_to_db(conn, listings)
+                total_scraped += len(listings)
+                total_saved += saved
+                details.append({"city": city, "transaction": transaction, "scraped": len(listings), "saved": saved})
+                print(f"[CRON] {city} ({transaction}): {len(listings)} scraped, {saved} saved")
+            except Exception as e:
+                print(f"[CRON] {city} failed: {e}")
+                conn.rollback()
+
+        # Step 3: Deactivate old listings
+        cur.execute("""
+            UPDATE properties SET is_active = FALSE
+            WHERE scraped_at < NOW() - INTERVAL '30 days' AND is_active = TRUE
+        """)
+        deactivated = cur.rowcount
+        conn.commit()
+
+        # Step 4: Re-score ALL active profiles
+        cur.execute("SELECT id FROM search_profiles WHERE is_active = TRUE")
+        profiles = cur.fetchall()
+        total_scored = 0
+        for p in profiles:
+            try:
+                scored = score_all_for_profile(conn, p['id'])
+                total_scored += scored
+            except Exception as e:
+                print(f"[CRON] Score error profile {p['id']}: {e}")
+                conn.rollback()
+
+        elapsed = _time.time() - start
+        print(f"[CRON] Done in {elapsed:.1f}s: {total_scraped} scraped, {total_saved} saved, {total_scored} scored, {deactivated} deactivated")
+
+        return jsonify({
+            "ok": True,
+            "targets": len(targets),
+            "total_scraped": total_scraped,
+            "total_saved": total_saved,
+            "total_scored": total_scored,
+            "deactivated": deactivated,
+            "details": details,
+            "time_s": round(elapsed, 1)
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
 
 
 @app.route('/api/import', methods=['POST'])
@@ -1140,20 +1188,22 @@ def api_scrape_debug():
 def api_scrape_test():
     """Debug endpoint: test raw HTTP connectivity to each portal using scrapers' HTTP client."""
     import re as re_mod
-    from scrapers import _get, _get_json, _curl_session, _cloudscraper_session
+    from scrapers import _get, _get_json, _curl_session, _cloudscraper_session, PROXY_URL
 
     city = request.args.get('city', 'Lausanne')
     slug = city.lower().replace(' ', '-').replace('â', 'a').replace('é', 'e')
 
     # Report which HTTP clients are active
     clients = []
+    if PROXY_URL:
+        clients.append("residential_proxy ★")
     if _curl_session:
         clients.append("curl_cffi (Chrome TLS)")
     if _cloudscraper_session:
         clients.append("cloudscraper (JS solver)")
     clients.append("requests (fallback)")
 
-    results = {"http_clients": clients, "fallback_chain": " → ".join(clients)}
+    results = {"http_clients": clients, "fallback_chain": " → ".join(clients), "proxy_active": bool(PROXY_URL)}
 
     # Test each portal
     portals = [
