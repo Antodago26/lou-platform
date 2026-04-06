@@ -469,13 +469,19 @@ COMPORTEMENT:
 - Ne force pas les critères optionnels
 - Si le profil est déjà complet, demande si l'utilisateur veut modifier quelque chose
 
-REPONSE: JSON uniquement:
-{"message":"texte","suggestions":["btn1","btn2"],"criteria":{"zones":[{"city":"X","canton":"XX","radius_km":3}],"property_types":["appartement"],"transaction":"location","budget_min":null,"budget_max":2500,"currency":"CHF","rooms_min":3,"rooms_max":null,"surface_min":null,"floor_preference":null,"priorities":["vue"],"move_date":null},"profile_ready":false,"confirmed":false}
+FORMAT DE REPONSE: Tu dois répondre UNIQUEMENT avec un objet JSON valide, sans AUCUN texte avant ou après. Pas de markdown, pas de commentaires, JUSTE le JSON.
 
-criteria contient UNIQUEMENT les champs qui changent dans ce message.
-profile_ready = true quand zone + type + transaction + budget sont remplis.
-confirmed = true quand l'utilisateur confirme explicitement.
-REPONDS UNIQUEMENT DU JSON VALIDE, RIEN D'AUTRE.
+Exemple de réponse correcte:
+{"message":"Salut ! Je vois que tu cherches à Lausanne. Tu veux modifier quelque chose ?","suggestions":["Changer le budget","Changer la zone","Tout est bon"],"criteria":{},"profile_ready":true,"confirmed":false}
+
+Règles JSON:
+- "message": texte court (1-3 phrases), PAS de markdown (**gras**), PAS de bullet points, PAS de listes
+- "suggestions": 2-4 boutons courts
+- "criteria": UNIQUEMENT les champs qui CHANGENT dans ce message (objet vide {} si rien ne change)
+- "profile_ready": true quand zone + type + transaction + budget sont remplis
+- "confirmed": true quand l'utilisateur confirme explicitement
+
+IMPORTANT: Le champ "message" doit être du texte simple et naturel. Ne fais JAMAIS de liste de critères dans le message. Si l'utilisateur veut modifier ses critères, demande simplement ce qu'il veut changer en une phrase.
 
 Cantons romands: VD, GE, NE, FR, VS, JU, BE
 Villes principales: Genève, Lausanne, Montreux, Vevey, Nyon, Morges, Yverdon, Neuchâtel, Fribourg, Sion, Bienne"""
@@ -591,14 +597,30 @@ def api_chat():
             messages=messages
         )
         raw = response.content[0].text.strip()
+        print(f"[CHAT] Raw response: {raw[:300]}")
 
-        # Parse JSON (handle ```json wrapping)
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
+        # Robust JSON extraction — handle text before/after JSON, ```json blocks, etc.
+        json_str = raw
 
-        result = json.loads(raw)
+        # Remove ```json ... ``` wrapping
+        if '```' in json_str:
+            parts = json_str.split('```')
+            for part in parts:
+                p = part.strip()
+                if p.startswith('json'):
+                    p = p[4:].strip()
+                if p.startswith('{') and p.endswith('}'):
+                    json_str = p
+                    break
+
+        # If still not valid JSON, try to extract { ... } from the text
+        if not json_str.startswith('{'):
+            brace_start = json_str.find('{')
+            brace_end = json_str.rfind('}')
+            if brace_start != -1 and brace_end > brace_start:
+                json_str = json_str[brace_start:brace_end + 1]
+
+        result = json.loads(json_str)
         result.setdefault("message", "...")
         result.setdefault("suggestions", [])
         result.setdefault("criteria", {})

@@ -771,7 +771,11 @@
         .then(function (data) {
           loading.remove();
           var reply = data.message || data.reply || 'Désolé, je n\'ai pas compris.';
-          body.innerHTML += '<div class="chat-msg bot">' + escapeHtml(reply) + '</div>';
+          // Simple markdown: **bold** -> <strong>, \n -> <br>, • -> bullet
+          var formatted = escapeHtml(reply)
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\n/g, '<br>');
+          body.innerHTML += '<div class="chat-msg bot">' + formatted + '</div>';
 
           // Show suggestions
           if (data.suggestions && data.suggestions.length) {
