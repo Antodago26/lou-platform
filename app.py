@@ -471,6 +471,7 @@ COMPORTEMENT:
 - Quand l'utilisateur dit "Créer mon espace" ou "Créer l'espace" et que le profil est complet, confirme simplement que c'est fait. NE REDEMANDE PAS la zone.
 - Quand l'utilisateur dit "Voir les annonces", confirme simplement. NE REDEMANDE RIEN.
 - Si l'utilisateur te donne une zone (ex: "Neuchâtel +3km"), enregistre-la IMMEDIATEMENT dans criteria.zones.
+- IMPORTANT: criteria.zones REMPLACE toutes les zones existantes. Si l'utilisateur veut CHANGER de ville (ex: "je veux Neuchâtel au lieu de Lausanne"), mets UNIQUEMENT la nouvelle ville dans criteria.zones. Si l'utilisateur veut AJOUTER une ville, mets TOUTES les villes (anciennes + nouvelle) dans criteria.zones.
 
 FORMAT DE REPONSE: Tu dois répondre UNIQUEMENT avec un objet JSON valide, sans AUCUN texte avant ou après. Pas de markdown, pas de commentaires, JUSTE le JSON.
 
@@ -802,6 +803,10 @@ def _save_chat_criteria(user_id, criteria):
                 zone_list = [{'city': m.group(1).strip(), 'radius_km': int(m.group(2))}]
             else:
                 zone_list = [{'city': zones_data.strip()}]
+
+        # Delete existing zones first so chat criteria REPLACE old zones
+        cur.execute("DELETE FROM search_zones WHERE profile_id = %s", (profile_id,))
+        print(f"[SAVE] Deleted old zones for profile_id={profile_id}, inserting {len(zone_list)} new zones")
 
         for zone in zone_list:
             if isinstance(zone, dict) and zone.get('city'):

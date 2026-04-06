@@ -1938,18 +1938,14 @@ def scrape_all(city="Lausanne", transaction="location"):
     """Scrape all portals for a given city and transaction type."""
     all_results = []
 
+    # Only run scrapers confirmed working from Render servers
+    # Others (ImmoScout24, Anibis, Tutti, Newhome, Properstar, Acheter-Louer, RealAdvisor)
+    # are blocked by Cloudflare/WAF and just waste time causing timeouts
     scrapers = [
-        ('Flatfox', scrape_flatfox),
-        ('ImmoScout24', scrape_immoscout24),
         ('Homegate', scrape_homegate),
         ('Comparis', scrape_comparis),
-        ('Anibis', scrape_anibis),
         ('Immobilier.ch', scrape_immobilier_ch),
-        ('Acheter-Louer', scrape_acheter_louer),
-        ('Properstar', scrape_properstar),
-        ('Newhome', scrape_newhome),
-        ('Tutti', scrape_tutti),
-        ('RealAdvisor', scrape_realadvisor),
+        ('Flatfox', scrape_flatfox),
     ]
 
     for name, scraper in scrapers:
