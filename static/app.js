@@ -505,7 +505,8 @@
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer ' + TOKEN
-          }
+          },
+          body: JSON.stringify({})
         })
           .then(function (r) { return r.json(); })
           .then(function (data) {
@@ -841,6 +842,28 @@
             body.innerHTML += sugHtml;
             body.querySelectorAll('.chat-sug').forEach(function (btn) {
               btn.onclick = function () {
+                var txt = this.textContent.trim().toLowerCase();
+                // Action suggestions — navigate instead of re-sending to chat
+                if (txt === 'voir les annonces' || txt === 'voir mes annonces' || txt === 'voir les favoris') {
+                  panel.classList.remove('open');
+                  var isOnDashboard = window.location.pathname.indexOf('dashboard') !== -1;
+                  if (isOnDashboard) {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    loadProperties(1, $('sort-select').value, parseInt($('grade-filter').value));
+                  } else {
+                    window.location.href = '/dashboard';
+                  }
+                  return;
+                }
+                if (txt === "créer mon espace" || txt === "créer l'espace" || txt === 'sauvegarder la recherche') {
+                  panel.classList.remove('open');
+                  window.location.href = '/dashboard';
+                  return;
+                }
+                if (txt === 'modifier mes critères' || txt === 'modifier les critères' || txt === 'modifier quelque chose' || txt === 'modifier') {
+                  var modBtn = $('edit-criteria-btn');
+                  if (modBtn) { panel.classList.remove('open'); modBtn.click(); return; }
+                }
                 $('chat-in').value = this.textContent;
                 sendMsg();
               };

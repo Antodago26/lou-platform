@@ -467,21 +467,29 @@ COMPORTEMENT:
 - Si aucun profil n'existe, commence par te présenter et demander la région
 - Quand tu as zone + type + transaction + budget, propose de créer l'espace
 - Ne force pas les critères optionnels
-- Si le profil est déjà complet, demande si l'utilisateur veut modifier quelque chose
+- Si le profil est déjà complet, dis-le et propose des modifications ou de consulter les annonces
+- Quand l'utilisateur dit "Créer mon espace" ou "Créer l'espace" et que le profil est complet, confirme simplement que c'est fait. NE REDEMANDE PAS la zone.
+- Quand l'utilisateur dit "Voir les annonces", confirme simplement. NE REDEMANDE RIEN.
+- Si l'utilisateur te donne une zone (ex: "Neuchâtel +3km"), enregistre-la IMMEDIATEMENT dans criteria.zones.
 
 FORMAT DE REPONSE: Tu dois répondre UNIQUEMENT avec un objet JSON valide, sans AUCUN texte avant ou après. Pas de markdown, pas de commentaires, JUSTE le JSON.
 
 Exemple de réponse correcte:
 {"message":"Salut ! Je vois que tu cherches à Lausanne. Tu veux modifier quelque chose ?","suggestions":["Changer le budget","Changer la zone","Tout est bon"],"criteria":{},"profile_ready":true,"confirmed":false}
 
+Exemple quand l'utilisateur donne une zone:
+{"message":"J'ajoute Neuchâtel dans un rayon de 3km à ta recherche.","suggestions":["Ajouter une autre zone","Modifier le budget","C'est parfait"],"criteria":{"zones":[{"city":"Neuchâtel","canton":"NE","radius_km":3}]},"profile_ready":true,"confirmed":false}
+
 Règles JSON:
 - "message": texte court (1-3 phrases), PAS de markdown (**gras**), PAS de bullet points, PAS de listes
-- "suggestions": 2-4 boutons courts
+- "suggestions": 2-4 boutons courts (pas de suggestions d'action comme "Voir les annonces" si le profil vient d'être modifié)
 - "criteria": UNIQUEMENT les champs qui CHANGENT dans ce message (objet vide {} si rien ne change)
+- "criteria.zones": TOUJOURS un tableau d'objets avec city, canton, radius_km. Exemple: [{"city":"Lausanne","canton":"VD","radius_km":5}]
 - "profile_ready": true quand zone + type + transaction + budget sont remplis
 - "confirmed": true quand l'utilisateur confirme explicitement
 
 IMPORTANT: Le champ "message" doit être du texte simple et naturel. Ne fais JAMAIS de liste de critères dans le message. Si l'utilisateur veut modifier ses critères, demande simplement ce qu'il veut changer en une phrase.
+IMPORTANT: Quand l'utilisateur clique sur un bouton de confirmation ("Créer mon espace", "C'est parfait", etc.), NE REDEMANDE RIEN. Confirme et passe à l'étape suivante.
 
 Cantons romands: VD, GE, NE, FR, VS, JU, BE
 Villes principales: Genève, Lausanne, Montreux, Vevey, Nyon, Morges, Yverdon, Neuchâtel, Fribourg, Sion, Bienne"""
@@ -734,22 +742,61 @@ def _save_chat_criteria(user_id, criteria):
         values.append(profile_id)
         cur.execute(f"UPDATE search_profiles SET {', '.join(updates)}, updated_at = NOW() WHERE id = %s", values)
 
-    # Handle zones separately
-    if 'zones' in criteria and criteria['zones']:
-        for zone in criteria['zones']:
+    # Handle zones separately — support multiple formats
+    zones_data = criteria.get('zones') or criteria.get('zone')
+    if zones_data:
+        # Normalize to list of dicts
+        zone_list = []
+        if isinstance(zones_data, list):
+            zone_list = zones_data
+        elif isinstance(zones_data, dict):
+            zone_list = [zones_data]
+        elif isinstance(zones_data, str):
+            # Simple string like "Neuchâtel" or "Neuchâtel +3km"
+            import re
+            m = re.match(r'(.+?)\s*\+?\s*(\d+)\s*km', zones_data)
+            if m:
+                zone_list = [{'city': m.group(1).strip(), 'radius_km': int(m.group(2))}]
+            else:
+                zone_list = [{'city': zones_data.strip()}]
+
+        for zone in zone_list:
             if isinstance(zone, dict) and zone.get('city'):
-                print(f"[SAVE] Saving zone: city={zone.get('city')}, canton={zone.get('canton')}, radius={zone.get('radius_km', 5)}")
+                city = zone['city'].strip()
+                canton = zone.get('canton', '')
+                radius = zone.get('radius_km', 5)
+                # Auto-detect canton if not provided
+                if not canton:
+                    canton_map = {
+                        'lausanne': 'VD', 'morges': 'VD', 'nyon': 'VD', 'vevey': 'VD', 'montreux': 'VD', 'yverdon': 'VD', 'renens': 'VD', 'pully': 'VD',
+                        'genève': 'GE', 'geneve': 'GE', 'carouge': 'GE', 'lancy': 'GE', 'vernier': 'GE',
+                        'neuchâtel': 'NE', 'neuchatel': 'NE', 'la chaux-de-fonds': 'NE',
+                        'fribourg': 'FR', 'bulle': 'FR',
+                        'sion': 'VS', 'sierre': 'VS', 'martigny': 'VS',
+                        'bienne': 'BE', 'biel': 'BE', 'bern': 'BE', 'berne': 'BE',
+                        'delémont': 'JU', 'delemont': 'JU',
+                    }
+                    canton = canton_map.get(city.lower(), '')
+                print(f"[SAVE] Saving zone: city={city}, canton={canton}, radius={radius}")
                 cur.execute("""
                     INSERT INTO search_zones (profile_id, city, canton, radius_km)
                     VALUES (%s, %s, %s, %s)
                     ON CONFLICT (profile_id, city) DO UPDATE SET
                         canton = EXCLUDED.canton, radius_km = EXCLUDED.radius_km
-                """, (
-                    profile_id,
-                    zone.get('city'),
-                    zone.get('canton'),
-                    zone.get('radius_km', 5)
-                ))
+                """, (profile_id, city, canton, radius))
+            elif isinstance(zone, str):
+                # Plain string zone name
+                import re
+                m = re.match(r'(.+?)\s*\+?\s*(\d+)\s*km', zone)
+                city = m.group(1).strip() if m else zone.strip()
+                radius = int(m.group(2)) if m else 5
+                print(f"[SAVE] Saving string zone: city={city}, radius={radius}")
+                cur.execute("""
+                    INSERT INTO search_zones (profile_id, city, canton, radius_km)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (profile_id, city) DO UPDATE SET
+                        radius_km = EXCLUDED.radius_km
+                """, (profile_id, city, '', radius))
             else:
                 print(f"[SAVE] Skipping invalid zone: {zone}")
     elif 'zones' in criteria:
