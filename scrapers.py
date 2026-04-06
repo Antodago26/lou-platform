@@ -137,7 +137,15 @@ def _get(url, headers=None, timeout=20, use_sb=False):
     for name, client in clients:
         try:
             r = client.get(url, headers=h, timeout=timeout, allow_redirects=True)
+            # Handle text — fix double UTF-8 encoding from ScrapingBee
             text = r.text if isinstance(r.text, str) else r.content.decode('utf-8', errors='replace')
+            # Detect and fix double-encoded UTF-8 (Ã© instead of é)
+            if '\u00c3' in text[:500] and ('\u00a9' in text[:500] or '\u00a2' in text[:500] or '\u00a8' in text[:500]):
+                try:
+                    text = text.encode('latin-1').decode('utf-8')
+                    log.info(f"[{name}] Fixed double UTF-8 encoding")
+                except (UnicodeDecodeError, UnicodeEncodeError):
+                    pass
             log.info(f"[{name}] {url[:70]} → {r.status_code} ({len(text)} bytes)")
 
             # If 403 and we have more clients to try, continue
@@ -362,13 +370,33 @@ def scrape_flatfox(city="Lausanne", transaction="location", limit=30):
 
     for api_url in endpoints:
         try:
-            status, data = _get_json(f"{api_url}?city={quote(city)}&offer_type={offer_type}&ordering=-created&limit={limit}")
+            # Try different city parameter names
+            city_lower = city.lower()
+            params = urlencode({
+                'city': city,
+                'offer_type': offer_type,
+                'ordering': '-created',
+                'limit': limit,
+            })
+            status, data = _get_json(f"{api_url}?{params}")
             log.info(f"[Flatfox] {api_url} → HTTP {status}")
 
             if status == 200 and data:
                 items = data.get('results', data) if isinstance(data, dict) else data
                 if not isinstance(items, list):
                     continue
+
+                # Filter client-side: only keep results matching city
+                filtered = []
+                for item in items:
+                    item_city = (item.get('city') or '').lower()
+                    item_zip = str(item.get('zipcode', ''))
+                    # Accept if city matches or is in the same region
+                    if city_lower in item_city or item_city in city_lower or (item_city and city_lower[:3] == item_city[:3]):
+                        filtered.append(item)
+
+                log.info(f"[Flatfox] {len(items)} total, {len(filtered)} matching {city}")
+                items = filtered if filtered else items[:5]  # Fallback to first 5 if no city match
 
                 for item in items:
                     pk = item.get('pk', item.get('id', ''))
@@ -800,12 +828,21 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=2):
                             continue
 
                         card_text = card.get_text(' ', strip=True)
-                        price_match = re.search(r"CHF\s*([\d'']+)", card_text)
+                        # Price: handle "CHF 1 290 000" or "CHF 1'290'000" or spans
+                        price = None
+                        price_match = re.search(r"CHF\s*([\d\s''.,\u2019]+)", card_text)
                         if not price_match:
-                            price_match = re.search(r"([\d'']+)\s*CHF", card_text)
-                        price = _clean_price(price_match.group(1)) if price_match else None
+                            price_match = re.search(r"([\d\s''.,\u2019]+)\s*CHF", card_text)
+                        if price_match:
+                            # Remove all whitespace/separators, keep digits
+                            raw = price_match.group(1).replace(' ', '').replace('\u2019', '').replace("'", '').replace('.', '').replace(',', '')
+                            digits = re.findall(r'\d+', raw)
+                            if digits:
+                                num = int(''.join(digits))
+                                # Sanity check: real estate prices > 100
+                                price = num if num > 100 else None
 
-                        rooms_match = re.search(r'(\d+[.,]?5?)\s*(?:pièce|Zimmer|room)', card_text, re.IGNORECASE)
+                        rooms_match = re.search(r'(\d+[.,]?5?)\s*(?:pi[èe]ce|Zimmer|room|½)', card_text, re.IGNORECASE)
                         rooms = _clean_rooms(rooms_match.group(1)) if rooms_match else None
 
                         surface_match = re.search(r'(\d+)\s*m[²2]', card_text)
@@ -1199,8 +1236,8 @@ def scrape_immobilier_ch(city="Lausanne", transaction="location", max_pages=2):
                     price_el = card.select_one('.price, .item-price, [class*="price"]')
                     price_text = price_el.get_text(strip=True) if price_el else ''
                     price = _clean_price(price_text)
-                    # Must have a price to be a real listing
-                    if not price:
+                    # Must have either a price or a title to be a real listing
+                    if not price and not title:
                         continue
 
                     addr_el = card.select_one('.address, .location, [class*="location"], [class*="address"]')
