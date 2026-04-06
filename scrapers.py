@@ -36,7 +36,7 @@ log = logging.getLogger('lou-scrapers')
 
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
 
-# Try to import curl_cffi for Cloudflare bypass (TLS fingerprint impersonation)
+# Import both curl_cffi AND cloudscraper — use curl_cffi first, cloudscraper as fallback for 403
 _curl_session = None
 _cloudscraper_session = None
 
@@ -45,17 +45,16 @@ try:
     _curl_session = CurlSession(impersonate="chrome")
     log.info("[Init] curl_cffi loaded — Chrome TLS impersonation active")
 except ImportError:
-    log.warning("[Init] curl_cffi not available, trying cloudscraper")
+    log.warning("[Init] curl_cffi not available")
 
-if _curl_session is None:
-    try:
-        import cloudscraper
-        _cloudscraper_session = cloudscraper.create_scraper(
-            browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
-        )
-        log.info("[Init] cloudscraper loaded — Cloudflare JS challenge solver active")
-    except ImportError:
-        log.warning("[Init] cloudscraper not available, using plain requests (Cloudflare sites will fail)")
+try:
+    import cloudscraper
+    _cloudscraper_session = cloudscraper.create_scraper(
+        browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
+    )
+    log.info("[Init] cloudscraper loaded — Cloudflare JS challenge solver available as fallback")
+except ImportError:
+    log.warning("[Init] cloudscraper not available")
 
 # Swiss city → canton mapping
 CITY_CANTONS = {
@@ -94,34 +93,41 @@ BROWSER_HEADERS = {
 
 
 def _get(url, headers=None, timeout=20):
-    """HTTP GET using best available client (curl_cffi > cloudscraper > requests)."""
+    """HTTP GET with automatic fallback: curl_cffi → cloudscraper → requests.
+    If curl_cffi returns 403, retries with cloudscraper (JS challenge solver)."""
     h = {**BROWSER_HEADERS}
     if headers:
         h.update(headers)
-    try:
-        # 1. curl_cffi with Chrome TLS impersonation
-        if _curl_session:
-            r = _curl_session.get(url, headers=h, timeout=timeout, allow_redirects=True)
-            log.info(f"[curl_cffi] {url[:70]} → {r.status_code} ({len(r.text)} bytes)")
-            return r.status_code, r.text
 
-        # 2. cloudscraper (Cloudflare JS challenge solver)
-        if _cloudscraper_session:
-            r = _cloudscraper_session.get(url, headers=h, timeout=timeout, allow_redirects=True)
-            log.info(f"[cloudscraper] {url[:70]} → {r.status_code} ({len(r.text)} bytes)")
-            return r.status_code, r.text
+    # Try each client in order, retry on 403
+    clients = []
+    if _curl_session:
+        clients.append(('curl_cffi', _curl_session))
+    if _cloudscraper_session:
+        clients.append(('cloudscraper', _cloudscraper_session))
+    clients.append(('requests', requests))
 
-        # 3. Plain requests (will fail on Cloudflare)
-        r = requests.get(url, headers=h, timeout=timeout, allow_redirects=True)
-        log.info(f"[requests] {url[:70]} → {r.status_code} ({len(r.text)} bytes)")
-        return r.status_code, r.text
-    except Exception as e:
-        log.error(f"GET {url[:80]}: {e}")
-        return 0, ''
+    for name, client in clients:
+        try:
+            r = client.get(url, headers=h, timeout=timeout, allow_redirects=True)
+            log.info(f"[{name}] {url[:70]} → {r.status_code} ({len(r.text)} bytes)")
+
+            # If 403 and we have more clients to try, continue
+            if r.status_code == 403 and name != clients[-1][0]:
+                is_cf = 'Just a moment' in r.text[:500] or 'cf-' in r.text[:2000]
+                log.info(f"[{name}] 403 received{' (Cloudflare)' if is_cf else ''}, trying next client...")
+                continue
+
+            return r.status_code, r.text
+        except Exception as e:
+            log.error(f"[{name}] GET {url[:70]}: {e}")
+            continue
+
+    return 0, ''
 
 
 def _get_json(url, headers=None, timeout=20):
-    """HTTP GET expecting JSON, using best available client."""
+    """HTTP GET expecting JSON, with automatic fallback on 403."""
     h = {
         'User-Agent': UA,
         'Accept': 'application/json, text/plain, */*',
@@ -130,21 +136,28 @@ def _get_json(url, headers=None, timeout=20):
     }
     if headers:
         h.update(headers)
-    try:
-        if _curl_session:
-            r = _curl_session.get(url, headers=h, timeout=timeout, allow_redirects=True)
-        elif _cloudscraper_session:
-            r = _cloudscraper_session.get(url, headers=h, timeout=timeout, allow_redirects=True)
-        else:
-            r = requests.get(url, headers=h, timeout=timeout, allow_redirects=True)
 
-        ct = r.headers.get('content-type', '')
-        if r.status_code == 200 and 'json' in ct:
-            return r.status_code, r.json()
-        return r.status_code, None
-    except Exception as e:
-        log.error(f"GET JSON {url[:80]}: {e}")
-        return 0, None
+    clients = []
+    if _curl_session:
+        clients.append(('curl_cffi', _curl_session))
+    if _cloudscraper_session:
+        clients.append(('cloudscraper', _cloudscraper_session))
+    clients.append(('requests', requests))
+
+    for name, client in clients:
+        try:
+            r = client.get(url, headers=h, timeout=timeout, allow_redirects=True)
+            ct = r.headers.get('content-type', '')
+            if r.status_code == 200 and 'json' in ct:
+                return r.status_code, r.json()
+            if r.status_code == 403 and name != clients[-1][0]:
+                continue
+            return r.status_code, None
+        except Exception as e:
+            log.error(f"[{name}] GET JSON {url[:70]}: {e}")
+            continue
+
+    return 0, None
 
 
 def _extract_next_data(html):
@@ -1674,8 +1687,24 @@ def scrape_realadvisor(city="Lausanne", transaction="location", max_pages=2):
 
     for page in range(1, max_pages + 1):
         try:
-            url = f"https://realadvisor.ch/fr/{tx}/{slug}?page={page}"
-            status, html = _get(url)
+            # RealAdvisor uses different URL patterns — try multiple
+            urls_to_try = [
+                f"https://realadvisor.ch/fr/proprietes/{tx}/{slug}?page={page}",
+                f"https://realadvisor.ch/fr/{tx}/bien-immobilier/{slug}?page={page}",
+                f"https://realadvisor.ch/fr/{tx}/{slug}?page={page}",
+            ]
+            url = urls_to_try[0]  # Start with most likely
+            status, html = 0, ''
+            for try_url in urls_to_try:
+                status, html = _get(try_url)
+                if status == 200:
+                    url = try_url
+                    break
+                log.info(f"[RealAdvisor] {try_url} → {status}, trying next...")
+
+            if status != 200:
+                log.warning(f"[RealAdvisor] All URL patterns failed for page {page}")
+                break
             log.info(f"[RealAdvisor] Page {page}: HTTP {status}, len={len(html)}")
 
             if status != 200:

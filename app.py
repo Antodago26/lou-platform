@@ -1120,14 +1120,15 @@ def api_scrape_test():
     city = request.args.get('city', 'Lausanne')
     slug = city.lower().replace(' ', '-').replace('â', 'a').replace('é', 'e')
 
-    # Report which HTTP client is active
-    http_client = "requests (no Cloudflare bypass)"
+    # Report which HTTP clients are active
+    clients = []
     if _curl_session:
-        http_client = "curl_cffi (Chrome TLS impersonation)"
-    elif _cloudscraper_session:
-        http_client = "cloudscraper (Cloudflare JS solver)"
+        clients.append("curl_cffi (Chrome TLS)")
+    if _cloudscraper_session:
+        clients.append("cloudscraper (JS solver)")
+    clients.append("requests (fallback)")
 
-    results = {"http_client": http_client}
+    results = {"http_clients": clients, "fallback_chain": " → ".join(clients)}
 
     # Test each portal
     portals = [
