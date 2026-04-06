@@ -1054,55 +1054,47 @@ def api_score():
 
 @app.route('/api/scrape/debug', methods=['GET'])
 def api_scrape_debug():
-    """Test ScrapingBee with a single Homegate request."""
+    """Test scrapers with a single request per portal."""
     import traceback
     try:
-        from scrapers import _sb_get, SCRAPINGBEE_KEY
-        import os
-
+        from scrapers import scrape_all
         city = request.args.get('city', 'Lausanne')
-        sb_key = os.environ.get('SCRAPINGBEE_API_KEY', 'NOT SET')
+        tx = request.args.get('transaction', 'achat')
 
-        results = {
-            "scrapingbee_key_set": bool(sb_key and sb_key != 'NOT SET'),
-            "scrapingbee_key_start": sb_key[:8] + '...' if sb_key and sb_key != 'NOT SET' else 'NOT SET',
-            "key_from_scrapers": SCRAPINGBEE_KEY[:8] + '...' if SCRAPINGBEE_KEY else 'EMPTY',
-        }
+        results = {"city": city, "transaction": tx, "portals": {}}
 
-        # Test 1: Simple ScrapingBee connectivity test with httpbin
+        # Run full scrape with 1 page each
         try:
-            status_test, html_test = _sb_get("https://httpbin.org/get", render_js=False)
-            results["httpbin_test"] = {
-                "http_status": status_test,
-                "html_size": len(html_test) if html_test else 0,
-                "html_start": html_test[:200] if html_test else '',
-            }
-        except Exception as e:
-            results["httpbin_test"] = {"error": str(e)}
+            listings = scrape_all(city=city, transaction=tx)
+            # Group by source
+            by_source = {}
+            for l in listings:
+                src = l['source']
+                if src not in by_source:
+                    by_source[src] = []
+                by_source[src].append(l)
 
-        # Test 2: Run actual Homegate scraper
-        try:
-            from scrapers import scrape_homegate
-            listings = scrape_homegate(city=city, transaction="location", max_pages=1)
-            results["homegate_scraper"] = {
-                "total_listings": len(listings),
-                "sample": [
-                    {
-                        "id": l["external_id"],
-                        "title": l["title"][:80],
-                        "price": l["price"],
-                        "rooms": l["rooms"],
-                        "surface": l["surface"],
-                        "address": l["address"][:60],
-                        "url": l["source_url"],
-                    }
-                    for l in listings[:5]
-                ]
-            }
+            for src, items in by_source.items():
+                results["portals"][src] = {
+                    "count": len(items),
+                    "sample": [
+                        {
+                            "id": l["external_id"],
+                            "title": l["title"][:80],
+                            "price": l["price"],
+                            "rooms": l["rooms"],
+                            "surface": l["surface"],
+                            "address": l["address"][:60],
+                            "url": l["source_url"][:100],
+                        }
+                        for l in items[:3]
+                    ]
+                }
+
+            results["total"] = len(listings)
         except Exception as e:
-            results["homegate_scraper"] = {"error": str(e)}
-            import traceback
-            results["homegate_traceback"] = traceback.format_exc()
+            results["error"] = str(e)
+            results["traceback"] = traceback.format_exc()
 
         return jsonify(results)
 
