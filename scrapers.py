@@ -348,7 +348,7 @@ def _slugify(city):
 # FLATFOX — Direct JSON API (always works)
 # ============================================================
 
-def scrape_flatfox(city="Lausanne", transaction="location", limit=30):
+def scrape_flatfox(city="Lausanne", transaction="location", limit=50):
     log.info(f"[Flatfox] Searching {city} ({transaction})")
     results = []
     offer_type = 'RENT' if transaction == 'location' else 'SALE'
@@ -380,15 +380,19 @@ def scrape_flatfox(city="Lausanne", transaction="location", limit=30):
 
                 # Filter client-side: only keep results matching city
                 filtered = []
+                city_slug = _slugify(city)
                 for item in items:
                     item_city = (item.get('city') or '').lower()
-                    item_zip = str(item.get('zipcode', ''))
-                    # Accept if city matches or is in the same region
-                    if city_lower in item_city or item_city in city_lower or (item_city and city_lower[:3] == item_city[:3]):
+                    item_slug = _slugify(item_city)
+                    # Exact or substring match on city name
+                    if (city_lower == item_city or city_slug == item_slug
+                            or city_lower in item_city or item_city in city_lower):
                         filtered.append(item)
 
                 log.info(f"[Flatfox] {len(items)} total, {len(filtered)} matching {city}")
-                items = filtered if filtered else items[:5]  # Fallback to first 5 if no city match
+                if not filtered:
+                    log.warning(f"[Flatfox] No city match — API may not support city filter")
+                items = filtered
 
                 for item in items:
                     pk = item.get('pk', item.get('id', ''))
@@ -944,9 +948,12 @@ def scrape_comparis(city="Lausanne", transaction="location", max_pages=2):
                         if img_url:
                             imgs.append(img_url)
 
-                        detail_url = item.get('DetailUrl', item.get('url', ''))
+                        detail_url = item.get('DetailUrl', item.get('detailUrl', item.get('url', '')))
                         if detail_url and detail_url.startswith('/'):
                             detail_url = 'https://www.comparis.ch' + detail_url
+                        # Fallback: construct URL from AdId
+                        if not detail_url and aid:
+                            detail_url = f"https://www.comparis.ch/immobilien/marktplatz/details/show/{aid}"
 
                         results.append(_make_property(
                             external_id=f"comp-{aid}", source='Comparis',
@@ -1228,9 +1235,39 @@ def scrape_immobilier_ch(city="Lausanne", transaction="location", max_pages=2):
                     price_el = card.select_one('.price, .item-price, [class*="price"]')
                     price_text = price_el.get_text(strip=True) if price_el else ''
                     price = _clean_price(price_text)
+
+                    # Fallback: extract price from title or card text
+                    card_text = card.get_text(' ', strip=True)
+                    if not price:
+                        # Look for CHF patterns in card text
+                        pm = re.search(r"CHF\s*([\d''.\s\u2019]+)", card_text)
+                        if pm:
+                            raw = pm.group(1).replace(' ', '').replace('\u2019', '').replace("'", '').replace('.', '').replace('-', '')
+                            digits = re.findall(r'\d+', raw)
+                            if digits:
+                                num = int(''.join(digits))
+                                price = num if num > 100 else None
+                    if not price:
+                        pm = re.search(r"CHF\s*([\d''.\s\u2019]+)", title)
+                        if pm:
+                            raw = pm.group(1).replace(' ', '').replace('\u2019', '').replace("'", '').replace('.', '').replace('-', '')
+                            digits = re.findall(r'\d+', raw)
+                            if digits:
+                                num = int(''.join(digits))
+                                price = num if num > 100 else None
+
                     # Must have either a price or a title to be a real listing
                     if not price and not title:
                         continue
+
+                    # Extract rooms from card text if not in title
+                    rooms = _clean_rooms(title)
+                    if not rooms:
+                        rm = re.search(r'(\d+[.,]?5?)\s*(?:pi[èe]ce|½)', card_text, re.IGNORECASE)
+                        rooms = _clean_rooms(rm.group(1)) if rm else None
+
+                    # Extract surface from card text
+                    surface = _clean_surface(card_text)
 
                     addr_el = card.select_one('.address, .location, [class*="location"], [class*="address"]')
                     address = addr_el.get_text(strip=True) if addr_el else ''
@@ -1244,13 +1281,21 @@ def scrape_immobilier_ch(city="Lausanne", transaction="location", max_pages=2):
                                 src = 'https:' + src
                             imgs.append(src)
 
+                    # Clean title: remove price if it's the whole title
+                    clean_title = title
+                    if clean_title.startswith('CHF'):
+                        # Title is just the price — try to get a better one
+                        t2 = card.select_one('.item-description, [class*="desc"], p')
+                        if t2:
+                            clean_title = t2.get_text(strip=True)[:100]
+
                     results.append(_make_property(
                         external_id=f"imch-{eid.group(1) if eid else hash(title + address)}",
                         source='Immobilier.ch', source_url=href,
-                        title=title, description='',
-                        property_type=_guess_type(title), transaction=transaction,
-                        price=price, rooms=_clean_rooms(title),
-                        surface=None, floor=None,
+                        title=clean_title, description='',
+                        property_type=_guess_type(card_text), transaction=transaction,
+                        price=price, rooms=rooms,
+                        surface=surface, floor=None,
                         address=address or city, city=city,
                         canton=CITY_CANTONS.get(city.lower(), ''),
                         postal_code=_extract_postal(address),
