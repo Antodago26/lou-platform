@@ -45,11 +45,27 @@
     .hero-text h1 em { font-style: normal; color: var(--blue); }
     .hero-text p { font-size: 18px; line-height: 1.7; color: var(--gray-500); margin-bottom: 32px; }
     .hero-ctas { display: flex; gap: 16px; align-items: center; }
-    .hero-visual { flex-shrink: 0; width: 440px; height: 380px; background: linear-gradient(135deg, var(--blue) 0%, #0c4a6e 100%); border-radius: 24px; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
-    .hero-visual::before { content: ''; position: absolute; inset: 0; background: url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3Cpattern id='g' width='60' height='60' patternUnits='userSpaceOnUse'%3E%3Cpath d='M0 30h60M30 0v60' stroke='rgba(255,255,255,.06)' stroke-width='1'/%3E%3C/pattern%3E%3C/defs%3E%3Crect width='60' height='60' fill='url(%23g)'/%3E%3C/svg%3E"); }
-    .hero-wolf-icon { z-index: 1; filter: drop-shadow(0 8px 32px rgba(0,0,0,.3)); }
-    .hero-badge { position: absolute; bottom: 24px; left: 24px; background: rgba(255,255,255,.15); backdrop-filter: blur(8px); border-radius: 12px; padding: 12px 18px; color: var(--white); font-size: 14px; font-weight: 600; z-index: 1; display: flex; align-items: center; gap: 10px; }
-    .hero-badge small { display: block; font-weight: 400; font-size: 12px; opacity: .8; margin-top: 2px; }
+    .hero-visual { flex-shrink: 0; width: 420px; border-radius: 24px; position: relative; }
+    .chat-card { background: linear-gradient(135deg, #0c4a6e 0%, var(--blue) 50%, #0ea5e9 100%); border-radius: 24px; padding: 28px 24px 24px; box-shadow: 0 20px 60px rgba(3,105,161,.3), 0 0 0 1px rgba(255,255,255,.1); position: relative; overflow: hidden; }
+    .chat-card::before { content: ''; position: absolute; inset: 0; background: url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3Cpattern id='g' width='60' height='60' patternUnits='userSpaceOnUse'%3E%3Cpath d='M0 30h60M30 0v60' stroke='rgba(255,255,255,.04)' stroke-width='1'/%3E%3C/pattern%3E%3C/defs%3E%3Crect width='60' height='60' fill='url(%23g)'/%3E%3C/svg%3E"); pointer-events: none; }
+    .cc-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; position: relative; z-index: 1; }
+    .cc-avatar { width: 44px; height: 44px; background: rgba(255,255,255,.15); border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+    .cc-name { color: #fff; font-weight: 700; font-size: 16px; font-family: 'Playfair Display', Georgia, serif; }
+    .cc-status { color: rgba(255,255,255,.7); font-size: 12px; display: flex; align-items: center; gap: 5px; }
+    .cc-dot { width: 7px; height: 7px; background: #34d399; border-radius: 50%; display: inline-block; }
+    .cc-messages { display: flex; flex-direction: column; gap: 10px; position: relative; z-index: 1; }
+    .cc-msg { max-width: 85%; padding: 10px 14px; border-radius: 16px; font-size: 13.5px; line-height: 1.5; animation: ccFade .5s ease both; }
+    .cc-bot { background: rgba(255,255,255,.13); color: #fff; border-bottom-left-radius: 4px; align-self: flex-start; backdrop-filter: blur(4px); }
+    .cc-user { background: #fff; color: var(--dark); border-bottom-right-radius: 4px; align-self: flex-end; font-weight: 500; }
+    .cc-result { background: rgba(52,211,153,.2); border: 1px solid rgba(52,211,153,.3); color: #fff; border-radius: 12px; padding: 10px 14px; font-size: 13px; align-self: flex-start; backdrop-filter: blur(4px); display: flex; align-items: center; gap: 8px; }
+    .cc-result svg { flex-shrink: 0; }
+    .cc-msg:nth-child(1) { animation-delay: 0s; }
+    .cc-msg:nth-child(2) { animation-delay: .3s; }
+    .cc-msg:nth-child(3) { animation-delay: .6s; }
+    .cc-msg:nth-child(4) { animation-delay: .9s; }
+    .cc-msg:nth-child(5) { animation-delay: 1.2s; }
+    .cc-msg:nth-child(6) { animation-delay: 1.5s; }
+    @keyframes ccFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
     /* STATS BAR */
     .stats-bar { background: var(--gray-50); border-top: 1px solid var(--gray-100); border-bottom: 1px solid var(--gray-100); }
@@ -113,7 +129,7 @@
       .hero { flex-direction: column; text-align: center; padding: 40px 5% 60px; }
       .hero-text h1 { font-size: 36px; }
       .hero-ctas { justify-content: center; }
-      .hero-visual { width: 100%; max-width: 360px; height: 280px; }
+      .hero-visual { width: 100%; max-width: 380px; }
       .features-grid { grid-template-columns: 1fr; }
       .steps { grid-template-columns: repeat(2, 1fr); }
       .nav-links { gap: 16px; }
@@ -160,21 +176,25 @@
       </div>
     </div>
     <div class="hero-visual">
-      <!-- Large Wolf from brand guide -->
-      <svg class="hero-wolf-icon" width="180" height="180" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
-        <g transform="translate(14, 10)">
-          <path d="M6 56 L16 8 L26 26 L36 8 L46 56 L36 46 L26 52 L16 46 Z" fill="rgba(255,255,255,0.95)"/>
-          <circle cx="20" cy="34" r="3" fill="rgba(255,255,255,0.3)"/>
-          <circle cx="32" cy="34" r="3" fill="rgba(255,255,255,0.3)"/>
-        </g>
-      </svg>
-      <div class="hero-badge">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:.8;flex-shrink:0">
-          <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
-        </svg>
-        <div>
-          8+ portails suisses
-          <small>Homegate, ImmoScout24, Flatfox...</small>
+      <div class="chat-card">
+        <div class="cc-header">
+          <div class="cc-avatar">
+            <svg width="26" height="26" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><g transform="translate(8,6)"><path d="M4 34 L10 5 L16 16 L22 5 L28 34 L22 28 L16 32 L10 28 Z" fill="rgba(255,255,255,0.95)"/><circle cx="12.5" cy="21" r="2" fill="rgba(255,255,255,0.4)"/><circle cx="19.5" cy="21" r="2" fill="rgba(255,255,255,0.4)"/></g></svg>
+          </div>
+          <div>
+            <div class="cc-name">Lou</div>
+            <div class="cc-status"><span class="cc-dot"></span> En ligne</div>
+          </div>
+        </div>
+        <div class="cc-messages">
+          <div class="cc-msg cc-bot">Bonjour ! Moi c'est Lou. Qu'est-ce que vous recherchez ?</div>
+          <div class="cc-msg cc-user">Un appart 4 pièces à Lausanne, max 900k</div>
+          <div class="cc-msg cc-bot">Parfait ! Des critères importants ? Balcon, parking, vue ?</div>
+          <div class="cc-msg cc-user">Balcon obligatoire, proche du métro</div>
+          <div class="cc-msg cc-result">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            8 biens trouvés ! Meilleur match : 87/100 (A+)
+          </div>
         </div>
       </div>
     </div>
