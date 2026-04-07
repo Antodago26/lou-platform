@@ -591,7 +591,8 @@ def scrape_immoscout24(city="Lausanne", transaction="location", max_pages=10):
                         pass
 
                 if not listings:
-                    log.warning(f"[ImmoScout24] Page {page}: __INITIAL_STATE__ found but no listings")
+                    log.warning(f"[ImmoScout24] Page {page}: __INITIAL_STATE__ found but no listings — stopping pagination")
+                    break
                 else:
                     log.info(f"[ImmoScout24] Page {page}: {len(listings)} listings via __INITIAL_STATE__")
 
@@ -889,6 +890,9 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=10):
                 soup = BeautifulSoup(html, 'html.parser')
                 cards = soup.select('[data-test="result-list-item"], article, .listing-card, [class*="ResultList"] > div')
                 log.info(f"[Homegate] Page {page}: {len(cards)} cards via HTML")
+                if not cards:
+                    log.info(f"[Homegate] Page {page}: 0 results — stopping pagination")
+                    break
                 for card in cards:
                     try:
                         link_el = card.select_one('a[href]')
@@ -992,6 +996,9 @@ def scrape_comparis(city="Lausanne", transaction="location", max_pages=10):
                         pass
 
                 log.info(f"[Comparis] Page {page}: {len(items)} items via __NEXT_DATA__")
+                if not items:
+                    log.info(f"[Comparis] Page {page}: 0 results — stopping pagination")
+                    break
 
                 for item in items:
                     try:
