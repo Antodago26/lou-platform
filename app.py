@@ -388,6 +388,22 @@ def get_properties():
     conn = get_db()
     cur = conn.cursor()
     try:
+        # Get user's transaction type from their profile to filter results
+        cur.execute("""
+            SELECT transaction FROM search_profiles
+            WHERE user_id = %s AND is_active = TRUE
+            ORDER BY created_at DESC LIMIT 1
+        """, (user_id,))
+        profile_row = cur.fetchone()
+        user_transaction = profile_row['transaction'] if profile_row else None
+
+        # Build transaction filter
+        tx_filter = ""
+        tx_params = [user_id, user_id, min_score]
+        if user_transaction:
+            tx_filter = " AND p.transaction = %s"
+            tx_params.append(user_transaction)
+
         # Get properties with scores — order is safe (from whitelist above)
         cur.execute(f"""
             SELECT p.*, sp.total_score, sp.grade, sp.distance_km,
@@ -396,18 +412,23 @@ def get_properties():
                    EXISTS(SELECT 1 FROM favorites f WHERE f.user_id = %s AND f.property_id = p.id) as is_favorite
             FROM scored_properties sp
             JOIN properties p ON p.id = sp.property_id
-            WHERE sp.user_id = %s AND sp.total_score >= %s AND p.is_active = TRUE
+            WHERE sp.user_id = %s AND sp.total_score >= %s AND p.is_active = TRUE{tx_filter}
             ORDER BY {order}
             LIMIT %s OFFSET %s
-        """, (user_id, user_id, min_score, per_page, offset))
+        """, tx_params + [per_page, offset])
         properties = [dict(r) for r in cur.fetchall()]
 
         # Get total count
-        cur.execute("""
+        count_params = [user_id, min_score]
+        count_tx_filter = ""
+        if user_transaction:
+            count_tx_filter = " AND p.transaction = %s"
+            count_params.append(user_transaction)
+        cur.execute(f"""
             SELECT COUNT(*) as total FROM scored_properties sp
             JOIN properties p ON p.id = sp.property_id
-            WHERE sp.user_id = %s AND sp.total_score >= %s AND p.is_active = TRUE
-        """, (user_id, min_score))
+            WHERE sp.user_id = %s AND sp.total_score >= %s AND p.is_active = TRUE{count_tx_filter}
+        """, count_params)
         total = cur.fetchone()['total']
 
         # Format for frontend
@@ -457,15 +478,30 @@ def get_stats():
     conn = get_db()
     cur = conn.cursor()
     try:
+        # Get user's transaction to filter stats
         cur.execute("""
+            SELECT transaction FROM search_profiles
+            WHERE user_id = %s AND is_active = TRUE
+            ORDER BY created_at DESC LIMIT 1
+        """, (user_id,))
+        prof = cur.fetchone()
+        user_tx = prof['transaction'] if prof else None
+
+        tx_filter = ""
+        params = [user_id]
+        if user_tx:
+            tx_filter = " AND p.transaction = %s"
+            params.append(user_tx)
+
+        cur.execute(f"""
             SELECT
                 COUNT(*) as total,
                 COUNT(*) FILTER (WHERE sp.scored_at > NOW() - INTERVAL '24 hours') as new_count,
                 (SELECT COUNT(*) FROM favorites WHERE user_id = %s) as favorites
             FROM scored_properties sp
             JOIN properties p ON p.id = sp.property_id
-            WHERE sp.user_id = %s AND p.is_active = TRUE
-        """, (user_id, user_id))
+            WHERE sp.user_id = %s AND p.is_active = TRUE{tx_filter}
+        """, [user_id] + params)
         stats = dict(cur.fetchone())
         return jsonify(stats)
     finally:
@@ -819,8 +855,21 @@ def api_score():
         cur.execute("SELECT * FROM search_zones WHERE profile_id = %s", (profile['id'],))
         zones = [dict(z) for z in cur.fetchall()]
 
-        # Get all active properties
-        cur.execute("SELECT * FROM properties WHERE is_active = TRUE")
+        # Get active properties matching user's transaction type + canton pre-filter
+        score_query = "SELECT * FROM properties WHERE is_active = TRUE"
+        score_params = []
+        if profile.get('transaction'):
+            score_query += " AND transaction = %s"
+            score_params.append(profile['transaction'])
+        zone_cantons = [z.get('canton', '').upper() for z in zones if z.get('canton')]
+        if zone_cantons:
+            placeholders = ','.join(['%s'] * len(zone_cantons))
+            score_query += f" AND (canton IN ({placeholders}) OR canton IS NULL OR canton = '')"
+            score_params.extend(zone_cantons)
+        if profile.get('budget_max'):
+            score_query += " AND (price IS NULL OR price <= %s)"
+            score_params.append(int(profile['budget_max'] * 1.3))
+        cur.execute(score_query, score_params)
         properties = cur.fetchall()
 
         scored = 0

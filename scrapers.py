@@ -39,6 +39,9 @@ CITY_CANTONS = {
     'luzern': 'LU', 'winterthur': 'ZH', 'st. gallen': 'SG',
     'carouge': 'GE', 'meyrin': 'GE', 'prilly': 'VD', 'pully': 'VD',
     'ecublens': 'VD', 'sierre': 'VS', 'martigny': 'VS',
+    'colombier': 'NE', 'peseux': 'NE', 'boudry': 'NE', 'cortaillod': 'NE',
+    'marin-epagnier': 'NE', 'hauterive': 'NE', 'saint-blaise': 'NE',
+    'le locle': 'NE', 'val-de-travers': 'NE', 'fleurier': 'NE',
 }
 
 
@@ -151,8 +154,19 @@ def _clean_rooms(text):
     if not text:
         return None
     text = str(text).replace('½', '.5')
-    nums = re.findall(r'[\d.]+', text)
-    return float(nums[0]) if nums else None
+    # Look for explicit room patterns first: "3.5 pièces", "4 rooms", "3½ pcs"
+    room_pat = re.search(r'(\d+\.?\d*)\s*(?:pi[eè]ces?|rooms?|pcs?|chambres?|zimmer|½)', text, re.IGNORECASE)
+    if room_pat:
+        val = float(room_pat.group(1))
+        if 0.5 <= val <= 20:
+            return val
+    # Fallback: find reasonable room number (skip IDs, surfaces, etc.)
+    nums = re.findall(r'(\d+\.5|\d+\.\d)', text)
+    for n in nums:
+        val = float(n)
+        if 0.5 <= val <= 20:
+            return val
+    return None
 
 
 def _clean_surface(text):
@@ -657,7 +671,8 @@ def scrape_properstar(city="Lausanne", transaction="location", max_pages=1):
     tx = "rent" if transaction == "location" else "buy"
     slug = city.lower().replace(' ', '-')
 
-    url = f"https://www.properstar.ch/switzerland/{slug}/{tx}/apartment"
+    tx_fr = "louer" if transaction == "location" else "acheter"
+    url = f"https://www.properstar.fr/suisse/{slug}/{tx_fr}/appartement"
     status, html = _sb_get(url, render_js=True)
 
     if status == 200:
