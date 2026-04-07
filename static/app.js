@@ -484,6 +484,7 @@
       '<div class="dash-header">' +
         '<h1>Mon Dashboard</h1>' +
         '<div class="dash-actions">' +
+          '<button id="refresh-btn" class="dash-refresh-btn" title="Actualiser les resultats">&#8635; Actualiser</button>' +
           '<select id="sort-select" class="dash-select">' +
             '<option value="score">Meilleur score</option>' +
             '<option value="price_asc">Prix croissant</option>' +
@@ -526,6 +527,26 @@
     loadStats();
     loadProfileBar();
     loadProperties(1, 'score', 0);
+
+    // Refresh button — re-score then reload
+    $('refresh-btn').onclick = function () {
+      var btn = this;
+      btn.disabled = true;
+      btn.textContent = '⟳ Scoring...';
+      apiFetch(API + '/api/score', { method: 'POST' })
+        .then(function () {
+          loadStats();
+          loadProfileBar();
+          loadProperties(1, 'score', 0);
+          btn.textContent = '↻ Actualiser';
+          btn.disabled = false;
+        })
+        .catch(function () {
+          btn.textContent = '↻ Actualiser';
+          btn.disabled = false;
+          loadProperties(1, 'score', 0);
+        });
+    };
 
     // Sort/filter change
     $('sort-select').onchange = function () {
@@ -1007,8 +1028,16 @@
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
-      }).then(function () {
+      }).then(function (r) { return r.json(); })
+      .then(function () {
         loadProfileBar();
+        // Trigger scoring + scraping so results appear immediately
+        apiFetch(API + '/api/score', { method: 'POST' })
+          .then(function () {
+            if (typeof loadProperties === 'function') loadProperties(1, 'score', 0);
+            if (typeof loadStats === 'function') loadStats();
+          })
+          .catch(function () {});
       }).catch(function () {});
     }
 
@@ -1049,6 +1078,9 @@
       '.dash-actions{display:flex;gap:10px}',
       '.dash-select{padding:8px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;background:#fff;cursor:pointer;color:#334155;outline:none}',
       '.dash-select:focus{border-color:#0369a1}',
+      '.dash-refresh-btn{padding:8px 16px;background:#059669;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600;transition:background .2s}',
+      '.dash-refresh-btn:hover{background:#047857}',
+      '.dash-refresh-btn:disabled{opacity:.6;cursor:wait}',
 
       // Stats
       '.dash-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}',
