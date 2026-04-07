@@ -1688,7 +1688,7 @@ def scrape_newhome(city="Lausanne", transaction="location", max_pages=5):
 
     for page in range(1, max_pages + 1):
         try:
-            url = f"https://www.newhome.ch/fr/{tx}/immobilier/{slug}/liste?page={page}"
+            url = f"https://www.newhome.ch/fr/{tx}/recherche/appartement/localite-{slug}/liste?propertyType=2&offerType={'1' if tx == 'acheter' else '2'}&skipCount={20 * (page - 1)}&rowCount=20"
             # Newhome is Angular SPA — needs JS rendering via Site Unblocker
             status, html = 0, ''
             if UNBLOCKER_URL:
@@ -1783,17 +1783,22 @@ def scrape_newhome(city="Lausanne", transaction="location", max_pages=5):
                             log.debug(f"[Newhome] Item error: {e}")
                     continue
 
-            # HTML fallback
+            # HTML fallback — Angular-rendered DOM uses object-card classes
             soup = BeautifulSoup(html, 'html.parser')
-            cards = soup.select('[class*="listing"], [class*="property"], article, .result-item')
+            # Primary: Angular object-card; fallback: generic selectors
+            cards = soup.select('div.object-card, [class*="object-card--tile"], [class*="listing"], [class*="property"], article, .result-item')
             log.info(f"[Newhome] Page {page}: {len(cards)} cards via HTML")
             for card in cards:
                 try:
-                    title_el = card.select_one('h2, h3, [class*="title"]')
+                    title_el = card.select_one('.object-card__title, h2, h3, [class*="title"]')
                     title = title_el.get_text(strip=True) if title_el else ''
-                    price_el = card.select_one('[class*="price"]')
+                    price_el = card.select_one('.formatted-value--price, [class*="price"]')
                     price = _clean_price(price_el.get_text(strip=True)) if price_el else None
-                    link_el = card.select_one('a[href]')
+                    addr_el = card.select_one('.object-card__address, [class*="address"], [class*="location"]')
+                    address_text = addr_el.get_text(strip=True) if addr_el else ''
+                    rooms_el = card.select_one('.formatted-value--property-attribute, [class*="rooms"], [class*="surface"]')
+                    rooms_text = rooms_el.get_text(strip=True) if rooms_el else ''
+                    link_el = card.select_one('a.object-card__link, a[href*="detail"], a[href]')
                     href = link_el.get('href', '') if link_el else ''
                     if href.startswith('/'):
                         href = 'https://www.newhome.ch' + href
@@ -1804,16 +1809,29 @@ def scrape_newhome(city="Lausanne", transaction="location", max_pages=5):
                             src = img_el.get('data-src') or img_el.get('src') or ''
                             if src and not src.startswith('data:'):
                                 imgs.append(src if src.startswith('http') else 'https:' + src if src.startswith('//') else src)
+                        # Extract postal code and city from address like "2000 Neuchâtel"
+                        postal = None
+                        addr_city = city
+                        if address_text:
+                            addr_match = re.match(r'(\d{4})\s+(.+)', address_text)
+                            if addr_match:
+                                postal = addr_match.group(1)
+                                addr_city = addr_match.group(2).strip()
+                        # Extract rooms from title like "Appartement 3.5 pièces" or rooms_text
+                        rooms = _clean_rooms(title) or _clean_rooms(rooms_text)
+                        # Extract surface from rooms_text like "Surface 80 m2"
+                        surface_match = re.search(r'(\d+)\s*m[²2]', rooms_text)
+                        surface = float(surface_match.group(1)) if surface_match else None
                         results.append(_make_property(
                             external_id=f"nh-{eid.group(1) if eid else hash(title)}",
                             source='Newhome', source_url=href,
                             title=title, description='',
                             property_type=_guess_type(title), transaction=transaction,
-                            price=price, rooms=_clean_rooms(title),
-                            surface=None, floor=None,
-                            address=city, city=city,
+                            price=price, rooms=rooms,
+                            surface=surface, floor=None,
+                            address=address_text or city, city=addr_city,
                             canton=CITY_CANTONS.get(city.lower(), ''),
-                            postal_code=None, latitude=None, longitude=None,
+                            postal_code=postal, latitude=None, longitude=None,
                             features=[], images=imgs[:5], published_at=None,
                         ))
                 except Exception:
