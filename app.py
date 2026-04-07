@@ -685,26 +685,47 @@ REGLES ABSOLUES:
         # Fallback: extract zone from user message if AI didn't put it in criteria
         if not criteria_to_save.get('zones') and not criteria_to_save.get('zone'):
             import re
-            zone_match = re.search(
-                r'(?:ajouter|ajout|zone|cherche[rz]?\s+[àa]|neuch[âa]tel|lausanne|gen[èe]ve|montreux|fribourg|sion|nyon|morges|yverdon|vevey|bienne)\s*(?:\+?\s*(\d+)\s*km)?',
-                message.lower()
-            )
-            if zone_match:
-                # Extract city name from known cities in the message
-                city_patterns = {
-                    'neuchâtel': 'Neuchâtel', 'neuchatel': 'Neuchâtel',
-                    'lausanne': 'Lausanne', 'genève': 'Genève', 'geneve': 'Genève',
-                    'montreux': 'Montreux', 'fribourg': 'Fribourg', 'sion': 'Sion',
-                    'nyon': 'Nyon', 'morges': 'Morges', 'yverdon': 'Yverdon',
-                    'vevey': 'Vevey', 'bienne': 'Bienne',
-                }
-                msg_lower = message.lower()
-                for key, city_name in city_patterns.items():
-                    if key in msg_lower:
-                        radius = int(zone_match.group(1)) if zone_match.group(1) else 5
-                        criteria_to_save['zones'] = [{'city': city_name, 'radius_km': radius}]
-                        print(f"[CHAT] Fallback zone extraction: {city_name} +{radius}km from message: {message}")
-                        break
+            city_patterns = {
+                'neuchâtel': 'Neuchâtel', 'neuchatel': 'Neuchâtel',
+                'lausanne': 'Lausanne', 'genève': 'Genève', 'geneve': 'Genève',
+                'montreux': 'Montreux', 'fribourg': 'Fribourg', 'sion': 'Sion',
+                'nyon': 'Nyon', 'morges': 'Morges', 'yverdon': 'Yverdon',
+                'vevey': 'Vevey', 'bienne': 'Bienne',
+            }
+            msg_lower = message.lower()
+            # Find ALL city mentions and their positions — take the LAST one
+            # (handles "Neuchâtel au lieu de Lausanne" → picks Lausanne wrongly if first match)
+            # Instead: if "au lieu de" / "plutôt que" / "remplacer" pattern, take the FIRST city
+            found_cities = []
+            for key, city_name in city_patterns.items():
+                pos = msg_lower.rfind(key)
+                if pos != -1:
+                    found_cities.append((pos, key, city_name))
+            if found_cities:
+                # If message contains "au lieu de", "plutôt que", "à la place de" → take the city BEFORE that phrase
+                replace_patterns = ['au lieu de', 'plutôt que', 'à la place de', 'remplacer', 'changer pour', 'passer à', 'passer a']
+                target_city = None
+                for rp in replace_patterns:
+                    rp_pos = msg_lower.find(rp)
+                    if rp_pos != -1:
+                        # Take city that appears BEFORE the replace phrase (the new target)
+                        before_cities = [(p, k, c) for p, k, c in found_cities if p < rp_pos]
+                        if before_cities:
+                            target_city = max(before_cities, key=lambda x: x[0])[2]
+                            break
+                        # If no city before, take city after (e.g. "changer pour Neuchâtel")
+                        after_cities = [(p, k, c) for p, k, c in found_cities if p > rp_pos]
+                        if after_cities:
+                            target_city = min(after_cities, key=lambda x: x[0])[2]
+                            break
+                # No replace pattern found — just take the last mentioned city
+                if not target_city:
+                    target_city = max(found_cities, key=lambda x: x[0])[2]
+
+                radius_match = re.search(r'(\d+)\s*km', msg_lower)
+                radius = int(radius_match.group(1)) if radius_match else 5
+                criteria_to_save['zones'] = [{'city': target_city, 'radius_km': radius}]
+                print(f"[CHAT] Fallback zone extraction: {target_city} +{radius}km from message: {message}")
 
         if criteria_to_save:
             try:
@@ -803,10 +824,6 @@ def _save_chat_criteria(user_id, criteria):
                 zone_list = [{'city': m.group(1).strip(), 'radius_km': int(m.group(2))}]
             else:
                 zone_list = [{'city': zones_data.strip()}]
-
-        # Delete existing zones first so chat criteria REPLACE old zones
-        cur.execute("DELETE FROM search_zones WHERE profile_id = %s", (profile_id,))
-        print(f"[SAVE] Deleted old zones for profile_id={profile_id}, inserting {len(zone_list)} new zones")
 
         # Delete existing zones first so chat criteria REPLACE old zones
         cur.execute("DELETE FROM search_zones WHERE profile_id = %s", (profile_id,))
