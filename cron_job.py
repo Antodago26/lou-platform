@@ -33,7 +33,7 @@ def run():
         r = requests.post(
             url,
             headers={'X-Cron-Secret': CRON_SECRET},
-            timeout=300  # 5 min max
+            timeout=300
         )
         data = r.json()
         log.info(f"Response ({r.status_code}): {json.dumps(data, indent=2)}")

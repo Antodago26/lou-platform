@@ -808,6 +808,10 @@ def _save_chat_criteria(user_id, criteria):
         cur.execute("DELETE FROM search_zones WHERE profile_id = %s", (profile_id,))
         print(f"[SAVE] Deleted old zones for profile_id={profile_id}, inserting {len(zone_list)} new zones")
 
+        # Delete existing zones first so chat criteria REPLACE old zones
+        cur.execute("DELETE FROM search_zones WHERE profile_id = %s", (profile_id,))
+        print(f"[SAVE] Deleted old zones for profile_id={profile_id}, inserting {len(zone_list)} new zones")
+
         for zone in zone_list:
             if isinstance(zone, dict) and zone.get('city'):
                 city = zone['city'].strip()
@@ -1188,7 +1192,7 @@ def api_scrape_debug():
 def api_scrape_test():
     """Debug endpoint: test raw HTTP connectivity to each portal using scrapers' HTTP client."""
     import re as re_mod
-    from scrapers import _get, _get_json, _curl_session, _cloudscraper_session, PROXY_URL
+    from scrapers import _get, _get_json, _curl_session, _cloudscraper_session, PROXY_URL, PROXY_URL
 
     city = request.args.get('city', 'Lausanne')
     slug = city.lower().replace(' ', '-').replace('â', 'a').replace('é', 'e')
