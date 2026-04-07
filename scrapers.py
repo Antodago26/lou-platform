@@ -2355,6 +2355,10 @@ def save_to_db(db, listings):
                 ON CONFLICT (external_id, source) DO UPDATE SET
                     price = EXCLUDED.price,
                     title = EXCLUDED.title,
+                    description = COALESCE(NULLIF(EXCLUDED.description, ''), properties.description),
+                    images = CASE WHEN EXCLUDED.images IS NOT NULL AND array_length(EXCLUDED.images, 1) > 0 THEN EXCLUDED.images ELSE properties.images END,
+                    rooms = COALESCE(EXCLUDED.rooms, properties.rooms),
+                    surface = COALESCE(EXCLUDED.surface, properties.surface),
                     is_active = TRUE,
                     scraped_at = NOW()
             """, (

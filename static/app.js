@@ -836,7 +836,8 @@
       : '<div class="prop-img-placeholder"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>';
 
     var priceText = p.price ? formatPrice(p.price) + ' CHF' : 'Prix sur demande';
-    if (p.unit && p.price) priceText += '<small>/' + escapeHtml(p.unit.split('/')[1] || 'mois') + '</small>';
+    var unitPart = p.unit ? (p.unit.split('/')[1] || '') : '';
+    if (unitPart && unitPart !== 'one-time' && p.price) priceText += ' <small>/' + escapeHtml(unitPart) + '</small>';
 
     var details = [];
     if (p.rooms) details.push(p.rooms + ' pcs');
@@ -1092,9 +1093,9 @@
       '.dash-stat-lbl{font-size:13px;color:#64748b;margin-top:4px}',
 
       // Profile bar
-      '.dash-profile-bar{margin-bottom:24px}',
-      '.dash-profile-tags{display:flex;flex-wrap:wrap;gap:8px}',
-      '.ptag{padding:6px 14px;background:#f1f5f9;border-radius:50px;font-size:13px;color:#64748b}',
+      '.dash-profile-bar{margin-bottom:24px;padding:16px 20px;background:#fff;border:1px solid #e2e8f0;border-radius:12px}',
+      '.dash-profile-tags{display:flex;flex-wrap:wrap;gap:10px;align-items:center}',
+      '.ptag{padding:8px 16px;background:#f1f5f9;border-radius:50px;font-size:13px;color:#475569;font-weight:500}',
       '.ptag.blue{background:rgba(3,105,161,.1);color:#0369a1}',
       '.dash-profile-empty{background:#fff;border:1px dashed #cbd5e1;border-radius:12px;padding:20px;text-align:center;color:#64748b;font-size:14px}',
       '.dash-profile-empty a{color:#0369a1;cursor:pointer}',

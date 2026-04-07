@@ -344,13 +344,21 @@ def score_all_for_profile(db, profile_id):
         (profile_id,)
     )
 
-    # Pre-filter properties — prefer matching transaction, but include all if none match
-    query = """
-        SELECT * FROM properties
-        WHERE is_active = TRUE
-        AND transaction = %s
-    """
-    params = [profile['transaction']]
+    # Pre-filter properties by transaction type
+    tx = profile['transaction']
+    print(f"[SCORING] Profile {profile_id}: transaction='{tx}', budget_max={profile['budget_max']}")
+
+    if tx:
+        query = """
+            SELECT * FROM properties
+            WHERE is_active = TRUE
+            AND transaction = %s
+        """
+        params = [tx]
+    else:
+        # No transaction set — score all properties
+        query = "SELECT * FROM properties WHERE is_active = TRUE"
+        params = []
 
     # Budget filter with 30% margin
     if profile['budget_max']:
@@ -359,16 +367,7 @@ def score_all_for_profile(db, profile_id):
 
     cur.execute(query, params)
     properties = cur.fetchall()
-
-    # Fallback: if no properties match the transaction type, score ALL properties
-    if not properties:
-        query = "SELECT * FROM properties WHERE is_active = TRUE"
-        params = []
-        if profile['budget_max']:
-            query += " AND (price IS NULL OR price <= %s)"
-            params.append(int(profile['budget_max'] * 1.3))
-        cur.execute(query, params)
-        properties = cur.fetchall()
+    print(f"[SCORING] Found {len(properties)} properties matching transaction='{tx}'")
 
     # Score each property
     scored = 0
