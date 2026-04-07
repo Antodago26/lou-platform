@@ -672,9 +672,55 @@ def api_chat():
     # Load history from DB
     history = _load_chat_history(user_id)
 
-    # Build messages
-    messages = list(history)
-    messages.append({"role": "user", "content": message})
+    # Extract already-collected criteria from the last assistant message with criteria
+    collected = {}
+    for h in reversed(history):
+        if h['role'] == 'assistant':
+            try:
+                parsed = _parse_llm_json(h['content'])
+                if parsed and parsed.get('criteria'):
+                    collected = parsed['criteria']
+                    break
+            except Exception:
+                pass
+
+    # Build messages — clean assistant history to just message text
+    messages = []
+    for h in history:
+        if h['role'] == 'assistant':
+            try:
+                parsed = _parse_llm_json(h['content'])
+                if parsed and parsed.get('message'):
+                    messages.append({"role": "assistant", "content": parsed['message']})
+                else:
+                    messages.append(h)
+            except Exception:
+                messages.append(h)
+        else:
+            messages.append(h)
+
+    # Inject criteria reminder into user message so Claude knows what's already collected
+    enriched_message = message
+    if collected:
+        reminder_parts = []
+        if collected.get('zones'):
+            cities = [z.get('city', '') for z in collected['zones'] if z.get('city')]
+            if cities:
+                reminder_parts.append(f"zones: {', '.join(cities)}")
+        if collected.get('transaction'):
+            reminder_parts.append(f"transaction: {collected['transaction']}")
+        if collected.get('property_types'):
+            reminder_parts.append(f"type: {', '.join(collected['property_types'])}")
+        if collected.get('budget_max'):
+            reminder_parts.append(f"budget max: {collected['budget_max']} CHF")
+        if collected.get('budget_min'):
+            reminder_parts.append(f"budget min: {collected['budget_min']} CHF")
+        if collected.get('rooms_min'):
+            reminder_parts.append(f"pieces min: {collected['rooms_min']}")
+        if reminder_parts:
+            enriched_message = f"[Critères déjà collectés: {', '.join(reminder_parts)}]\n{message}"
+
+    messages.append({"role": "user", "content": enriched_message})
 
     try:
         response = anthropic_client.messages.create(
