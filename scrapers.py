@@ -1462,16 +1462,35 @@ def scrape_acheter_louer(city="Lausanne", transaction="location", max_pages=5):
                             pass
                     continue
 
-            # HTML parsing
+            # HTML parsing — acheter-louer uses div.col-auto cards with h2.vign-title and .price
             soup = BeautifulSoup(html, 'html.parser')
-            cards = soup.select('.property-item, .listing-card, article, [class*="result"], [class*="listing"]')
+            # Primary: find cards that contain a .price element (each listing has its own table.table-blue with .price)
+            price_els = soup.select('.price')
+            cards = []
+            for pel in price_els:
+                # Walk up to find the col-auto wrapper (the listing card)
+                card = pel
+                for _ in range(10):
+                    if card.parent and 'col-auto' in (card.parent.get('class') or []):
+                        card = card.parent
+                        break
+                    elif card.parent:
+                        card = card.parent
+                    else:
+                        break
+                if card not in cards:
+                    cards.append(card)
+            # Fallback: try generic selectors
+            if not cards:
+                cards = soup.select('.col-auto, .property-item, .listing-card, article')
             log.info(f"[Acheter-Louer] Page {page}: {len(cards)} cards via HTML")
 
+            page_results = 0
             for card in cards:
                 try:
-                    title_el = card.select_one('h3, h2, .title, [class*="title"]')
+                    title_el = card.select_one('h2.vign-title, h2, h3, [class*="vign-title"], [class*="title"]')
                     title = title_el.get_text(strip=True) if title_el else ''
-                    price_el = card.select_one('[class*="price"], .price')
+                    price_el = card.select_one('.price, [class*="price"]')
                     price = _clean_price(price_el.get_text(strip=True)) if price_el else None
                     link_el = card.select_one('a[href]')
                     href = link_el.get('href', '') if link_el else ''
@@ -1485,6 +1504,8 @@ def scrape_acheter_louer(city="Lausanne", transaction="location", max_pages=5):
                             if src and not src.startswith('data:'):
                                 if src.startswith('//'):
                                     src = 'https:' + src
+                                elif not src.startswith('http'):
+                                    src = 'https://www.acheter-louer.ch' + src
                                 imgs.append(src)
 
                         results.append(_make_property(
@@ -1498,8 +1519,11 @@ def scrape_acheter_louer(city="Lausanne", transaction="location", max_pages=5):
                             postal_code=None, latitude=None, longitude=None,
                             features=[], images=imgs[:5], published_at=None,
                         ))
+                        page_results += 1
                 except Exception:
                     pass
+            if page_results == 0 and cards:
+                log.warning(f"[Acheter-Louer] Page {page}: {len(cards)} cards found but 0 extracted")
 
         except Exception as e:
             log.error(f"[Acheter-Louer] Page {page} error: {e}")
@@ -1665,7 +1689,25 @@ def scrape_newhome(city="Lausanne", transaction="location", max_pages=5):
     for page in range(1, max_pages + 1):
         try:
             url = f"https://www.newhome.ch/fr/{tx}/immobilier/{slug}/liste?page={page}"
-            status, html = _get(url, use_sb=True)
+            # Newhome is Angular SPA — needs JS rendering via Site Unblocker
+            status, html = 0, ''
+            if UNBLOCKER_URL:
+                try:
+                    # Add render_js parameter to unblocker URL for JavaScript rendering
+                    ub_url = UNBLOCKER_URL
+                    # Decodo Site Unblocker: append rendering params to username
+                    # Format: username-render_js-true
+                    import re as _re_nh
+                    ub_js_url = _re_nh.sub(r'(://[^:]+)(:[^@]+@)', r'\1-render_js-true\2', ub_url)
+                    ub_proxies = {'http': ub_js_url, 'https': ub_js_url}
+                    r = requests.get(url, headers=BROWSER_HEADERS, timeout=90, proxies=ub_proxies, allow_redirects=True, verify=False)
+                    html = r.text if isinstance(r.text, str) else r.content.decode('utf-8', errors='replace')
+                    status = r.status_code
+                    log.info(f"[Newhome] JS render via unblocker: {url[:70]} → {status} ({len(html)} bytes)")
+                except Exception as e:
+                    log.error(f"[Newhome] JS render error: {e}")
+            if status != 200:
+                status, html = _get(url, use_sb=True)
             log.info(f"[Newhome] Page {page}: HTTP {status}, len={len(html)}")
 
             if status != 200:
@@ -1940,23 +1982,7 @@ def scrape_realadvisor(city="Lausanne", transaction="location", max_pages=5):
             if status != 200:
                 break
 
-            # Debug: log HTML snippet to understand structure
-            if page == 1:
-                has_next = '__NEXT_DATA__' in html
-                has_nuxt = '__NUXT__' in html or '__NUXT_DATA__' in html
-                has_jsonld = 'application/ld+json' in html
-                has_ng = 'ng-' in html or '_ngcontent' in html
-                log.info(f"[RealAdvisor] DEBUG: __NEXT_DATA__={has_next}, __NUXT__={has_nuxt}, JSON-LD={has_jsonld}, Angular={has_ng}")
-                # Log a sample of script tags
-                import re as _re3
-                scripts = _re3.findall(r'<script[^>]*id="([^"]*)"[^>]*>', html)
-                log.info(f"[RealAdvisor] DEBUG script ids: {scripts[:10]}")
-                # Log body start
-                body_match = _re3.search(r'<body[^>]*>(.*)', html[:8000], _re3.DOTALL)
-                if body_match:
-                    log.info(f"[RealAdvisor] DEBUG body[:1500]: {body_match.group(1)[:1500]}")
-
-            # Try __NEXT_DATA__
+            # Try __NEXT_DATA__ (classic Next.js)
             nd = _extract_next_data(html)
             if nd:
                 items = []
@@ -2011,30 +2037,215 @@ def scrape_realadvisor(city="Lausanne", transaction="location", max_pages=5):
                             log.debug(f"[RealAdvisor] Item error: {e}")
                     continue
 
-            # JSON-LD fallback
-            soup = BeautifulSoup(html, 'html.parser')
+            # RSC chunks fallback — Next.js React Server Components
+            # RealAdvisor stores listing data in self.__next_f.push() script chunks
+            if not results or len([r for r in results if r.get('source') == 'RealAdvisor']) == 0:
+                soup = BeautifulSoup(html, 'html.parser')
+                rsc_listings = []
+                for script in soup.find_all('script'):
+                    txt = script.string or ''
+                    if 'self.__next_f.push' not in txt:
+                        continue
+                    # Extract sale_price / rent_gross fields from RSC chunks
+                    if 'sale_price' in txt or 'rent_gross' in txt or 'living_surface' in txt:
+                        try:
+                            # RSC chunks contain escaped JSON-like data
+                            # Extract individual listing objects by finding price + address patterns
+                            import re as _re_rsc
+                            # Find all sale_price or rent_gross occurrences with surrounding context
+                            # The data looks like: "sale_price":725000,"number_of_rooms":4.5,...
+                            price_field = 'rent_gross' if transaction == 'location' else 'sale_price'
+                            # Try to extract JSON-like objects containing listing data
+                            # Look for chunks with address/locality data
+                            chunk_text = txt
+                            # Unescape the RSC string (it's inside a JS string literal)
+                            chunk_text = chunk_text.replace('\\"', '"').replace('\\\\', '\\').replace('\\n', '\n')
+
+                            # Find all price values
+                            price_matches = list(_re_rsc.finditer(rf'"{price_field}"\s*:\s*(\d+(?:\.\d+)?)', chunk_text))
+                            if not price_matches and price_field == 'sale_price':
+                                price_matches = list(_re_rsc.finditer(r'"rent_gross"\s*:\s*(\d+(?:\.\d+)?)', chunk_text))
+                            if not price_matches:
+                                price_matches = list(_re_rsc.finditer(r'"(?:sale_price|rent_gross|price)"\s*:\s*(\d+(?:\.\d+)?)', chunk_text))
+
+                            for pm in price_matches:
+                                # Extract a context window around each price match
+                                start = max(0, pm.start() - 800)
+                                end = min(len(chunk_text), pm.end() + 800)
+                                ctx = chunk_text[start:end]
+
+                                price_val = float(pm.group(1))
+                                if price_val <= 0:
+                                    continue
+
+                                # Extract fields from context
+                                def _rsc_field(name, ctx_str):
+                                    m = _re_rsc.search(rf'"{name}"\s*:\s*"([^"]*)"', ctx_str)
+                                    return m.group(1) if m else None
+
+                                def _rsc_num(name, ctx_str):
+                                    m = _re_rsc.search(rf'"{name}"\s*:\s*(\d+(?:\.\d+)?)', ctx_str)
+                                    return float(m.group(1)) if m else None
+
+                                rooms = _rsc_num('number_of_rooms', ctx)
+                                surface = _rsc_num('living_surface', ctx)
+                                address = _rsc_field('address', ctx) or ''
+                                locality = _rsc_field('locality', ctx) or ''
+                                postcode = _rsc_field('postcode', ctx) or _rsc_field('postal_code', ctx) or ''
+                                route = _rsc_field('route', ctx) or ''
+                                street_number = _rsc_field('street_number', ctx) or ''
+                                slug = _rsc_field('slug', ctx) or ''
+                                agency_ref = _rsc_field('agency_reference', ctx) or ''
+
+                                # Build a unique ID
+                                eid = agency_ref or f"{address}-{price_val}-{rooms}"
+                                # Build source URL from slug
+                                source_url = f"https://realadvisor.ch/fr/{tx}/{slug}" if slug else ''
+
+                                # Build title
+                                title_parts = []
+                                if rooms:
+                                    title_parts.append(f"{rooms} pièces")
+                                if surface:
+                                    title_parts.append(f"{int(surface)} m²")
+                                if locality:
+                                    title_parts.append(locality)
+                                title = ' — '.join(title_parts) if title_parts else f"Appartement {locality}"
+
+                                # Build full address
+                                full_addr = f"{route} {street_number}".strip() if route else address
+                                if postcode and locality:
+                                    full_addr = f"{full_addr}, {postcode} {locality}".strip(', ')
+
+                                rsc_listings.append(_make_property(
+                                    external_id=f"ra-{hash(eid)}",
+                                    source='RealAdvisor',
+                                    source_url=source_url,
+                                    title=title,
+                                    description='',
+                                    property_type='appartement',
+                                    transaction=transaction,
+                                    price=price_val,
+                                    rooms=rooms,
+                                    surface=surface,
+                                    floor=None,
+                                    address=full_addr if full_addr else city,
+                                    city=locality if locality else city,
+                                    canton=CITY_CANTONS.get((locality or city).lower(), CITY_CANTONS.get(city.lower(), '')),
+                                    postal_code=postcode if postcode else None,
+                                    latitude=_rsc_num('latitude', ctx),
+                                    longitude=_rsc_num('longitude', ctx),
+                                    features=[],
+                                    images=[],
+                                    published_at=None,
+                                ))
+                        except Exception as e:
+                            log.debug(f"[RealAdvisor] RSC chunk parse error: {e}")
+
+                if rsc_listings:
+                    # Deduplicate RSC listings by price+rooms+address
+                    seen_rsc = set()
+                    for li in rsc_listings:
+                        key = f"{li['price']}-{li['rooms']}-{li['address']}"
+                        if key not in seen_rsc:
+                            seen_rsc.add(key)
+                            results.append(li)
+                    log.info(f"[RealAdvisor] Page {page}: {len(seen_rsc)} listings via RSC chunks")
+                    continue
+            else:
+                soup = BeautifulSoup(html, 'html.parser')
+
+            # JSON-LD fallback — accept multiple @type values
+            jsonld_items = []
             for script in soup.select('script[type="application/ld+json"]'):
                 try:
                     ld = json.loads(script.string)
-                    if isinstance(ld, dict) and ld.get('@type') == 'ItemList':
-                        for li in ld.get('itemListElement', []):
-                            item = li.get('item', li)
-                            results.append(_make_property(
-                                external_id=f"ra-{hash(item.get('name', '') + str(item.get('url', '')))}",
-                                source='RealAdvisor',
-                                source_url=item.get('url', ''),
-                                title=item.get('name', ''), description='',
-                                property_type=_guess_type(item.get('name', '')),
-                                transaction=transaction,
-                                price=_clean_price(item.get('offers', {}).get('price')),
-                                rooms=None, surface=None, floor=None,
-                                address=city, city=city,
-                                canton=CITY_CANTONS.get(city.lower(), ''),
-                                postal_code=None, latitude=None, longitude=None,
-                                features=[], images=[], published_at=None,
-                            ))
+                    if isinstance(ld, list):
+                        for item in ld:
+                            jsonld_items.append(item)
+                    elif isinstance(ld, dict):
+                        if ld.get('@type') == 'ItemList':
+                            for li in ld.get('itemListElement', []):
+                                jsonld_items.append(li.get('item', li))
+                        elif ld.get('@type') in ['RealEstateListing', 'Product', 'Offer', 'Residence', 'Apartment', 'House']:
+                            jsonld_items.append(ld)
+                        elif '@graph' in ld:
+                            for item in ld['@graph']:
+                                if isinstance(item, dict) and item.get('@type') in ['RealEstateListing', 'Product', 'Offer', 'Residence', 'Apartment', 'House', 'ItemList']:
+                                    if item.get('@type') == 'ItemList':
+                                        for li in item.get('itemListElement', []):
+                                            jsonld_items.append(li.get('item', li))
+                                    else:
+                                        jsonld_items.append(item)
                 except Exception:
                     pass
+
+            if jsonld_items:
+                log.info(f"[RealAdvisor] Page {page}: {len(jsonld_items)} items via JSON-LD")
+                for item in jsonld_items:
+                    try:
+                        name = item.get('name', item.get('headline', ''))
+                        url = item.get('url', '')
+                        price_val = None
+                        offers = item.get('offers', {})
+                        if isinstance(offers, dict):
+                            price_val = offers.get('price', offers.get('lowPrice'))
+                        elif isinstance(offers, list) and offers:
+                            price_val = offers[0].get('price')
+                        if not price_val:
+                            price_val = item.get('price')
+                        results.append(_make_property(
+                            external_id=f"ra-{hash(name + str(url))}",
+                            source='RealAdvisor',
+                            source_url=url if url.startswith('http') else f"https://realadvisor.ch{url}" if url else '',
+                            title=name, description=item.get('description', '')[:500],
+                            property_type=_guess_type(name),
+                            transaction=transaction,
+                            price=_clean_price(price_val),
+                            rooms=_clean_rooms(item.get('numberOfRooms')),
+                            surface=_clean_surface(item.get('floorSize', {}).get('value') if isinstance(item.get('floorSize'), dict) else item.get('floorSize')),
+                            floor=None,
+                            address=item.get('address', {}).get('streetAddress', city) if isinstance(item.get('address'), dict) else city,
+                            city=item.get('address', {}).get('addressLocality', city) if isinstance(item.get('address'), dict) else city,
+                            canton=CITY_CANTONS.get(city.lower(), ''),
+                            postal_code=item.get('address', {}).get('postalCode') if isinstance(item.get('address'), dict) else None,
+                            latitude=item.get('geo', {}).get('latitude') if isinstance(item.get('geo'), dict) else None,
+                            longitude=item.get('geo', {}).get('longitude') if isinstance(item.get('geo'), dict) else None,
+                            features=[], images=[], published_at=None,
+                        ))
+                    except Exception as e:
+                        log.debug(f"[RealAdvisor] JSON-LD item error: {e}")
+
+            # DOM fallback — try to parse listing cards from HTML
+            if not results:
+                cards = soup.select('[class*="listing"], [class*="property"], [class*="card"], article, [class*="result"]')
+                if cards:
+                    log.info(f"[RealAdvisor] Page {page}: trying {len(cards)} DOM cards")
+                    for card in cards:
+                        try:
+                            title_el = card.select_one('h2, h3, h1, [class*="title"], [class*="name"]')
+                            title = title_el.get_text(strip=True) if title_el else ''
+                            price_el = card.select_one('[class*="price"], [class*="cost"], [class*="amount"]')
+                            price = _clean_price(price_el.get_text(strip=True)) if price_el else None
+                            link_el = card.select_one('a[href]')
+                            href = link_el.get('href', '') if link_el else ''
+                            if href.startswith('/'):
+                                href = 'https://realadvisor.ch' + href
+                            if title or price:
+                                results.append(_make_property(
+                                    external_id=f"ra-{hash(title + href)}",
+                                    source='RealAdvisor', source_url=href,
+                                    title=title, description='',
+                                    property_type=_guess_type(title), transaction=transaction,
+                                    price=price, rooms=_clean_rooms(title),
+                                    surface=None, floor=None,
+                                    address=city, city=city,
+                                    canton=CITY_CANTONS.get(city.lower(), ''),
+                                    postal_code=None, latitude=None, longitude=None,
+                                    features=[], images=[], published_at=None,
+                                ))
+                        except Exception:
+                            pass
 
             if not results:
                 log.info(f"[RealAdvisor] Page {page}: No structured data found")
