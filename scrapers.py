@@ -95,6 +95,18 @@ BROWSER_HEADERS = {
 # Format: http://username:password@gate.decodo.com:10001
 PROXY_URL = os.environ.get('PROXY_URL', '')
 
+# Site Unblocker (Decodo) — for Cloudflare-protected sites
+# Format: http://username:password@unblock.decodo.com:60000
+# Set UNBLOCKER_URL in env, or auto-derive from PROXY_URL
+UNBLOCKER_URL = os.environ.get('UNBLOCKER_URL', '')
+if not UNBLOCKER_URL and PROXY_URL and 'decodo.com' in PROXY_URL:
+    # Auto-derive: replace gate hostname + port with unblocker endpoint
+    UNBLOCKER_URL = PROXY_URL.replace('gate.decodo.com', 'unblock.decodo.com').replace('ch.decodo.com', 'unblock.decodo.com')
+    # Replace any port with 60000
+    import re as _re
+    UNBLOCKER_URL = _re.sub(r':(\d+)$', ':60000', UNBLOCKER_URL)
+    log.info(f"[Init] Auto-derived UNBLOCKER_URL from PROXY_URL")
+
 # ScrapingBee (legacy fallback, can be removed once proxy is active)
 SCRAPINGBEE_KEY = os.environ.get('SCRAPINGBEE_API_KEY', '')
 SCRAPINGBEE_URL = 'https://app.scrapingbee.com/api/v1'
@@ -144,9 +156,22 @@ def _get(url, headers=None, timeout=20, use_sb=False):
             log.info(f"[proxy] {url[:70]} → {r.status_code} ({len(text)} bytes)")
             if r.status_code != 403:
                 return r.status_code, text
-            log.info(f"[proxy] 403 received, trying direct clients...")
+            log.info(f"[proxy] 403 received, trying Site Unblocker...")
         except Exception as e:
             log.error(f"[proxy] GET {url[:70]}: {e}")
+
+    # Strategy 1b: Site Unblocker for Cloudflare-protected sites (403 fallback)
+    if UNBLOCKER_URL:
+        try:
+            ub_proxies = {'http': UNBLOCKER_URL, 'https': UNBLOCKER_URL}
+            r = requests.get(url, headers=h, timeout=60, proxies=ub_proxies, allow_redirects=True, verify=False)
+            text = r.text if isinstance(r.text, str) else r.content.decode('utf-8', errors='replace')
+            log.info(f"[unblocker] {url[:70]} → {r.status_code} ({len(text)} bytes)")
+            if r.status_code == 200:
+                return r.status_code, text
+            log.info(f"[unblocker] {r.status_code} received, trying direct clients...")
+        except Exception as e:
+            log.error(f"[unblocker] GET {url[:70]}: {e}")
 
     # Strategy 2: Direct clients (curl_cffi → cloudscraper → requests)
     clients = []
@@ -211,9 +236,23 @@ def _get_json(url, headers=None, timeout=20):
                 return r.status_code, r.json()
             if r.status_code != 403:
                 return r.status_code, None
-            log.info(f"[proxy-json] {url[:70]} → 403, trying direct...")
+            log.info(f"[proxy-json] {url[:70]} → 403, trying unblocker...")
         except Exception as e:
             log.error(f"[proxy-json] GET {url[:70]}: {e}")
+
+    # Try Site Unblocker for 403s
+    if UNBLOCKER_URL:
+        try:
+            ub_proxies = {'http': UNBLOCKER_URL, 'https': UNBLOCKER_URL}
+            r = requests.get(url, headers=h, timeout=60, proxies=ub_proxies, allow_redirects=True, verify=False)
+            ct = r.headers.get('content-type', '')
+            if r.status_code == 200 and 'json' in ct:
+                log.info(f"[unblocker-json] {url[:70]} → 200")
+                return r.status_code, r.json()
+            if r.status_code != 403:
+                return r.status_code, None
+        except Exception as e:
+            log.error(f"[unblocker-json] GET {url[:70]}: {e}")
 
     # Direct clients fallback
     clients = []
