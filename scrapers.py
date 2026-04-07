@@ -563,7 +563,7 @@ def scrape_flatfox(city="Lausanne", transaction="location", limit=50):
 # IMMOSCOUT24 — via __INITIAL_STATE__ (no JS needed)
 # ============================================================
 
-def scrape_immoscout24(city="Lausanne", transaction="location", max_pages=3):
+def scrape_immoscout24(city="Lausanne", transaction="location", max_pages=10):
     log.info(f"[ImmoScout24] Searching {city} ({transaction})")
     results = []
     tx = "louer" if transaction == "location" else "acheter"
@@ -751,7 +751,7 @@ def scrape_immoscout24(city="Lausanne", transaction="location", max_pages=3):
 # HOMEGATE — via __NEXT_DATA__ or __INITIAL_STATE__
 # ============================================================
 
-def scrape_homegate(city="Lausanne", transaction="location", max_pages=2):
+def scrape_homegate(city="Lausanne", transaction="location", max_pages=10):
     log.info(f"[Homegate] Searching {city} ({transaction})")
     results = []
     tx = "rent" if transaction == "location" else "buy"
@@ -960,7 +960,7 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=2):
 # COMPARIS — via __NEXT_DATA__ (confirmed working)
 # ============================================================
 
-def scrape_comparis(city="Lausanne", transaction="location", max_pages=2):
+def scrape_comparis(city="Lausanne", transaction="location", max_pages=10):
     log.info(f"[Comparis] Searching {city} ({transaction})")
     results = []
     deal_type = 10 if transaction == 'location' else 20
@@ -1089,7 +1089,7 @@ def scrape_comparis(city="Lausanne", transaction="location", max_pages=2):
 # ANIBIS — via SMG internal API
 # ============================================================
 
-def scrape_anibis(city="Lausanne", transaction="location", max_pages=2):
+def scrape_anibis(city="Lausanne", transaction="location", max_pages=5):
     """Scrape Anibis via internal API (SMG platform)."""
     log.info(f"[Anibis] Searching {city} ({transaction})")
     results = []
@@ -1232,7 +1232,7 @@ def scrape_anibis(city="Lausanne", transaction="location", max_pages=2):
 # IMMOBILIER.CH — HTML parsing with multi-method
 # ============================================================
 
-def scrape_immobilier_ch(city="Lausanne", transaction="location", max_pages=2):
+def scrape_immobilier_ch(city="Lausanne", transaction="location", max_pages=10):
     log.info(f"[Immobilier.ch] Searching {city} ({transaction})")
     results = []
     tx = "louer" if transaction == "location" else "acheter"
@@ -1395,7 +1395,7 @@ def scrape_immobilier_ch(city="Lausanne", transaction="location", max_pages=2):
 # ACHETER-LOUER — HTML parsing with multi-method
 # ============================================================
 
-def scrape_acheter_louer(city="Lausanne", transaction="location", max_pages=2):
+def scrape_acheter_louer(city="Lausanne", transaction="location", max_pages=5):
     log.info(f"[Acheter-Louer] Searching {city} ({transaction})")
     results = []
     tx = "louer" if transaction == "location" else "acheter"
@@ -1403,10 +1403,12 @@ def scrape_acheter_louer(city="Lausanne", transaction="location", max_pages=2):
     for page in range(1, max_pages + 1):
         try:
             # Try multiple URL patterns (acheter-louer.ch changes their routing)
+            city_upper = city.upper()
+            tx_slug = "appartements-a-louer" if transaction == "location" else "appartements-a-vendre"
             urls_to_try = [
+                f"https://www.acheter-louer.ch/{tx}/{city_upper}-{tx_slug}.html" + (f"?page={page}" if page > 1 else ""),
+                f"https://www.acheter-louer.ch/{tx}/{city.lower()}-{tx_slug}.html" + (f"?page={page}" if page > 1 else ""),
                 f"https://www.acheter-louer.ch/fr/{tx}/appartement/{city.lower()}?page={page}",
-                f"https://www.acheter-louer.ch/{tx}/{city.lower()}?page={page}",
-                f"https://www.acheter-louer.ch/fr/{tx}/{city.lower()}?page={page}",
             ]
             status, html = 0, ''
             for try_url in urls_to_try:
@@ -1647,7 +1649,7 @@ def _parse_jsonld_listing(item, results, transaction, city):
 # NEWHOME.CH — __NEXT_DATA__ / HTML parsing
 # ============================================================
 
-def scrape_newhome(city="Lausanne", transaction="location", max_pages=2):
+def scrape_newhome(city="Lausanne", transaction="location", max_pages=5):
     log.info(f"[Newhome] Searching {city} ({transaction})")
     results = []
     tx = "louer" if transaction == "location" else "acheter"
@@ -1766,7 +1768,7 @@ def scrape_newhome(city="Lausanne", transaction="location", max_pages=2):
 # TUTTI.CH — SMG API / __NEXT_DATA__
 # ============================================================
 
-def scrape_tutti(city="Lausanne", transaction="location", max_pages=2):
+def scrape_tutti(city="Lausanne", transaction="location", max_pages=5):
     log.info(f"[Tutti] Searching {city} ({transaction})")
     results = []
 
@@ -1883,7 +1885,7 @@ def scrape_tutti(city="Lausanne", transaction="location", max_pages=2):
 # REALADVISOR — __NEXT_DATA__
 # ============================================================
 
-def scrape_realadvisor(city="Lausanne", transaction="location", max_pages=2):
+def scrape_realadvisor(city="Lausanne", transaction="location", max_pages=5):
     log.info(f"[RealAdvisor] Searching {city} ({transaction})")
     results = []
     tx = "louer" if transaction == "location" else "acheter"
