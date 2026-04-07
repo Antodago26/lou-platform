@@ -86,7 +86,7 @@ def return_db(conn):
     if pool:
         pool.putconn(conn)
     else:
-        return_db(conn)
+        conn.close()
 
 
 def token_required(f):

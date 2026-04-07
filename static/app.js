@@ -5,11 +5,8 @@
 (function () {
   'use strict';
 
-  // API URL — use Render backend unless we're already on it
-  var RENDER_API = 'https://lou-platform.onrender.com';
-  var API = (window.location.hostname === 'lou-platform.onrender.com' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? window.location.origin
-    : RENDER_API;
+  // Dynamic API URL — works on any host (garou.ch, onrender, localhost)
+  var API = window.location.origin;
   var TOKEN = localStorage.getItem('lou_token');
   var USER = JSON.parse(localStorage.getItem('lou_user') || 'null');
 
