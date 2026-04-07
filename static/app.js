@@ -869,7 +869,11 @@
                 }
                 if (txt === "créer mon espace" || txt === "créer l'espace" || txt === 'sauvegarder la recherche') {
                   panel.classList.remove('open');
-                  window.location.href = '/dashboard';
+                  if (isJWT(TOKEN) && USER) {
+                    window.location.href = '/dashboard';
+                  } else {
+                    showAuthModal();
+                  }
                   return;
                 }
                 if (txt === 'modifier mes critères' || txt === 'modifier les critères' || txt === 'modifier quelque chose' || txt === 'modifier') {

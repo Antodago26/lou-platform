@@ -1055,8 +1055,8 @@ def scrape_anibis(city="Lausanne", transaction="location", max_pages=2):
     log.info(f"[Anibis] Searching {city} ({transaction})")
     results = []
 
-    # Anibis category IDs: immobilier=12, acheter=12xx, louer=12xx
-    # Try the search API
+    # Anibis search API endpoints (Scout24 group)
+    tx_slug = "louer" if transaction == "location" else "acheter"
     api_urls = [
         f"https://api.anibis.ch/v4/fr/search/listings?cid=12&q={quote(city)}&fcid=0&fts=0&nrs=20&pi={{page}}",
         f"https://www.anibis.ch/api/search?cid=immobilier&q={quote(city)}&page={{page}}",
@@ -1119,8 +1119,7 @@ def scrape_anibis(city="Lausanne", transaction="location", max_pages=2):
 
         # Fallback: HTML parsing
         if not found_api:
-            tx = "louer" if transaction == "location" else "acheter"
-            url = f"https://www.anibis.ch/fr/immobilier--{tx}/{city.lower()}?page={page}"
+            url = f"https://www.anibis.ch/fr/q/immobilier-{quote(city.lower())}-appartements-{tx_slug}/?page={page}"
             status, html = _get(url)
             log.info(f"[Anibis] Page {page}: HTTP {status}, len={len(html)}, trying HTML")
 
@@ -1732,10 +1731,11 @@ def scrape_tutti(city="Lausanne", transaction="location", max_pages=2):
     log.info(f"[Tutti] Searching {city} ({transaction})")
     results = []
 
-    # Try API endpoint
+    # Try API endpoints (tutti.ch changed their API structure)
     api_urls = [
         f"https://www.tutti.ch/api/v10/list.json?q=appartement&l={quote(city)}&c=immobilien&o=0&n=30",
         f"https://www.tutti.ch/api/v10/list.json?q=&l={quote(city)}&c=immobilien-wohnungen&o=0&n=30",
+        f"https://www.tutti.ch/api/v14/list.json?q={quote(city)}&c=immobilien&o=0&n=30",
     ]
 
     for api_url in api_urls:
@@ -1791,7 +1791,7 @@ def scrape_tutti(city="Lausanne", transaction="location", max_pages=2):
     # Fallback: page scraping
     if not results:
         try:
-            url = f"https://www.tutti.ch/fr/immobilier/{_slugify(city)}"
+            url = f"https://www.tutti.ch/fr/li/toute-la-suisse/immobilier/appartements?q={quote(city)}"
             status, html = _get(url)
             log.info(f"[Tutti] HTML: HTTP {status}, len={len(html)}")
 
@@ -1852,10 +1852,10 @@ def scrape_realadvisor(city="Lausanne", transaction="location", max_pages=2):
 
     for page in range(1, max_pages + 1):
         try:
-            # RealAdvisor uses different URL patterns — try multiple
+            # RealAdvisor URL patterns (updated April 2026)
             urls_to_try = [
-                f"https://realadvisor.ch/fr/proprietes/{tx}/{slug}?page={page}",
-                f"https://realadvisor.ch/fr/{tx}/bien-immobilier/{slug}?page={page}",
+                f"https://realadvisor.ch/fr/{tx}/ville-{slug}/appartement?page={page}",
+                f"https://realadvisor.ch/fr/immobilier-a-{'vendre' if tx == 'acheter' else 'louer'}?city={quote(city)}&page={page}",
                 f"https://realadvisor.ch/fr/{tx}/{slug}?page={page}",
             ]
             url = urls_to_try[0]  # Start with most likely
