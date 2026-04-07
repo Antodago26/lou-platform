@@ -627,9 +627,9 @@ REGLES ABSOLUES:
 4. Si tous les critères sont remplis, dis simplement que le profil est complet et propose de le modifier ou de voir les résultats.
 5. Ne demande QUE les critères listés comme MANQUANTS."""
 
-    # Build accumulated criteria from conversation history (for non-logged-in users or between saves)
-    # This ensures Lou remembers what was said even if DB hasn't been updated yet
+    # Build accumulated criteria from ALL sources: DB profile + conversation JSON + message analysis
     conv_criteria = {}
+    # Source 1: extract from assistant JSON criteria tags
     for h in history:
         if h.get('role') == 'assistant' and '[Critères mis à jour:' in h.get('content', ''):
             try:
@@ -640,29 +640,94 @@ REGLES ABSOLUES:
             except Exception:
                 pass
 
-    if conv_criteria and not existing_profile:
-        # Non-logged-in user: build context from conversation
+    # Source 2: analyze user messages directly for criteria mentions
+    for h in history:
+        if h.get('role') == 'user':
+            msg_low = h.get('content', '').lower().strip()
+            # Detect transaction
+            if not conv_criteria.get('transaction_type') and not existing_profile.get('transaction'):
+                if any(w in msg_low for w in ['acheter', 'achat', 'achète', 'acquerir']):
+                    conv_criteria['transaction_type'] = 'achat'
+                elif any(w in msg_low for w in ['louer', 'location', 'loue']):
+                    conv_criteria['transaction_type'] = 'location'
+            # Detect property type
+            if not conv_criteria.get('property_type') and not existing_profile.get('property_types'):
+                if 'appartement' in msg_low:
+                    conv_criteria['property_type'] = 'appartement'
+                elif 'maison' in msg_low or 'villa' in msg_low:
+                    conv_criteria['property_type'] = 'maison'
+                elif 'studio' in msg_low:
+                    conv_criteria['property_type'] = 'studio'
+            # Detect city
+            if not conv_criteria.get('zones') and not existing_profile.get('zones'):
+                city_map = {
+                    'neuchâtel': ('Neuchâtel', 'NE'), 'neuchatel': ('Neuchâtel', 'NE'),
+                    'lausanne': ('Lausanne', 'VD'), 'genève': ('Genève', 'GE'), 'geneve': ('Genève', 'GE'),
+                    'montreux': ('Montreux', 'VD'), 'fribourg': ('Fribourg', 'FR'), 'sion': ('Sion', 'VS'),
+                    'nyon': ('Nyon', 'VD'), 'morges': ('Morges', 'VD'), 'yverdon': ('Yverdon', 'VD'),
+                    'vevey': ('Vevey', 'VD'), 'bienne': ('Bienne', 'BE'),
+                }
+                for key, (city_name, canton) in city_map.items():
+                    if key in msg_low:
+                        conv_criteria['zones'] = [{'city': city_name, 'canton': canton, 'radius_km': 5}]
+                        break
+            # Detect budget
+            if not conv_criteria.get('budget_max') and not conv_criteria.get('budget_min'):
+                if not existing_profile.get('budget_max') and not existing_profile.get('budget_min'):
+                    import re as _re_budget
+                    # Match patterns like "800'000", "800000", "500k", "800k"
+                    budget_match = _re_budget.search(r"(\d[\d'\.]*)\s*(?:000)?\s*(?:chf|CHF|francs?)?", msg_low)
+                    if '800' in msg_low and any(w in msg_low for w in ['plus de', '800k', "800'000", '800000']):
+                        conv_criteria['budget_min'] = 800000
+                    elif '500' in msg_low and '800' in msg_low:
+                        conv_criteria['budget_min'] = 500000
+                        conv_criteria['budget_max'] = 800000
+                    elif '500' in msg_low and any(w in msg_low for w in ['moins de', '500k', "500'000"]):
+                        conv_criteria['budget_max'] = 500000
+
+    # Merge conv_criteria with existing_profile for the complete picture
+    all_criteria = {}
+    if existing_profile:
+        all_criteria.update(existing_profile)
+    # Map conv_criteria keys to profile keys
+    if conv_criteria.get('transaction_type') and not all_criteria.get('transaction'):
+        all_criteria['transaction'] = conv_criteria['transaction_type']
+    if conv_criteria.get('property_type') and not all_criteria.get('property_types'):
+        all_criteria['property_types'] = [conv_criteria['property_type']]
+    if conv_criteria.get('zones') and not all_criteria.get('zones'):
+        all_criteria['zones'] = conv_criteria['zones']
+    if conv_criteria.get('budget_min') and not all_criteria.get('budget_min'):
+        all_criteria['budget_min'] = conv_criteria['budget_min']
+    if conv_criteria.get('budget_max') and not all_criteria.get('budget_max'):
+        all_criteria['budget_max'] = conv_criteria['budget_max']
+
+    # Always inject accumulated criteria summary (whether from DB or conversation)
+    if all_criteria and not existing_profile:
         conv_parts = []
-        if conv_criteria.get('transaction'):
-            conv_parts.append(f"Transaction: {conv_criteria['transaction']}")
-        if conv_criteria.get('zones'):
-            zones_str = ', '.join(z.get('city', '?') for z in conv_criteria['zones'] if isinstance(z, dict))
+        if all_criteria.get('transaction'):
+            conv_parts.append(f"Transaction: {all_criteria['transaction']}")
+        if all_criteria.get('zones'):
+            zones_str = ', '.join(
+                z.get('city', '?') if isinstance(z, dict) else str(z)
+                for z in all_criteria['zones']
+            )
             conv_parts.append(f"Zones: {zones_str}")
-        if conv_criteria.get('property_types'):
-            conv_parts.append(f"Type: {conv_criteria['property_types']}")
-        if conv_criteria.get('budget_min') or conv_criteria.get('budget_max'):
-            bmin = conv_criteria.get('budget_min', '')
-            bmax = conv_criteria.get('budget_max', '')
+        if all_criteria.get('property_types'):
+            types = all_criteria['property_types']
+            conv_parts.append(f"Type: {', '.join(types) if isinstance(types, list) else types}")
+        if all_criteria.get('budget_min') or all_criteria.get('budget_max'):
+            bmin = all_criteria.get('budget_min', '')
+            bmax = all_criteria.get('budget_max', '')
             conv_parts.append(f"Budget: {bmin or '?'} - {bmax or '?'} CHF")
         if conv_parts:
             missing = []
-            if not conv_criteria.get('zones'):
+            if not all_criteria.get('zones'):
                 missing.append('zone (ville)')
-            if not conv_criteria.get('transaction'):
+            if not all_criteria.get('transaction'):
                 missing.append('transaction (location ou achat)')
-            if not conv_criteria.get('property_types'):
+            if not all_criteria.get('property_types'):
                 missing.append('type de bien')
-            if not conv_criteria.get('budget_max') and not conv_criteria.get('budget_min'):
+            if not all_criteria.get('budget_max') and not all_criteria.get('budget_min'):
                 missing.append('budget')
             missing_str = ', '.join(missing) if missing else 'AUCUN - profil complet'
             conv_summary = '\n'.join(conv_parts)
@@ -673,10 +738,12 @@ REGLES ABSOLUES:
 
 Critères MANQUANTS: {missing_str}
 
-REGLES ABSOLUES:
-1. Les critères ci-dessus ont DEJA été donnés par l'utilisateur. NE LES REDEMANDE JAMAIS.
-2. Ne demande QUE les critères listés comme MANQUANTS.
-3. Si tous les critères obligatoires sont remplis (zone + type + transaction + budget), propose de créer l'espace."""
+IMPORTANT: Tu connais DEJA les critères ci-dessus. NE LES REDEMANDE JAMAIS.
+- Si la zone est listée ci-dessus → NE DEMANDE PAS la zone
+- Si le budget est listé ci-dessus → NE DEMANDE PAS le budget
+- Si la transaction est listée ci-dessus → NE DEMANDE PAS la transaction
+- Si le type est listé ci-dessus → NE DEMANDE PAS le type
+- Si AUCUN critère n'est manquant → propose de créer l'espace"""
 
     # Build messages
     messages = list(history[-10:])
