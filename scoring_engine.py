@@ -320,21 +320,26 @@ def score_all_for_profile(db, profile_id):
         profile_id: ID du search_profile
     """
     # Load profile + zones
-    profile = db.execute(
+    cur = db.cursor()
+
+    cur.execute(
         "SELECT * FROM search_profiles WHERE id = %s AND is_active = TRUE",
         (profile_id,)
-    ).fetchone()
+    )
+    profile = cur.fetchone()
 
     if not profile:
+        cur.close()
         return 0
 
-    zones = db.execute(
+    cur.execute(
         "SELECT * FROM search_zones WHERE profile_id = %s",
         (profile_id,)
-    ).fetchall()
+    )
+    zones = cur.fetchall()
 
     # Clean old scores for this profile
-    db.execute(
+    cur.execute(
         "DELETE FROM scored_properties WHERE profile_id = %s",
         (profile_id,)
     )
@@ -352,7 +357,8 @@ def score_all_for_profile(db, profile_id):
         query += " AND (price IS NULL OR price <= %s)"
         params.append(int(profile['budget_max'] * 1.3))
 
-    properties = db.execute(query, params).fetchall()
+    cur.execute(query, params)
+    properties = cur.fetchall()
 
     # Fallback: if no properties match the transaction type, score ALL properties
     if not properties:
@@ -361,16 +367,15 @@ def score_all_for_profile(db, profile_id):
         if profile['budget_max']:
             query += " AND (price IS NULL OR price <= %s)"
             params.append(int(profile['budget_max'] * 1.3))
-        properties = db.execute(query, params).fetchall()
-
-    properties = db.execute(query, params).fetchall()
+        cur.execute(query, params)
+        properties = cur.fetchall()
 
     # Score each property
     scored = 0
     for prop in properties:
         result = score_property(dict(prop), dict(profile), [dict(z) for z in zones])
 
-        db.execute("""
+        cur.execute("""
             INSERT INTO scored_properties
                 (property_id, profile_id, user_id, total_score, grade,
                  score_zone, score_budget, score_type, score_surface,
@@ -399,4 +404,5 @@ def score_all_for_profile(db, profile_id):
         scored += 1
 
     db.commit()
+    cur.close()
     return scored
