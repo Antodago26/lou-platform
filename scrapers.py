@@ -1979,7 +1979,9 @@ def scrape_realadvisor(city="Lausanne", transaction="location", max_pages=5):
                 break
             log.info(f"[RealAdvisor] Page {page}: HTTP {status}, len={len(html)}")
 
-            if status != 200:
+            # Early stop: if page is tiny (< 1000 bytes), it's empty/redirect
+            if len(html) < 1000:
+                log.info(f"[RealAdvisor] Page {page}: response too small ({len(html)} bytes) — stopping pagination")
                 break
 
             # Try __NEXT_DATA__ (classic Next.js)
@@ -2094,13 +2096,13 @@ def scrape_realadvisor(city="Lausanne", transaction="location", max_pages=5):
                                 postcode = _rsc_field('postcode', ctx) or _rsc_field('postal_code', ctx) or ''
                                 route = _rsc_field('route', ctx) or ''
                                 street_number = _rsc_field('street_number', ctx) or ''
-                                slug = _rsc_field('slug', ctx) or ''
+                                listing_slug = _rsc_field('slug', ctx) or ''
                                 agency_ref = _rsc_field('agency_reference', ctx) or ''
 
                                 # Build a unique ID
                                 eid = agency_ref or f"{address}-{price_val}-{rooms}"
-                                # Build source URL from slug
-                                source_url = f"https://realadvisor.ch/fr/{tx}/{slug}" if slug else ''
+                                # Build source URL from listing slug
+                                source_url = f"https://realadvisor.ch/fr/{tx}/{listing_slug}" if listing_slug else ''
 
                                 # Build title
                                 title_parts = []
