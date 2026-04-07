@@ -316,92 +316,87 @@ def score_all_for_profile(db, profile_id):
     Appeler après chaque scrape.
 
     Args:
-        db: database connection/session
+        db: psycopg2 database connection
         profile_id: ID du search_profile
     """
-    # Load profile + zones
     cur = db.cursor()
+    try:
+        # Load profile
+        cur.execute(
+            "SELECT * FROM search_profiles WHERE id = %s AND is_active = TRUE",
+            (profile_id,)
+        )
+        profile = cur.fetchone()
 
-    cur.execute(
-        "SELECT * FROM search_profiles WHERE id = %s AND is_active = TRUE",
-        (profile_id,)
-    )
-    profile = cur.fetchone()
+        if not profile:
+            return 0
+        profile = dict(profile)
 
-    if not profile:
-        cur.close()
-        return 0
+        # Load zones
+        cur.execute(
+            "SELECT * FROM search_zones WHERE profile_id = %s",
+            (profile_id,)
+        )
+        zones = [dict(z) for z in cur.fetchall()]
 
-    cur.execute(
-        "SELECT * FROM search_zones WHERE profile_id = %s",
-        (profile_id,)
-    )
-    zones = cur.fetchall()
-
-    # Clean old scores for this profile
-    cur.execute(
-        "DELETE FROM scored_properties WHERE profile_id = %s",
-        (profile_id,)
-    )
-
-    # Pre-filter properties by transaction type
-    tx = profile['transaction']
-    print(f"[SCORING] Profile {profile_id}: transaction='{tx}', budget_max={profile['budget_max']}")
-
-    if tx:
+        # Pre-filter properties by transaction type
         query = """
             SELECT * FROM properties
             WHERE is_active = TRUE
             AND transaction = %s
         """
-        params = [tx]
-    else:
-        # No transaction set — score all properties
-        query = "SELECT * FROM properties WHERE is_active = TRUE"
-        params = []
+        params = [profile['transaction']]
 
-    # Budget filter with 30% margin
-    if profile['budget_max']:
-        query += " AND (price IS NULL OR price <= %s)"
-        params.append(int(profile['budget_max'] * 1.3))
+        # Budget filter with 30% margin
+        if profile.get('budget_max'):
+            query += " AND (price IS NULL OR price <= %s)"
+            params.append(int(profile['budget_max'] * 1.3))
 
-    cur.execute(query, params)
-    properties = cur.fetchall()
-    print(f"[SCORING] Found {len(properties)} properties matching transaction='{tx}'")
+        # Zone pre-filter: if we have zones, limit to matching cantons to reduce scope
+        zone_cantons = [z.get('canton', '').upper() for z in zones if z.get('canton')]
+        if zone_cantons:
+            placeholders = ','.join(['%s'] * len(zone_cantons))
+            query += f" AND (canton IN ({placeholders}) OR canton IS NULL OR canton = '')"
+            params.extend(zone_cantons)
 
-    # Score each property
-    scored = 0
-    for prop in properties:
-        result = score_property(dict(prop), dict(profile), [dict(z) for z in zones])
+        cur.execute(query, params)
+        properties = cur.fetchall()
 
-        cur.execute("""
-            INSERT INTO scored_properties
-                (property_id, profile_id, user_id, total_score, grade,
-                 score_zone, score_budget, score_type, score_surface,
-                 score_equipment, score_freshness, distance_km)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (property_id, profile_id)
-            DO UPDATE SET
-                total_score = EXCLUDED.total_score,
-                grade = EXCLUDED.grade,
-                score_zone = EXCLUDED.score_zone,
-                score_budget = EXCLUDED.score_budget,
-                score_type = EXCLUDED.score_type,
-                score_surface = EXCLUDED.score_surface,
-                score_equipment = EXCLUDED.score_equipment,
-                score_freshness = EXCLUDED.score_freshness,
-                distance_km = EXCLUDED.distance_km,
-                scored_at = NOW()
-        """, (
-            prop['id'], profile_id, profile['user_id'],
-            result['total_score'], result['grade'],
-            result['score_zone'], result['score_budget'],
-            result['score_type'], result['score_surface'],
-            result['score_equipment'], result['score_freshness'],
-            result['distance_km']
-        ))
-        scored += 1
+        # Score each property
+        scored = 0
+        for prop in properties:
+            prop = dict(prop)
+            result = score_property(prop, profile, zones)
 
-    db.commit()
-    cur.close()
-    return scored
+            cur.execute("""
+                INSERT INTO scored_properties
+                    (property_id, profile_id, user_id, total_score, grade,
+                     score_zone, score_budget, score_type, score_surface,
+                     score_equipment, score_freshness, distance_km)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (property_id, profile_id)
+                DO UPDATE SET
+                    total_score = EXCLUDED.total_score,
+                    grade = EXCLUDED.grade,
+                    score_zone = EXCLUDED.score_zone,
+                    score_budget = EXCLUDED.score_budget,
+                    score_type = EXCLUDED.score_type,
+                    score_surface = EXCLUDED.score_surface,
+                    score_equipment = EXCLUDED.score_equipment,
+                    score_freshness = EXCLUDED.score_freshness,
+                    distance_km = EXCLUDED.distance_km,
+                    scored_at = NOW()
+            """, (
+                prop['id'], profile_id, profile['user_id'],
+                result['total_score'], result['grade'],
+                result['score_zone'], result['score_budget'],
+                result['score_type'], result['score_surface'],
+                result['score_equipment'], result['score_freshness'],
+                result['distance_km']
+            ))
+            scored += 1
+
+        db.commit()
+        return scored
+    finally:
+        cur.close()

@@ -5,9 +5,13 @@
 (function () {
   'use strict';
 
-  var API = 'https://lou-platform.onrender.com';
+  // Dynamic API URL — works on any host (garou.ch, onrender, localhost)
+  var API = window.location.origin;
   var TOKEN = localStorage.getItem('lou_token');
   var USER = JSON.parse(localStorage.getItem('lou_user') || 'null');
+
+  // Accumulated chatbot criteria (persists across messages)
+  var chatCriteria = {};
 
   function $(id) { return document.getElementById(id); }
   function ce(tag, cls, html) {
@@ -21,6 +25,25 @@
     var div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  // Wrapper for authenticated API calls — handles 401 (expired token)
+  function apiFetch(url, opts) {
+    opts = opts || {};
+    opts.headers = opts.headers || {};
+    if (TOKEN) opts.headers['Authorization'] = 'Bearer ' + TOKEN;
+    return fetch(url, opts).then(function (r) {
+      if (r.status === 401) {
+        // Token expired or invalid — force re-login
+        localStorage.removeItem('lou_token');
+        localStorage.removeItem('lou_user');
+        TOKEN = null;
+        USER = null;
+        showAuthModal();
+        return Promise.reject(new Error('Session expiree'));
+      }
+      return r;
+    });
   }
 
   // ============================================================
@@ -76,7 +99,7 @@
       btn.disabled = true;
 
       var body = mode === 'signup'
-        ? { email: email, password: pass, name: name }
+        ? { email: email, password: pass, name: name, criteria: chatCriteria }
         : { email: email, password: pass };
 
       fetch(API + '/api/' + mode, {
@@ -92,7 +115,7 @@
             TOKEN = data.token;
             USER = data.user;
             // On external hosts (Webflow), render dashboard in place
-            var isRenderHost = window.location.hostname === 'lou-platform.onrender.com' || window.location.hostname === 'garou.ch' || window.location.hostname === 'www.garou.ch' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            var isRenderHost = window.location.hostname === 'lou-platform.onrender.com' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
             if (isRenderHost) {
               window.location.href = '/dashboard';
             } else {
@@ -107,7 +130,7 @@
           }
         })
         .catch(function () {
-          err.textContent = 'Erreur réseau — réessayez';
+          err.textContent = 'Erreur reseau — reessayez';
           err.style.display = 'block';
           btn.textContent = mode === 'signup' ? "S'inscrire" : 'Se connecter';
           btn.disabled = false;
@@ -125,27 +148,19 @@
   // LANDING PAGE — Hook CTAs (when HTML already exists, e.g. Render)
   // ============================================================
   function initLanding() {
-    // Hook all CTA buttons — hero/bottom CTAs always open chat, nav button opens auth if not logged in
-    var isLoggedIn = isJWT(TOKEN) && USER;
-    ['nav-login-btn', 'hero-cta-1', 'cta-bottom'].forEach(function (id) {
+    var isRenderHost = window.location.hostname === 'lou-platform.onrender.com' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+    // Hook all CTA buttons to open auth modal
+    ['nav-login-btn', 'hero-cta-1', 'cta-bottom', 'nav-cta-btn'].forEach(function (id) {
       var el = $(id);
       if (el) {
         el.addEventListener('click', function (e) {
           e.preventDefault();
-          if (id === 'hero-cta-1' || id === 'cta-bottom') {
-            // Always open chatbot — accessible without login
-            var chatToggle = document.querySelector('.chat-toggle');
-            if (chatToggle) chatToggle.click();
-          } else if (isLoggedIn) {
-            // Nav button when logged in — go to dashboard or open chat
-            var chatToggle = document.querySelector('.chat-toggle');
-            if (chatToggle) chatToggle.click();
-          } else {
-            showAuthModal();
-          }
+          showAuthModal();
         });
       }
     });
+
     // If user is already logged in, change nav button to "Mon Dashboard"
     if (isJWT(TOKEN) && USER) {
       var navBtn = $('nav-login-btn');
@@ -153,7 +168,11 @@
         navBtn.textContent = 'Mon Dashboard';
         navBtn.onclick = function (e) {
           e.preventDefault();
-          window.location.href = '/dashboard';
+          if (isRenderHost) {
+            window.location.href = '/dashboard';
+          } else {
+            showDashboard();
+          }
         };
       }
     }
@@ -194,7 +213,7 @@
       '</a>' +
       '<div class="nav-links">' +
         '<a href="#features">Fonctions</a>' +
-        '<a href="#how">Comment ça marche</a>' +
+        '<a href="#how">Comment ca marche</a>' +
         '<a href="#" class="btn btn-primary" id="nav-login-btn">Connexion</a>' +
       '</div>';
     document.body.appendChild(nav);
@@ -204,7 +223,7 @@
     hero.innerHTML =
       '<div class="hero-text">' +
         '<h1>Votre <em>chasseur immobilier</em> intelligent en Suisse</h1>' +
-        '<p>Lou Garou scrute en continu les meilleures annonces de Suisse romande, les analyse avec l\'IA et vous présente uniquement les biens qui correspondent a vos critères.</p>' +
+        '<p>Lou Garou scrute en continu les meilleures annonces de Suisse romande, les analyse avec l\'IA et vous presente uniquement les biens qui correspondent a vos criteres.</p>' +
         '<div class="hero-ctas">' +
           '<a href="#" class="btn btn-primary" id="hero-cta-1">Commencer ma recherche</a>' +
           '<a href="#how" class="btn btn-outline">En savoir plus</a>' +
@@ -224,8 +243,8 @@
     statsBar.innerHTML =
       '<div class="stats-bar-inner">' +
         '<div><strong>8+</strong><span>Portails suisses</span></div>' +
-        '<div><strong>500+</strong><span>Annonces analysées</span></div>' +
-        '<div><strong>6</strong><span>Critères de scoring</span></div>' +
+        '<div><strong>500+</strong><span>Annonces analysees</span></div>' +
+        '<div><strong>6</strong><span>Criteres de scoring</span></div>' +
         '<div><strong>24/7</strong><span>Veille automatique</span></div>' +
       '</div>';
     document.body.appendChild(statsBar);
@@ -237,10 +256,10 @@
       '<div class="features-header"><h2>Pourquoi Lou Garou ?</h2><p>Un assistant immobilier complet, de la recherche a la prise de contact.</p></div>' +
       '<div class="features-grid">' +
         featureCard('<circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>', 'Scraping multi-portails', 'Lou scrute automatiquement Homegate, ImmoScout24, Flatfox, Immobilier.ch, Properstar et bien d\'autres pour ne rien manquer.') +
-        featureCard('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>', 'Scoring intelligent', 'Chaque annonce est notée de A a D selon vos critères : zone, budget, type, surface, equipements, fraîcheur.') +
-        featureCard('<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>', 'Chatbot IA', 'Discutez avec Lou pour definir vos critères de recherche de manière naturelle. Il comprend vos besoins et affine votre profil.') +
-        featureCard('<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>', 'Recherche par zone', 'Definissez une ou plusieurs zones géographiques avec un rayon en km. Lou calcule la distance GPS pour chaque bien.') +
-        featureCard('<path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/>', 'Alertes en temps reel', 'Soyez averti des qu\'un nouveau bien correspondant a vos critères apparait sur le marche.') +
+        featureCard('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>', 'Scoring intelligent', 'Chaque annonce est notee de A a D selon vos criteres : zone, budget, type, surface, equipements, fraicheur.') +
+        featureCard('<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>', 'Chatbot IA', 'Discutez avec Lou pour definir vos criteres de recherche de maniere naturelle. Il comprend vos besoins et affine votre profil.') +
+        featureCard('<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>', 'Recherche par zone', 'Definissez une ou plusieurs zones geographiques avec un rayon en km. Lou calcule la distance GPS pour chaque bien.') +
+        featureCard('<path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/>', 'Alertes en temps reel', 'Soyez averti des qu\'un nouveau bien correspondant a vos criteres apparait sur le marche.') +
         featureCard('<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="2" width="4" height="19" rx="1"/>', 'Dashboard complet', 'Visualisez tous vos resultats, filtrez par score, triez par prix ou date, et gardez vos favoris.') +
       '</div>';
     document.body.appendChild(features);
@@ -250,12 +269,12 @@
     how.id = 'how';
     how.innerHTML =
       '<div class="how-inner">' +
-        '<h2>Comment ça marche ?</h2>' +
+        '<h2>Comment ca marche ?</h2>' +
         '<div class="steps">' +
-          '<div class="step"><div class="step-num">1</div><h3>Parlez a Lou</h3><p>Dites-lui ce que vous cherchez : region, budget, type de bien, nombre de pièces...</p></div>' +
+          '<div class="step"><div class="step-num">1</div><h3>Parlez a Lou</h3><p>Dites-lui ce que vous cherchez : region, budget, type de bien, nombre de pieces...</p></div>' +
           '<div class="step"><div class="step-num">2</div><h3>Lou chasse pour vous</h3><p>Notre moteur scrute 8+ portails immobiliers suisses en continu et collecte les nouvelles annonces.</p></div>' +
-          '<div class="step"><div class="step-num">3</div><h3>Scoring & analyse</h3><p>Chaque bien est note selon 6 critères ponderes. Seuls les meilleurs vous sont présentés.</p></div>' +
-          '<div class="step"><div class="step-num">4</div><h3>Contactez & visitez</h3><p>Retrouvez les coordonnées du propriétaire, l\'annonce originale et tous les details en un clic.</p></div>' +
+          '<div class="step"><div class="step-num">3</div><h3>Scoring & analyse</h3><p>Chaque bien est note selon 6 criteres ponderes. Seuls les meilleurs vous sont presentes.</p></div>' +
+          '<div class="step"><div class="step-num">4</div><h3>Contactez & visitez</h3><p>Retrouvez les coordonnees du proprietaire, l\'annonce originale et tous les details en un clic.</p></div>' +
         '</div>' +
       '</div>';
     document.body.appendChild(how);
@@ -376,7 +395,7 @@
       '.lou-auth-err{color:#dc2626;font-size:13px;margin-top:8px;display:none;text-align:center}',
 
       '@media(max-width:900px){.hero{flex-direction:column;text-align:center;padding:40px 5% 60px}.hero-text h1{font-size:36px}.hero-ctas{justify-content:center}.hero-visual{width:100%;max-width:360px;height:280px}.features-grid{grid-template-columns:1fr}.steps{grid-template-columns:repeat(2,1fr)}.nav-links{gap:16px}.footer-inner{flex-direction:column;gap:12px}}',
-      '@media(max-width:600px){.nav-links a:not(.btn){display:none}.stats-bar-inner{flex-wrap:wrap;margin:0 auto;display:grid;grid-template-columns:repeat(2,1fr);gap:16px}.steps{grid-template-columns:1fr}.hero-visual{display:none}.hero-text{max-width:100%}.hero-text h1{font-size:28px}.hero-ctas{flex-direction:column}.hero-ctas .btn{width:100%;text-align:center}.footer-inner{flex-direction:column;gap:12px}}'
+      '@media(max-width:600px){.nav-links a:not(.btn){display:none}.stats-bar-inner{flex-wrap:wrap}.steps{grid-template-columns:1fr}}'
     ].join('');
   }
 
@@ -414,7 +433,7 @@
   // ============================================================
   function showDashboard() {
     if (!isJWT(TOKEN) || !USER) {
-      window.location.href = '/';
+      window.location.reload();
       return;
     }
 
@@ -432,7 +451,7 @@
       '<a href="/" class="dash-nav-brand"><svg class="dash-logo-wolf" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" rx="12" fill="#0369a1"/><g transform="translate(8,6)"><path d="M4 34 L10 5 L16 16 L22 5 L28 34 L22 28 L16 32 L10 28 Z" fill="rgba(255,255,255,0.95)"/><circle cx="12.5" cy="21" r="2" fill="#0369a1"/><circle cx="19.5" cy="21" r="2" fill="#0369a1"/></g></svg>Lou Garou</a>' +
       '<div class="dash-nav-right">' +
         '<span class="dash-user-email">' + escapeHtml(USER.email || '') + '</span>' +
-        '<button class="dash-logout-btn" id="logout-btn">Déconnexion</button>' +
+        '<button class="dash-logout-btn" id="logout-btn">Deconnexion</button>' +
       '</div>';
     document.body.appendChild(nav);
 
@@ -456,7 +475,6 @@
             '<option value="70">Classe B+ (70+)</option>' +
             '<option value="55">Classe C+ (55+)</option>' +
           '</select>' +
-          '<button id="btn-scrape" class="dash-btn-scrape" title="Recalculer les scores selon vos crit\u00e8res">Actualiser mes r\u00e9sultats</button>' +
         '</div>' +
       '</div>' +
       // Stats row
@@ -479,7 +497,7 @@
     $('logout-btn').onclick = function () {
       localStorage.removeItem('lou_token');
       localStorage.removeItem('lou_user');
-      window.location.href = '/';
+      window.location.reload();
     };
 
     // Load data
@@ -495,72 +513,6 @@
       loadProperties(1, $('sort-select').value, parseInt(this.value));
     };
 
-    // Scrape button
-    var scrapeBtn = $('btn-scrape');
-    if (scrapeBtn) {
-      scrapeBtn.onclick = function () {
-        var btn = this;
-        if (btn.disabled) return;
-        btn.disabled = true;
-        btn.innerHTML = '<span class="scrape-spinner"></span> Mise \u00e0 jour...';
-        btn.classList.add('scraping');
-
-        fetch(API + '/api/scrape', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + TOKEN
-          },
-          body: JSON.stringify({})
-        })
-          .then(function (r) {
-            if (!r.ok) {
-              return r.text().then(function (t) {
-                try { return JSON.parse(t); } catch (e) { return { ok: false, error: t }; }
-              });
-            }
-            return r.json();
-          })
-          .then(function (data) {
-            btn.disabled = false;
-            btn.classList.remove('scraping');
-            if (data.ok) {
-              var saved = data.total_saved || 0;
-              var scraped = data.total_scraped || 0;
-              var scored = data.scored || scraped;
-              var msg = '&#10003; ' + scored + ' annonces analys\u00e9es';
-              btn.innerHTML = msg;
-              btn.classList.add('scrape-success');
-              // Refresh dashboard data
-              loadStats();
-              loadProperties(1, $('sort-select').value, parseInt($('grade-filter').value));
-              setTimeout(function () {
-                btn.innerHTML = 'Actualiser mes r\u00e9sultats';
-                btn.classList.remove('scrape-success');
-              }, 5000);
-            } else {
-              var errMsg = data.error || 'Erreur inconnue';
-              btn.innerHTML = 'Erreur: ' + errMsg.substring(0, 40);
-              btn.classList.add('scrape-error');
-              setTimeout(function () {
-                btn.innerHTML = 'Actualiser mes r\u00e9sultats';
-                btn.classList.remove('scrape-error');
-              }, 4000);
-            }
-          })
-          .catch(function (err) {
-            btn.disabled = false;
-            btn.classList.remove('scraping');
-            btn.innerHTML = 'Erreur réseau — Réessayer';
-            btn.classList.add('scrape-error');
-            setTimeout(function () {
-              btn.innerHTML = 'Actualiser mes r\u00e9sultats';
-              btn.classList.remove('scrape-error');
-            }, 4000);
-          });
-      };
-    }
-
     // Init chat widget
     initChat();
   }
@@ -569,20 +521,19 @@
   // LOAD STATS
   // ============================================================
   function loadStats() {
-    fetch(API + '/api/stats/' + USER.id)
+    apiFetch(API + '/api/stats')
       .then(function (r) { return r.json(); })
       .then(function (data) {
         $('stat-total').textContent = data.total || 0;
         $('stat-new').textContent = data.new_count || 0;
         $('stat-favs').textContent = data.favorites || 0;
-        // Grade A count loaded separately
       })
       .catch(function () {
         $('stat-total').textContent = '?';
       });
 
     // Count grade A properties
-    fetch(API + '/api/properties/' + USER.id + '?min_score=85&per_page=1')
+    apiFetch(API + '/api/properties?min_score=85&per_page=1')
       .then(function (r) { return r.json(); })
       .then(function (data) {
         $('stat-grade-a').textContent = data.total || 0;
@@ -594,13 +545,11 @@
   // LOAD PROFILE BAR
   // ============================================================
   function loadProfileBar() {
-    fetch(API + '/api/profile', {
-      headers: { 'Authorization': 'Bearer ' + TOKEN }
-    })
+    apiFetch(API + '/api/profile')
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (!data.profile) {
-          $('profile-bar').innerHTML = '<div class="dash-profile-empty">Aucun profil de recherche. <a href="#" id="setup-profile">Parlez a Lou</a> pour configurer vos critères.</div>';
+          $('profile-bar').innerHTML = '<div class="dash-profile-empty">Aucun profil de recherche. <a href="#" id="setup-profile">Parlez a Lou</a> pour configurer vos criteres.</div>';
           var link = $('setup-profile');
           if (link) link.onclick = function (e) {
             e.preventDefault();
@@ -613,7 +562,7 @@
         if (p.transaction) tags.push(p.transaction === 'location' ? 'Location' : 'Achat');
         if (p.property_types && p.property_types.length) tags.push(p.property_types.join(', '));
         if (p.budget_max) tags.push('Max ' + formatPrice(p.budget_max) + ' CHF');
-        if (p.rooms_min) tags.push(p.rooms_min + '+ pièces');
+        if (p.rooms_min) tags.push(p.rooms_min + '+ pieces');
         if (p.surface_min) tags.push(p.surface_min + '+ m2');
 
         var zones = (p.zones || []).filter(function (z) { return z && z.city; });
@@ -627,152 +576,9 @@
           '<div class="dash-profile-tags">' +
             tags.map(function (t) { return '<span class="ptag">' + escapeHtml(t) + '</span>'; }).join('') +
             priorities.map(function (t) { return '<span class="ptag blue">' + escapeHtml(t) + '</span>'; }).join('') +
-            '<button class="ptag edit-criteria-btn" id="edit-criteria-btn" title="Modifier mes crit\u00e8res">\u270F\uFE0F Modifier</button>' +
           '</div>';
-        var editBtn = $('edit-criteria-btn');
-        if (editBtn) {
-          editBtn.onclick = function() {
-            showCriteriaEditor(p);
-          };
-        }
       })
       .catch(function () {});
-  }
-
-  // ============================================================
-  // CRITERIA EDITOR — inline form to edit profile
-  // ============================================================
-  function showCriteriaEditor(profile) {
-    var existing = $('criteria-editor');
-    if (existing) { existing.remove(); return; } // toggle off
-
-    var p = profile || {};
-    var zones = (p.zones || []).filter(function(z) { return z && z.city; });
-    var zoneCity = zones.length ? zones[0].city : '';
-    var zoneRadius = zones.length ? (zones[0].radius_km || 5) : 5;
-    var transaction = p.transaction || '';
-    var types = p.property_types || [];
-    var type0 = types.length ? types[0] : '';
-    var budgetMin = p.budget_min || '';
-    var budgetMax = p.budget_max || '';
-    var roomsMin = p.rooms_min || '';
-    var roomsMax = p.rooms_max || '';
-    var surfaceMin = p.surface_min || '';
-    var priorities = p.priorities || [];
-
-    var allPriorities = ['balcon', 'parking', 'vue', 'calme', 'transports', 'ascenseur', 'cave', 'jardin'];
-
-    var editor = ce('div', 'criteria-editor');
-    editor.id = 'criteria-editor';
-    editor.innerHTML =
-      '<h3>Modifier mes critères</h3>' +
-      '<div class="ce-grid">' +
-        '<div class="ce-field">' +
-          '<label>Transaction</label>' +
-          '<select id="ce-transaction">' +
-            '<option value="achat"' + (transaction === 'achat' ? ' selected' : '') + '>Achat</option>' +
-            '<option value="location"' + (transaction === 'location' ? ' selected' : '') + '>Location</option>' +
-          '</select>' +
-        '</div>' +
-        '<div class="ce-field">' +
-          '<label>Type de bien</label>' +
-          '<select id="ce-type">' +
-            '<option value="appartement"' + (type0 === 'appartement' ? ' selected' : '') + '>Appartement</option>' +
-            '<option value="maison"' + (type0 === 'maison' ? ' selected' : '') + '>Maison</option>' +
-            '<option value="villa"' + (type0 === 'villa' ? ' selected' : '') + '>Villa</option>' +
-            '<option value="studio"' + (type0 === 'studio' ? ' selected' : '') + '>Studio</option>' +
-            '<option value="loft"' + (type0 === 'loft' ? ' selected' : '') + '>Loft</option>' +
-            '<option value="attique"' + (type0 === 'attique' ? ' selected' : '') + '>Attique</option>' +
-          '</select>' +
-        '</div>' +
-        '<div class="ce-field">' +
-          '<label>Ville</label>' +
-          '<input type="text" id="ce-city" value="' + escapeHtml(zoneCity) + '" placeholder="ex: Neuchâtel">' +
-        '</div>' +
-        '<div class="ce-field">' +
-          '<label>Rayon (km)</label>' +
-          '<input type="number" id="ce-radius" value="' + zoneRadius + '" min="1" max="50">' +
-        '</div>' +
-        '<div class="ce-field">' +
-          '<label>Budget min (CHF)</label>' +
-          '<input type="number" id="ce-budget-min" value="' + budgetMin + '" placeholder="ex: 300000">' +
-        '</div>' +
-        '<div class="ce-field">' +
-          '<label>Budget max (CHF)</label>' +
-          '<input type="number" id="ce-budget-max" value="' + budgetMax + '" placeholder="ex: 800000">' +
-        '</div>' +
-        '<div class="ce-field">' +
-          '<label>Pièces min</label>' +
-          '<input type="number" id="ce-rooms-min" value="' + roomsMin + '" step="0.5" min="1" max="10">' +
-        '</div>' +
-        '<div class="ce-field">' +
-          '<label>Pièces max</label>' +
-          '<input type="number" id="ce-rooms-max" value="' + roomsMax + '" step="0.5" min="1" max="10">' +
-        '</div>' +
-        '<div class="ce-field">' +
-          '<label>Surface min (m²)</label>' +
-          '<input type="number" id="ce-surface-min" value="' + surfaceMin + '" placeholder="ex: 60">' +
-        '</div>' +
-        '<div class="ce-field ce-field-wide">' +
-          '<label>Priorités</label>' +
-          '<div class="ce-priorities">' +
-            allPriorities.map(function(pr) {
-              var checked = priorities.indexOf(pr) !== -1 ? ' checked' : '';
-              return '<label class="ce-check"><input type="checkbox" value="' + pr + '"' + checked + '> ' + pr + '</label>';
-            }).join('') +
-          '</div>' +
-        '</div>' +
-      '</div>' +
-      '<div class="ce-actions">' +
-        '<button class="btn btn-primary" id="ce-save">Sauvegarder</button>' +
-        '<button class="btn btn-outline" id="ce-cancel">Annuler</button>' +
-      '</div>';
-
-    // Insert after profile bar
-    var profileBar = $('profile-bar');
-    profileBar.parentNode.insertBefore(editor, profileBar.nextSibling);
-
-    $('ce-cancel').onclick = function() { editor.remove(); };
-    $('ce-save').onclick = function() {
-      var newCity = $('ce-city').value.trim();
-      var newRadius = parseInt($('ce-radius').value) || 5;
-      var newPrios = [];
-      editor.querySelectorAll('.ce-priorities input:checked').forEach(function(cb) {
-        newPrios.push(cb.value);
-      });
-
-      var payload = {
-        transaction: $('ce-transaction').value,
-        property_types: [$('ce-type').value],
-        budget_min: parseInt($('ce-budget-min').value) || null,
-        budget_max: parseInt($('ce-budget-max').value) || null,
-        rooms_min: parseFloat($('ce-rooms-min').value) || null,
-        rooms_max: parseFloat($('ce-rooms-max').value) || null,
-        surface_min: parseInt($('ce-surface-min').value) || null,
-        priorities: newPrios,
-        zones: newCity ? [{ city: newCity, radius_km: newRadius }] : []
-      };
-
-      // Save profile + zones in one call
-      fetch(API + '/api/profile', {
-        method: 'PUT',
-        headers: { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-      .then(function(r) { return r.json(); })
-      .then(function() {
-        editor.remove();
-        loadProfileBar();
-        // Re-score properties with new criteria
-        fetch(API + '/api/rescore/' + USER.id, {
-          method: 'POST',
-          headers: { 'Authorization': 'Bearer ' + TOKEN }
-        }).then(function() {
-          loadProperties(1, currentSort, currentMinScore);
-        });
-      })
-      .catch(function(e) { alert('Erreur: ' + e.message); });
-    };
   }
 
   // ============================================================
@@ -790,17 +596,23 @@
     var list = $('properties-list');
     list.innerHTML = '<div class="dash-loading">Chargement...</div>';
 
-    var url = API + '/api/properties/' + USER.id +
+    var url = API + '/api/properties' +
       '?page=' + page +
       '&per_page=12' +
       '&sort=' + currentSort +
       '&min_score=' + currentMinScore;
 
-    fetch(url)
+    apiFetch(url)
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (!data.properties || data.properties.length === 0) {
-          list.innerHTML = '<div class="dash-empty">Aucun bien trouve. Lancez un scraping ou ajustez vos filtres.</div>';
+          list.innerHTML = '<div class="dash-empty">' +
+            '<h3 style="margin-bottom:8px;font-family:Playfair Display,serif">Pas encore de resultats</h3>' +
+            '<p>Lou est en train de chasser pour vous ! Les premiers biens apparaitront apres le prochain cycle de recherche (toutes les 2 heures).</p>' +
+            '<p style="margin-top:12px">En attendant, <a href="#" class="open-chat-link" style="color:#0369a1;cursor:pointer">parlez a Lou</a> pour affiner vos criteres.</p>' +
+          '</div>';
+          var chatLink = list.querySelector('.open-chat-link');
+          if (chatLink) chatLink.onclick = function(e) { e.preventDefault(); document.querySelector('.chat-toggle').click(); };
           $('pagination').innerHTML = '';
           return;
         }
@@ -823,7 +635,7 @@
         });
       })
       .catch(function (err) {
-        list.innerHTML = '<div class="dash-empty">Erreur de chargement. Le serveur est peut-etre en veille — réessayez dans 30 secondes.</div>';
+        list.innerHTML = '<div class="dash-empty">Erreur de chargement. Le serveur est peut-etre en veille — reessayez dans 30 secondes.</div>';
       });
   }
 
@@ -832,12 +644,17 @@
     var gc = gradeColors[p.grade] || '#94a3b8';
 
     var img = (p.images && p.images.length > 0)
-      ? '<img src="' + escapeHtml(p.images[0]) + '" alt="' + escapeHtml(p.title || '') + '" class="prop-img" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=prop-img-placeholder><svg width=48 height=48 viewBox=&quot;0 0 24 24&quot; fill=none stroke=#94a3b8 stroke-width=1.5><rect x=3 y=3 width=18 height=18 rx=2/><circle cx=8.5 cy=8.5 r=1.5/><path d=&quot;M21 15l-5-5L5 21&quot;/></svg></div>\'">'
-      : '<div class="prop-img-placeholder"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>';
+      ? '<img src="' + escapeHtml(p.images[0]) + '" alt="" class="prop-img" onerror="this.style.display=\'none\'">'
+      : '';
 
     var priceText = p.price ? formatPrice(p.price) + ' CHF' : 'Prix sur demande';
-    var unitPart = p.unit ? (p.unit.split('/')[1] || '') : '';
-    if (unitPart && unitPart !== 'one-time' && p.price) priceText += ' <small>/' + escapeHtml(unitPart) + '</small>';
+    if (p.unit && p.price) {
+      var unitPart = (p.unit.split('/')[1] || '').toLowerCase();
+      // Don't show "/total" or "/one-time" for purchases — only show for rentals
+      if (unitPart && unitPart !== 'total' && unitPart !== 'one-time') {
+        priceText += '<small>/' + escapeHtml(unitPart) + '</small>';
+      }
+    }
 
     var details = [];
     if (p.rooms) details.push(p.rooms + ' pcs');
@@ -911,10 +728,7 @@
   // FAVORITES
   // ============================================================
   function toggleFavorite(propertyId, btn) {
-    fetch(API + '/api/favorite/' + propertyId, {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + TOKEN }
-    })
+    apiFetch(API + '/api/favorite/' + propertyId, { method: 'POST' })
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.action === 'added') {
@@ -940,10 +754,8 @@
     var panel = ce('div', 'chat-panel');
     panel.innerHTML =
       '<div class="chat-head"><span>Lou — Assistant IA</span><button id="chat-close">&times;</button></div>' +
-      '<div class="chat-body" id="chat-body">' +
-        '<div class="chat-msg bot">Bonjour ! Je suis Lou, votre assistant immobilier. Comment puis-je vous aider ?</div>' +
-      '</div>' +
-      '<div class="chat-input"><input id="chat-in" type="text" placeholder="Votre question..."><button id="chat-send"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button></div>';
+      '<div class="chat-body" id="chat-body"></div>' +
+      '<div class="chat-input"><input id="chat-in" type="text" placeholder="Votre message..."><button id="chat-send"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button></div>';
     document.body.appendChild(panel);
 
     toggle.onclick = function () {
@@ -960,6 +772,11 @@
       input.value = '';
 
       var body = $('chat-body');
+
+      // Remove old suggestion buttons before adding new message
+      var oldSugs = body.querySelectorAll('.chat-suggestions');
+      oldSugs.forEach(function (el) { el.remove(); });
+
       body.innerHTML += '<div class="chat-msg user">' + escapeHtml(msg) + '</div>';
       body.scrollTop = body.scrollHeight;
 
@@ -967,23 +784,47 @@
       body.appendChild(loading);
       body.scrollTop = body.scrollHeight;
 
+      var chatUserId = (USER && USER.id) ? USER.id : 'anon-' + Date.now();
+
       fetch(API + '/api/chat', {
         method: 'POST',
-        headers: Object.assign(
-          { 'Content-Type': 'application/json' },
-          TOKEN ? { 'Authorization': 'Bearer ' + TOKEN } : {}
-        ),
-        body: JSON.stringify({ message: msg, user_id: (USER && USER.id) ? USER.id : 'anon' })
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ message: msg, user_id: chatUserId })
       })
         .then(function (r) { return r.json(); })
         .then(function (data) {
           loading.remove();
-          var reply = data.message || data.reply || 'Désolé, je n\'ai pas compris.';
-          // Simple markdown: **bold** -> <strong>, \n -> <br>, • -> bullet
-          var formatted = escapeHtml(reply)
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\n/g, '<br>');
-          body.innerHTML += '<div class="chat-msg bot">' + formatted + '</div>';
+          var reply = data.message || data.reply || 'Desole, je n\'ai pas compris.';
+          body.innerHTML += '<div class="chat-msg bot">' + escapeHtml(reply) + '</div>';
+
+          // Accumulate criteria from chatbot responses
+          if (data.criteria && typeof data.criteria === 'object') {
+            Object.keys(data.criteria).forEach(function (k) {
+              if (data.criteria[k] !== null && data.criteria[k] !== undefined) {
+                chatCriteria[k] = data.criteria[k];
+              }
+            });
+          }
+
+          // Handle profile_ready — prompt signup if not logged in
+          if (data.profile_ready && !isJWT(TOKEN)) {
+            body.innerHTML += '<div class="chat-msg bot" style="background:#e0f2fe">' +
+              'Super, j\'ai tous tes criteres ! ' +
+              '<a href="#" class="chat-signup-link" style="color:#0369a1;font-weight:600">Cree ton espace</a> pour que je lance la recherche.' +
+            '</div>';
+            var signupLink = body.querySelector('.chat-signup-link');
+            if (signupLink) signupLink.onclick = function (e) {
+              e.preventDefault();
+              showAuthModal();
+            };
+          }
+
+          // Handle profile_ready + logged in — update profile
+          if (data.profile_ready && isJWT(TOKEN) && Object.keys(chatCriteria).length > 0) {
+            _updateProfileFromChat(chatCriteria);
+          }
 
           // Show suggestions
           if (data.suggestions && data.suggestions.length) {
@@ -995,48 +836,42 @@
             body.innerHTML += sugHtml;
             body.querySelectorAll('.chat-sug').forEach(function (btn) {
               btn.onclick = function () {
-                var txt = this.textContent.trim().toLowerCase();
-                // Action suggestions — navigate instead of re-sending to chat
-                if (txt === 'voir les annonces' || txt === 'voir mes annonces' || txt === 'voir les favoris') {
-                  panel.classList.remove('open');
-                  var isOnDashboard = window.location.pathname.indexOf('dashboard') !== -1;
-                  if (isOnDashboard) {
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                    loadProperties(1, $('sort-select').value, parseInt($('grade-filter').value));
-                  } else {
-                    window.location.href = '/dashboard';
-                  }
-                  return;
-                }
-                if (txt === "créer mon espace" || txt === "créer l'espace" || txt === 'sauvegarder la recherche') {
-                  panel.classList.remove('open');
-                  if (isJWT(TOKEN) && USER) {
-                    window.location.href = '/dashboard';
-                  } else {
-                    showAuthModal();
-                  }
-                  return;
-                }
-                if (txt === 'modifier mes critères' || txt === 'modifier les critères' || txt === 'modifier quelque chose' || txt === 'modifier') {
-                  var modBtn = $('edit-criteria-btn');
-                  if (modBtn) { panel.classList.remove('open'); modBtn.click(); return; }
-                }
                 $('chat-in').value = this.textContent;
                 sendMsg();
               };
             });
           }
           body.scrollTop = body.scrollHeight;
-          // Refresh profile bar if criteria were updated
-          if (data.criteria && Object.keys(data.criteria).length > 0 && typeof loadProfileBar === 'function') {
-            loadProfileBar();
-          }
         })
         .catch(function () {
           loading.remove();
           body.innerHTML += '<div class="chat-msg bot">Erreur de connexion. Reessayez.</div>';
           body.scrollTop = body.scrollHeight;
         });
+    }
+
+    // Auto-update the user's profile when chatbot has collected all criteria
+    function _updateProfileFromChat(criteria) {
+      var payload = {
+        property_types: criteria.property_types || [criteria.property_type || 'appartement'],
+        transaction: criteria.transaction || 'location',
+        budget_max: criteria.budget_max,
+        budget_min: criteria.budget_min,
+        rooms_min: criteria.rooms_min,
+        rooms_max: criteria.rooms_max,
+        surface_min: criteria.surface_min,
+        priorities: criteria.priorities || [],
+        zones: (criteria.zones || []).map(function (z) {
+          return { city: z.city || '', canton: z.canton || '', radius_km: z.radius_km || 3 };
+        })
+      };
+      apiFetch(API + '/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).then(function () {
+        loadProfileBar();
+      }).catch(function () {});
     }
 
     $('chat-send').onclick = sendMsg;
@@ -1076,14 +911,6 @@
       '.dash-actions{display:flex;gap:10px}',
       '.dash-select{padding:8px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;background:#fff;cursor:pointer;color:#334155;outline:none}',
       '.dash-select:focus{border-color:#0369a1}',
-      '.dash-btn-scrape{padding:8px 16px;border:1px solid #0369a1;border-radius:8px;font-size:13px;background:#fff;color:#0369a1;cursor:pointer;font-weight:600;transition:all .2s;display:flex;align-items:center;gap:6px;white-space:nowrap}',
-      '.dash-btn-scrape:hover{background:#0369a1;color:#fff}',
-      '.dash-btn-scrape:disabled{opacity:.7;cursor:wait}',
-      '.dash-btn-scrape.scraping{background:#0369a1;color:#fff}',
-      '.dash-btn-scrape.scrape-success{background:#059669;color:#fff;border-color:#059669}',
-      '.dash-btn-scrape.scrape-error{background:#dc2626;color:#fff;border-color:#dc2626}',
-      '.scrape-spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin 0.8s linear infinite}',
-      '@keyframes spin{to{transform:rotate(360deg)}}',
 
       // Stats
       '.dash-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}',
@@ -1093,27 +920,12 @@
       '.dash-stat-lbl{font-size:13px;color:#64748b;margin-top:4px}',
 
       // Profile bar
-      '.dash-profile-bar{margin-bottom:24px;padding:16px 20px;background:#fff;border:1px solid #e2e8f0;border-radius:12px}',
-      '.dash-profile-tags{display:flex;flex-wrap:wrap;gap:10px;align-items:center}',
-      '.ptag{padding:8px 16px;background:#f1f5f9;border-radius:50px;font-size:13px;color:#475569;font-weight:500}',
+      '.dash-profile-bar{margin-bottom:24px}',
+      '.dash-profile-tags{display:flex;flex-wrap:wrap;gap:8px}',
+      '.ptag{padding:6px 14px;background:#f1f5f9;border-radius:50px;font-size:13px;color:#64748b}',
       '.ptag.blue{background:rgba(3,105,161,.1);color:#0369a1}',
       '.dash-profile-empty{background:#fff;border:1px dashed #cbd5e1;border-radius:12px;padding:20px;text-align:center;color:#64748b;font-size:14px}',
       '.dash-profile-empty a{color:#0369a1;cursor:pointer}',
-      '.edit-criteria-btn{background:#0369a1!important;color:#fff!important;cursor:pointer;border:none;font-size:13px}',
-      '.edit-criteria-btn:hover{background:#025d8c!important}',
-
-      // Criteria editor
-      '.criteria-editor{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:24px;margin-bottom:24px;animation:fadeIn .2s}',
-      '.criteria-editor h3{margin:0 0 16px;font-size:18px;color:#1e293b}',
-      '.ce-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}',
-      '.ce-field label{display:block;font-size:12px;color:#64748b;margin-bottom:4px;font-weight:500}',
-      '.ce-field input,.ce-field select{width:100%;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;background:#f8fafc}',
-      '.ce-field input:focus,.ce-field select:focus{outline:none;border-color:#0369a1;box-shadow:0 0 0 3px rgba(3,105,161,.1)}',
-      '.ce-field-wide{grid-column:1/-1}',
-      '.ce-priorities{display:flex;flex-wrap:wrap;gap:8px}',
-      '.ce-check{font-size:13px;color:#475569;display:flex;align-items:center;gap:4px;cursor:pointer}',
-      '.ce-check input{width:auto}',
-      '.ce-actions{display:flex;gap:8px;margin-top:16px}',
 
       // Properties grid
       '.prop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:20px}',
@@ -1121,14 +933,13 @@
       '.prop-card:hover{box-shadow:0 8px 24px rgba(0,0,0,.08);border-color:#cbd5e1;transform:translateY(-2px)}',
       '.prop-card-top{position:relative;height:180px;background:#e2e8f0;overflow:hidden}',
       '.prop-img{width:100%;height:100%;object-fit:cover}',
-      '.prop-img-placeholder{width:100%;height:100%;background:linear-gradient(135deg,#e2e8f0,#f1f5f9);display:flex;align-items:center;justify-content:center}',
+      '.prop-img-placeholder{width:100%;height:100%;background:linear-gradient(135deg,#e2e8f0,#cbd5e1);display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:13px}',
+      '.prop-img-placeholder::after{content:"Pas d\'image";opacity:.6}',
       '.prop-score{position:absolute;top:12px;left:12px;display:flex;align-items:center;gap:4px;padding:6px 12px;border-radius:8px;color:#fff;font-weight:700}',
       '.prop-score-num{font-size:18px}',
       '.prop-score-grade{font-size:12px;opacity:.9}',
       '.fav-btn{position:absolute;top:12px;right:12px;background:rgba(255,255,255,.9);border:none;width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;color:#94a3b8;display:flex;align-items:center;justify-content:center;transition:all .2s}',
       '.fav-btn:hover,.fav-btn.active{color:#dc2626;background:#fff}',
-      '.edit-criteria-btn{background:#0369a1;color:#fff;cursor:pointer;border:none;padding:6px 14px;border-radius:50px;font-size:13px;transition:background .2s}',
-      '.edit-criteria-btn:hover{background:#0284c7}',
 
       // Card body
       '.prop-card-body{padding:16px}',
@@ -1200,23 +1011,12 @@
 
       // Responsive
       '@media(max-width:768px){',
-        '.dash-stats{grid-template-columns:repeat(2,1fr);gap:10px}',
-        '.dash-stat{padding:14px}',
-        '.dash-stat-num{font-size:24px}',
+        '.dash-stats{grid-template-columns:repeat(2,1fr)}',
         '.dash-wrap{padding:16px}',
         '.prop-grid{grid-template-columns:1fr}',
-        '.prop-card-top{height:140px}',
         '.dash-header{flex-direction:column;align-items:flex-start}',
-        '.dash-header h1{font-size:22px}',
         '.dash-nav{padding:12px 16px}',
-        '.dash-user-email{display:none}',
         '.chat-panel{width:calc(100vw - 32px);right:16px;bottom:80px;height:60vh}',
-      '}',
-      '@media(max-width:480px){',
-        '.dash-actions{flex-direction:column;width:100%}',
-        '.dash-select{width:100%}',
-        '.chat-toggle{width:48px;height:48px;bottom:16px;right:16px}',
-        '.chat-panel{height:70vh;bottom:72px}',
       '}'
     ].join('');
   }
@@ -1225,33 +1025,24 @@
   // ROUTER — Determine which page to show
   // ============================================================
   var path = window.location.pathname;
-  var isRender = window.location.hostname === 'lou-platform.onrender.com' || window.location.hostname === 'garou.ch' || window.location.hostname === 'www.garou.ch' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  var isRender = window.location.hostname === 'lou-platform.onrender.com' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
   if (path === '/dashboard') {
     showDashboard();
   } else if (!isRender) {
     // External host (Webflow etc.)
-    // If user is logged in, show dashboard; otherwise show landing page
+    // If user is logged in, show dashboard; otherwise hook into existing page
     if (isJWT(TOKEN) && USER) {
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', showDashboard);
       } else {
         showDashboard();
       }
-   } else {
-      // Webflow — build landing page then hook CTAs
-      function bootWebflow() {
-        showLanding();
-        initLanding();
-        if (window.__chatCardHTML) {
-          var hv = document.querySelector('.hero-visual');
-          if (hv) hv.outerHTML = window.__chatCardHTML;
-        }
-      }
+    } else {
       if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', bootWebflow);
+        document.addEventListener('DOMContentLoaded', initLanding);
       } else {
-        bootWebflow();
+        initLanding();
       }
     }
   } else {
