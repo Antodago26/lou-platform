@@ -627,6 +627,57 @@ REGLES ABSOLUES:
 4. Si tous les critères sont remplis, dis simplement que le profil est complet et propose de le modifier ou de voir les résultats.
 5. Ne demande QUE les critères listés comme MANQUANTS."""
 
+    # Build accumulated criteria from conversation history (for non-logged-in users or between saves)
+    # This ensures Lou remembers what was said even if DB hasn't been updated yet
+    conv_criteria = {}
+    for h in history:
+        if h.get('role') == 'assistant' and '[Critères mis à jour:' in h.get('content', ''):
+            try:
+                crit_start = h['content'].index('[Critères mis à jour:') + len('[Critères mis à jour: ')
+                crit_end = h['content'].index(']', crit_start)
+                crit_json = json.loads(h['content'][crit_start:crit_end])
+                conv_criteria.update(crit_json)
+            except Exception:
+                pass
+
+    if conv_criteria and not existing_profile:
+        # Non-logged-in user: build context from conversation
+        conv_parts = []
+        if conv_criteria.get('transaction'):
+            conv_parts.append(f"Transaction: {conv_criteria['transaction']}")
+        if conv_criteria.get('zones'):
+            zones_str = ', '.join(z.get('city', '?') for z in conv_criteria['zones'] if isinstance(z, dict))
+            conv_parts.append(f"Zones: {zones_str}")
+        if conv_criteria.get('property_types'):
+            conv_parts.append(f"Type: {conv_criteria['property_types']}")
+        if conv_criteria.get('budget_min') or conv_criteria.get('budget_max'):
+            bmin = conv_criteria.get('budget_min', '')
+            bmax = conv_criteria.get('budget_max', '')
+            conv_parts.append(f"Budget: {bmin or '?'} - {bmax or '?'} CHF")
+        if conv_parts:
+            missing = []
+            if not conv_criteria.get('zones'):
+                missing.append('zone (ville)')
+            if not conv_criteria.get('transaction'):
+                missing.append('transaction (location ou achat)')
+            if not conv_criteria.get('property_types'):
+                missing.append('type de bien')
+            if not conv_criteria.get('budget_max') and not conv_criteria.get('budget_min'):
+                missing.append('budget')
+            missing_str = ', '.join(missing) if missing else 'AUCUN - profil complet'
+            conv_summary = '\n'.join(conv_parts)
+            sys_prompt += f"""
+
+=== CRITERES DEJA COLLECTES DANS CETTE CONVERSATION ===
+{conv_summary}
+
+Critères MANQUANTS: {missing_str}
+
+REGLES ABSOLUES:
+1. Les critères ci-dessus ont DEJA été donnés par l'utilisateur. NE LES REDEMANDE JAMAIS.
+2. Ne demande QUE les critères listés comme MANQUANTS.
+3. Si tous les critères obligatoires sont remplis (zone + type + transaction + budget), propose de créer l'espace."""
+
     # Build messages
     messages = list(history[-10:])
     messages.append({"role": "user", "content": message})
