@@ -1664,6 +1664,22 @@ def scrape_newhome(city="Lausanne", transaction="location", max_pages=5):
             if status != 200:
                 break
 
+            # Debug: log HTML snippet to understand structure
+            if page == 1:
+                # Check for common data patterns
+                has_next = '__NEXT_DATA__' in html
+                has_nuxt = '__NUXT__' in html or '__NUXT_DATA__' in html
+                has_jsonld = 'application/ld+json' in html
+                has_ng = 'ng-' in html or '_ngcontent' in html or 'ng-version' in html
+                log.info(f"[Newhome] DEBUG: __NEXT_DATA__={has_next}, __NUXT__={has_nuxt}, JSON-LD={has_jsonld}, Angular={has_ng}")
+                # Log first 2000 chars of body
+                import re as _re2
+                body_match = _re2.search(r'<body[^>]*>(.*)', html[:5000], _re2.DOTALL)
+                if body_match:
+                    log.info(f"[Newhome] DEBUG body[:1500]: {body_match.group(1)[:1500]}")
+                else:
+                    log.info(f"[Newhome] DEBUG html[:1500]: {html[:1500]}")
+
             # Try __NEXT_DATA__
             nd = _extract_next_data(html)
             if nd:
@@ -1783,6 +1799,7 @@ def scrape_tutti(city="Lausanne", transaction="location", max_pages=5):
         try:
             status, data = _get_json(api_url)
             if status == 200 and data:
+                log.info(f"[Tutti] DEBUG API keys: {list(data.keys()) if isinstance(data, dict) else type(data).__name__}")
                 items = data.get('items', data.get('listings', []))
                 if isinstance(items, list) and items:
                     log.info(f"[Tutti] {len(items)} items via API")
@@ -1915,6 +1932,22 @@ def scrape_realadvisor(city="Lausanne", transaction="location", max_pages=5):
 
             if status != 200:
                 break
+
+            # Debug: log HTML snippet to understand structure
+            if page == 1:
+                has_next = '__NEXT_DATA__' in html
+                has_nuxt = '__NUXT__' in html or '__NUXT_DATA__' in html
+                has_jsonld = 'application/ld+json' in html
+                has_ng = 'ng-' in html or '_ngcontent' in html
+                log.info(f"[RealAdvisor] DEBUG: __NEXT_DATA__={has_next}, __NUXT__={has_nuxt}, JSON-LD={has_jsonld}, Angular={has_ng}")
+                # Log a sample of script tags
+                import re as _re3
+                scripts = _re3.findall(r'<script[^>]*id="([^"]*)"[^>]*>', html)
+                log.info(f"[RealAdvisor] DEBUG script ids: {scripts[:10]}")
+                # Log body start
+                body_match = _re3.search(r'<body[^>]*>(.*)', html[:8000], _re3.DOTALL)
+                if body_match:
+                    log.info(f"[RealAdvisor] DEBUG body[:1500]: {body_match.group(1)[:1500]}")
 
             # Try __NEXT_DATA__
             nd = _extract_next_data(html)
