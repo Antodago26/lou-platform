@@ -5,8 +5,11 @@
 (function () {
   'use strict';
 
-  // Dynamic API URL — works on any host (garou.ch, onrender, localhost)
-  var API = window.location.origin;
+  // API URL — use Render backend unless we're already on it
+  var RENDER_API = 'https://lou-platform.onrender.com';
+  var API = (window.location.hostname === 'lou-platform.onrender.com' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? window.location.origin
+    : RENDER_API;
   var TOKEN = localStorage.getItem('lou_token');
   var USER = JSON.parse(localStorage.getItem('lou_user') || 'null');
 
@@ -566,6 +569,8 @@
   // ============================================================
   // LOAD PROFILE BAR
   // ============================================================
+  var _currentProfile = null; // cached profile for edit form
+
   function loadProfileBar() {
     apiFetch(API + '/api/profile')
       .then(function (r) { return r.json(); })
@@ -579,6 +584,7 @@
           };
           return;
         }
+        _currentProfile = data.profile;
         var p = data.profile;
         var tags = [];
         if (p.transaction) tags.push(p.transaction === 'location' ? 'Location' : 'Achat');
@@ -595,12 +601,123 @@
         var priorities = p.priorities || [];
 
         $('profile-bar').innerHTML =
-          '<div class="dash-profile-tags">' +
-            tags.map(function (t) { return '<span class="ptag">' + escapeHtml(t) + '</span>'; }).join('') +
-            priorities.map(function (t) { return '<span class="ptag blue">' + escapeHtml(t) + '</span>'; }).join('') +
-          '</div>';
+          '<div class="dash-profile-row">' +
+            '<div class="dash-profile-tags">' +
+              tags.map(function (t) { return '<span class="ptag">' + escapeHtml(t) + '</span>'; }).join('') +
+              priorities.map(function (t) { return '<span class="ptag blue">' + escapeHtml(t) + '</span>'; }).join('') +
+            '</div>' +
+            '<button class="dash-edit-btn" id="edit-profile-btn">Modifier</button>' +
+          '</div>' +
+          '<div id="profile-edit-form" style="display:none"></div>';
+
+        $('edit-profile-btn').onclick = function () { toggleProfileForm(); };
       })
       .catch(function () {});
+  }
+
+  function toggleProfileForm() {
+    var formWrap = $('profile-edit-form');
+    if (!formWrap) return;
+    if (formWrap.style.display !== 'none') {
+      formWrap.style.display = 'none';
+      return;
+    }
+    var p = _currentProfile || {};
+    var zones = (p.zones || []).filter(function (z) { return z && z.city; });
+    var zoneVal = zones.map(function (z) { return z.city; }).join(', ');
+
+    formWrap.innerHTML =
+      '<div class="profile-form">' +
+        '<div class="pf-row">' +
+          '<label>Transaction</label>' +
+          '<select id="pf-transaction">' +
+            '<option value="location"' + (p.transaction === 'location' ? ' selected' : '') + '>Location</option>' +
+            '<option value="achat"' + (p.transaction === 'achat' ? ' selected' : '') + '>Achat</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="pf-row">' +
+          '<label>Type de bien</label>' +
+          '<input id="pf-types" placeholder="appartement, maison" value="' + escapeHtml((p.property_types || []).join(', ')) + '">' +
+        '</div>' +
+        '<div class="pf-row">' +
+          '<label>Budget max (CHF)</label>' +
+          '<input id="pf-budget-max" type="number" value="' + (p.budget_max || '') + '">' +
+        '</div>' +
+        '<div class="pf-row">' +
+          '<label>Budget min (CHF)</label>' +
+          '<input id="pf-budget-min" type="number" value="' + (p.budget_min || '') + '">' +
+        '</div>' +
+        '<div class="pf-row">' +
+          '<label>Pieces min</label>' +
+          '<input id="pf-rooms-min" type="number" step="0.5" value="' + (p.rooms_min || '') + '">' +
+        '</div>' +
+        '<div class="pf-row">' +
+          '<label>Surface min (m2)</label>' +
+          '<input id="pf-surface-min" type="number" value="' + (p.surface_min || '') + '">' +
+        '</div>' +
+        '<div class="pf-row">' +
+          '<label>Villes (separees par virgule)</label>' +
+          '<input id="pf-zones" placeholder="Lausanne, Geneve" value="' + escapeHtml(zoneVal) + '">' +
+        '</div>' +
+        '<div class="pf-row">' +
+          '<label>Priorites (separees par virgule)</label>' +
+          '<input id="pf-priorities" placeholder="balcon, calme, parking" value="' + escapeHtml((p.priorities || []).join(', ')) + '">' +
+        '</div>' +
+        '<div class="pf-actions">' +
+          '<button id="pf-save" class="pf-save-btn">Sauvegarder</button>' +
+          '<button id="pf-cancel" class="pf-cancel-btn">Annuler</button>' +
+        '</div>' +
+      '</div>';
+
+    formWrap.style.display = 'block';
+
+    $('pf-cancel').onclick = function () { formWrap.style.display = 'none'; };
+    $('pf-save').onclick = function () { saveProfileForm(); };
+  }
+
+  function saveProfileForm() {
+    var payload = {
+      transaction: $('pf-transaction').value,
+      property_types: $('pf-types').value.split(',').map(function (s) { return s.trim(); }).filter(Boolean),
+      budget_max: parseInt($('pf-budget-max').value) || null,
+      budget_min: parseInt($('pf-budget-min').value) || null,
+      rooms_min: parseFloat($('pf-rooms-min').value) || null,
+      surface_min: parseInt($('pf-surface-min').value) || null,
+      priorities: $('pf-priorities').value.split(',').map(function (s) { return s.trim(); }).filter(Boolean),
+      zones: $('pf-zones').value.split(',').map(function (s) {
+        var city = s.trim();
+        if (!city) return null;
+        return { city: city, radius_km: 3 };
+      }).filter(Boolean)
+    };
+
+    var btn = $('pf-save');
+    btn.textContent = 'Sauvegarde...';
+    btn.disabled = true;
+
+    apiFetch(API + '/api/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (data.ok) {
+        $('profile-edit-form').style.display = 'none';
+        loadProfileBar();
+        // Re-score and reload properties
+        apiFetch(API + '/api/score', { method: 'POST' })
+          .then(function () { loadProperties(1, 'score', 0); })
+          .catch(function () { loadProperties(1, 'score', 0); });
+      } else {
+        btn.textContent = 'Erreur — reessayez';
+        btn.disabled = false;
+      }
+    })
+    .catch(function () {
+      btn.textContent = 'Erreur reseau';
+      btn.disabled = false;
+    });
   }
 
   // ============================================================
@@ -950,6 +1067,19 @@
       '.ptag.blue{background:rgba(3,105,161,.1);color:#0369a1}',
       '.dash-profile-empty{background:#fff;border:1px dashed #cbd5e1;border-radius:12px;padding:20px;text-align:center;color:#64748b;font-size:14px}',
       '.dash-profile-empty a{color:#0369a1;cursor:pointer}',
+      '.dash-profile-row{display:flex;align-items:center;justify-content:space-between;gap:12px}',
+      '.dash-edit-btn{padding:8px 18px;background:#0369a1;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;white-space:nowrap;transition:background .2s}',
+      '.dash-edit-btn:hover{background:#024e7a}',
+      '.profile-form{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:12px}',
+      '.pf-row{display:flex;flex-direction:column;gap:4px}',
+      '.pf-row label{font-size:12px;color:#64748b;font-weight:600}',
+      '.pf-row input,.pf-row select{padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:inherit}',
+      '.pf-row input:focus,.pf-row select:focus{border-color:#0369a1;outline:none}',
+      '.pf-actions{grid-column:1/-1;display:flex;gap:10px;justify-content:flex-end;margin-top:4px}',
+      '.pf-save-btn{padding:10px 24px;background:#0369a1;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600}',
+      '.pf-save-btn:hover{background:#024e7a}',
+      '.pf-cancel-btn{padding:10px 24px;background:#f1f5f9;color:#64748b;border:none;border-radius:8px;font-size:14px;cursor:pointer}',
+      '@media(max-width:768px){.profile-form{grid-template-columns:1fr}.dash-profile-row{flex-direction:column;align-items:stretch}}',
 
       // Properties grid
       '.prop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:20px}',
