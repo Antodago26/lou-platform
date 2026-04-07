@@ -632,12 +632,147 @@
         var editBtn = $('edit-criteria-btn');
         if (editBtn) {
           editBtn.onclick = function() {
-            var chatToggle = document.querySelector('.chat-toggle');
-            if (chatToggle) chatToggle.click();
+            showCriteriaEditor(p);
           };
         }
       })
       .catch(function () {});
+  }
+
+  // ============================================================
+  // CRITERIA EDITOR — inline form to edit profile
+  // ============================================================
+  function showCriteriaEditor(profile) {
+    var existing = $('criteria-editor');
+    if (existing) { existing.remove(); return; } // toggle off
+
+    var p = profile || {};
+    var zones = (p.zones || []).filter(function(z) { return z && z.city; });
+    var zoneCity = zones.length ? zones[0].city : '';
+    var zoneRadius = zones.length ? (zones[0].radius_km || 5) : 5;
+    var transaction = p.transaction || '';
+    var types = p.property_types || [];
+    var type0 = types.length ? types[0] : '';
+    var budgetMin = p.budget_min || '';
+    var budgetMax = p.budget_max || '';
+    var roomsMin = p.rooms_min || '';
+    var roomsMax = p.rooms_max || '';
+    var surfaceMin = p.surface_min || '';
+    var priorities = p.priorities || [];
+
+    var allPriorities = ['balcon', 'parking', 'vue', 'calme', 'transports', 'ascenseur', 'cave', 'jardin'];
+
+    var editor = ce('div', 'criteria-editor');
+    editor.id = 'criteria-editor';
+    editor.innerHTML =
+      '<h3>Modifier mes critères</h3>' +
+      '<div class="ce-grid">' +
+        '<div class="ce-field">' +
+          '<label>Transaction</label>' +
+          '<select id="ce-transaction">' +
+            '<option value="achat"' + (transaction === 'achat' ? ' selected' : '') + '>Achat</option>' +
+            '<option value="location"' + (transaction === 'location' ? ' selected' : '') + '>Location</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="ce-field">' +
+          '<label>Type de bien</label>' +
+          '<select id="ce-type">' +
+            '<option value="appartement"' + (type0 === 'appartement' ? ' selected' : '') + '>Appartement</option>' +
+            '<option value="maison"' + (type0 === 'maison' ? ' selected' : '') + '>Maison</option>' +
+            '<option value="villa"' + (type0 === 'villa' ? ' selected' : '') + '>Villa</option>' +
+            '<option value="studio"' + (type0 === 'studio' ? ' selected' : '') + '>Studio</option>' +
+            '<option value="loft"' + (type0 === 'loft' ? ' selected' : '') + '>Loft</option>' +
+            '<option value="attique"' + (type0 === 'attique' ? ' selected' : '') + '>Attique</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="ce-field">' +
+          '<label>Ville</label>' +
+          '<input type="text" id="ce-city" value="' + escapeHtml(zoneCity) + '" placeholder="ex: Neuchâtel">' +
+        '</div>' +
+        '<div class="ce-field">' +
+          '<label>Rayon (km)</label>' +
+          '<input type="number" id="ce-radius" value="' + zoneRadius + '" min="1" max="50">' +
+        '</div>' +
+        '<div class="ce-field">' +
+          '<label>Budget min (CHF)</label>' +
+          '<input type="number" id="ce-budget-min" value="' + budgetMin + '" placeholder="ex: 300000">' +
+        '</div>' +
+        '<div class="ce-field">' +
+          '<label>Budget max (CHF)</label>' +
+          '<input type="number" id="ce-budget-max" value="' + budgetMax + '" placeholder="ex: 800000">' +
+        '</div>' +
+        '<div class="ce-field">' +
+          '<label>Pièces min</label>' +
+          '<input type="number" id="ce-rooms-min" value="' + roomsMin + '" step="0.5" min="1" max="10">' +
+        '</div>' +
+        '<div class="ce-field">' +
+          '<label>Pièces max</label>' +
+          '<input type="number" id="ce-rooms-max" value="' + roomsMax + '" step="0.5" min="1" max="10">' +
+        '</div>' +
+        '<div class="ce-field">' +
+          '<label>Surface min (m²)</label>' +
+          '<input type="number" id="ce-surface-min" value="' + surfaceMin + '" placeholder="ex: 60">' +
+        '</div>' +
+        '<div class="ce-field ce-field-wide">' +
+          '<label>Priorités</label>' +
+          '<div class="ce-priorities">' +
+            allPriorities.map(function(pr) {
+              var checked = priorities.indexOf(pr) !== -1 ? ' checked' : '';
+              return '<label class="ce-check"><input type="checkbox" value="' + pr + '"' + checked + '> ' + pr + '</label>';
+            }).join('') +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="ce-actions">' +
+        '<button class="btn btn-primary" id="ce-save">Sauvegarder</button>' +
+        '<button class="btn btn-outline" id="ce-cancel">Annuler</button>' +
+      '</div>';
+
+    // Insert after profile bar
+    var profileBar = $('profile-bar');
+    profileBar.parentNode.insertBefore(editor, profileBar.nextSibling);
+
+    $('ce-cancel').onclick = function() { editor.remove(); };
+    $('ce-save').onclick = function() {
+      var newCity = $('ce-city').value.trim();
+      var newRadius = parseInt($('ce-radius').value) || 5;
+      var newPrios = [];
+      editor.querySelectorAll('.ce-priorities input:checked').forEach(function(cb) {
+        newPrios.push(cb.value);
+      });
+
+      var payload = {
+        transaction: $('ce-transaction').value,
+        property_types: [$('ce-type').value],
+        budget_min: parseInt($('ce-budget-min').value) || null,
+        budget_max: parseInt($('ce-budget-max').value) || null,
+        rooms_min: parseFloat($('ce-rooms-min').value) || null,
+        rooms_max: parseFloat($('ce-rooms-max').value) || null,
+        surface_min: parseInt($('ce-surface-min').value) || null,
+        priorities: newPrios,
+        zones: newCity ? [{ city: newCity, radius_km: newRadius }] : []
+      };
+
+      // Save profile + zones in one call
+      fetch(API + '/api/profile', {
+        method: 'PUT',
+        headers: { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      .then(function(r) { return r.json(); })
+      .then(function() {
+        editor.remove();
+        loadProfileBar();
+        // Re-score properties with new criteria
+        fetch(API + '/api/rescore/' + USER.id, {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + TOKEN }
+        }).then(function() {
+          loadProperties(1, currentSort, currentMinScore);
+        });
+      })
+      .catch(function(e) { alert('Erreur: ' + e.message); });
+    };
   }
 
   // ============================================================
@@ -963,6 +1098,21 @@
       '.ptag.blue{background:rgba(3,105,161,.1);color:#0369a1}',
       '.dash-profile-empty{background:#fff;border:1px dashed #cbd5e1;border-radius:12px;padding:20px;text-align:center;color:#64748b;font-size:14px}',
       '.dash-profile-empty a{color:#0369a1;cursor:pointer}',
+      '.edit-criteria-btn{background:#0369a1!important;color:#fff!important;cursor:pointer;border:none;font-size:13px}',
+      '.edit-criteria-btn:hover{background:#025d8c!important}',
+
+      // Criteria editor
+      '.criteria-editor{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:24px;margin-bottom:24px;animation:fadeIn .2s}',
+      '.criteria-editor h3{margin:0 0 16px;font-size:18px;color:#1e293b}',
+      '.ce-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}',
+      '.ce-field label{display:block;font-size:12px;color:#64748b;margin-bottom:4px;font-weight:500}',
+      '.ce-field input,.ce-field select{width:100%;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;background:#f8fafc}',
+      '.ce-field input:focus,.ce-field select:focus{outline:none;border-color:#0369a1;box-shadow:0 0 0 3px rgba(3,105,161,.1)}',
+      '.ce-field-wide{grid-column:1/-1}',
+      '.ce-priorities{display:flex;flex-wrap:wrap;gap:8px}',
+      '.ce-check{font-size:13px;color:#475569;display:flex;align-items:center;gap:4px;cursor:pointer}',
+      '.ce-check input{width:auto}',
+      '.ce-actions{display:flex;gap:8px;margin-top:16px}',
 
       // Properties grid
       '.prop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:20px}',
