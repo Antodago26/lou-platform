@@ -409,7 +409,7 @@
   // ============================================================
   function showDashboard() {
     if (!isJWT(TOKEN) || !USER) {
-      window.location.reload();
+      window.location.href = '/';
       return;
     }
 
@@ -474,7 +474,7 @@
     $('logout-btn').onclick = function () {
       localStorage.removeItem('lou_token');
       localStorage.removeItem('lou_user');
-      window.location.reload();
+      window.location.href = '/';
     };
 
     // Load data
@@ -828,11 +828,11 @@
 
       fetch(API + '/api/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + TOKEN
-        },
-        body: JSON.stringify({ message: msg, user_id: USER.id })
+        headers: Object.assign(
+          { 'Content-Type': 'application/json' },
+          TOKEN ? { 'Authorization': 'Bearer ' + TOKEN } : {}
+        ),
+        body: JSON.stringify({ message: msg, user_id: (USER && USER.id) ? USER.id : 'anon' })
       })
         .then(function (r) { return r.json(); })
         .then(function (data) {
