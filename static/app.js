@@ -125,14 +125,19 @@
   // LANDING PAGE — Hook CTAs (when HTML already exists, e.g. Render)
   // ============================================================
   function initLanding() {
-    // Hook all CTA buttons — open chat if logged in, otherwise auth modal
+    // Hook all CTA buttons — hero/bottom CTAs always open chat, nav button opens auth if not logged in
     var isLoggedIn = isJWT(TOKEN) && USER;
     ['nav-login-btn', 'hero-cta-1', 'cta-bottom'].forEach(function (id) {
       var el = $(id);
       if (el) {
         el.addEventListener('click', function (e) {
           e.preventDefault();
-          if (isLoggedIn && (id === 'hero-cta-1' || id === 'cta-bottom')) {
+          if (id === 'hero-cta-1' || id === 'cta-bottom') {
+            // Always open chatbot — accessible without login
+            var chatToggle = document.querySelector('.chat-toggle');
+            if (chatToggle) chatToggle.click();
+          } else if (isLoggedIn) {
+            // Nav button when logged in — go to dashboard or open chat
             var chatToggle = document.querySelector('.chat-toggle');
             if (chatToggle) chatToggle.click();
           } else {
