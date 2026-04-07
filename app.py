@@ -982,54 +982,31 @@ def api_scrape():
         conn.close()
 
 
-@app.route('/api/cron/scrape', methods=['POST'])
-def api_cron_scrape():
-    """Centralized scraping endpoint — called by Render Cron Job or manually.
-    Protected by CRON_SECRET env var. Scrapes all active cities and re-scores all profiles."""
+def _run_scrape_job(targets):
+    """Background scraping job — runs in a separate thread so the HTTP request can return immediately."""
     import time as _time
     from scrapers import scrape_all, save_to_db
     from scoring_engine import score_all_for_profile
-
-    # Auth: require CRON_SECRET header or param
-    cron_secret = os.environ.get('CRON_SECRET', '')
-    provided = request.headers.get('X-Cron-Secret') or request.args.get('secret', '')
-    if not cron_secret or provided != cron_secret:
-        return jsonify({"error": "Unauthorized"}), 401
 
     start = _time.time()
     conn = get_db()
     cur = conn.cursor()
 
     try:
-        # Step 1: Get all unique cities from active profiles
-        cur.execute("""
-            SELECT DISTINCT sz.city, sp.transaction
-            FROM search_zones sz
-            JOIN search_profiles sp ON sp.id = sz.profile_id
-            WHERE sp.is_active = TRUE AND sz.city IS NOT NULL AND sz.city != ''
-        """)
-        targets = [(r['city'], r['transaction'] or 'location') for r in cur.fetchall()]
-
-        if not targets:
-            return jsonify({"ok": True, "message": "No active profiles/cities", "time_s": 0})
-
-        # Step 2: Scrape each city/transaction combo
         total_scraped = 0
         total_saved = 0
-        details = []
         for city, transaction in targets:
             try:
                 listings = scrape_all(city=city, transaction=transaction)
                 saved = save_to_db(conn, listings)
                 total_scraped += len(listings)
                 total_saved += saved
-                details.append({"city": city, "transaction": transaction, "scraped": len(listings), "saved": saved})
                 print(f"[CRON] {city} ({transaction}): {len(listings)} scraped, {saved} saved")
             except Exception as e:
                 print(f"[CRON] {city} failed: {e}")
                 conn.rollback()
 
-        # Step 3: Deactivate old listings
+        # Deactivate old listings
         cur.execute("""
             UPDATE properties SET is_active = FALSE
             WHERE scraped_at < NOW() - INTERVAL '30 days' AND is_active = TRUE
@@ -1037,7 +1014,7 @@ def api_cron_scrape():
         deactivated = cur.rowcount
         conn.commit()
 
-        # Step 4: Re-score ALL active profiles
+        # Re-score ALL active profiles
         cur.execute("SELECT id FROM search_profiles WHERE is_active = TRUE")
         profiles = cur.fetchall()
         total_scored = 0
@@ -1052,23 +1029,54 @@ def api_cron_scrape():
         elapsed = _time.time() - start
         print(f"[CRON] Done in {elapsed:.1f}s: {total_scraped} scraped, {total_saved} saved, {total_scored} scored, {deactivated} deactivated")
 
-        return jsonify({
-            "ok": True,
-            "targets": len(targets),
-            "total_scraped": total_scraped,
-            "total_saved": total_saved,
-            "total_scored": total_scored,
-            "deactivated": deactivated,
-            "details": details,
-            "time_s": round(elapsed, 1)
-        })
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
     finally:
         cur.close()
         conn.close()
+
+
+@app.route('/api/cron/scrape', methods=['POST'])
+def api_cron_scrape():
+    """Centralized scraping endpoint — called by Render Cron Job or manually.
+    Protected by CRON_SECRET env var. Launches scraping in background thread."""
+    import threading
+
+    # Auth: require CRON_SECRET header or param
+    cron_secret = os.environ.get('CRON_SECRET', '')
+    provided = request.headers.get('X-Cron-Secret') or request.args.get('secret', '')
+    if not cron_secret or provided != cron_secret:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    try:
+        # Get all unique cities from active profiles
+        cur.execute("""
+            SELECT DISTINCT sz.city, sp.transaction
+            FROM search_zones sz
+            JOIN search_profiles sp ON sp.id = sz.profile_id
+            WHERE sp.is_active = TRUE AND sz.city IS NOT NULL AND sz.city != ''
+        """)
+        targets = [(r['city'], r['transaction'] or 'location') for r in cur.fetchall()]
+    finally:
+        cur.close()
+        conn.close()
+
+    if not targets:
+        return jsonify({"ok": True, "message": "No active profiles/cities"})
+
+    # Launch scraping in background thread — return immediately
+    thread = threading.Thread(target=_run_scrape_job, args=(targets,), daemon=True)
+    thread.start()
+
+    return jsonify({
+        "ok": True,
+        "message": f"Scraping lancé en arrière-plan pour {len(targets)} ville(s)",
+        "targets": [{"city": c, "transaction": t} for c, t in targets]
+    })
 
 
 @app.route('/api/import', methods=['POST'])
