@@ -13,6 +13,13 @@
   // Accumulated chatbot criteria (persists across messages)
   var chatCriteria = {};
 
+  // Stable anonymous session ID (persists in localStorage so chat history works)
+  var ANON_SESSION = localStorage.getItem('lou_anon_session');
+  if (!ANON_SESSION) {
+    ANON_SESSION = 'anon-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
+    localStorage.setItem('lou_anon_session', ANON_SESSION);
+  }
+
   function $(id) { return document.getElementById(id); }
   function ce(tag, cls, html) {
     var el = document.createElement(tag);
@@ -150,13 +157,28 @@
   function initLanding() {
     var isRenderHost = window.location.hostname === 'lou-platform.onrender.com' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
-    // Hook all CTA buttons to open auth modal
-    ['nav-login-btn', 'hero-cta-1', 'cta-bottom', 'nav-cta-btn'].forEach(function (id) {
+    // Hook login button to auth modal
+    ['nav-login-btn'].forEach(function (id) {
       var el = $(id);
       if (el) {
         el.addEventListener('click', function (e) {
           e.preventDefault();
           showAuthModal();
+        });
+      }
+    });
+
+    // Hook CTA buttons to open chat directly
+    ['hero-cta-1', 'cta-bottom', 'nav-cta-btn'].forEach(function (id) {
+      var el = $(id);
+      if (el) {
+        el.addEventListener('click', function (e) {
+          e.preventDefault();
+          var chatToggle = document.querySelector('.chat-toggle');
+          if (chatToggle) {
+            var panel = document.querySelector('.chat-panel');
+            if (panel && !panel.classList.contains('open')) chatToggle.click();
+          }
         });
       }
     });
@@ -754,7 +776,9 @@
     var panel = ce('div', 'chat-panel');
     panel.innerHTML =
       '<div class="chat-head"><span>Lou — Assistant IA</span><button id="chat-close">&times;</button></div>' +
-      '<div class="chat-body" id="chat-body"></div>' +
+      '<div class="chat-body" id="chat-body">' +
+        '<div class="chat-msg bot">Salut ! Je suis Lou, ton chasseur immobilier digital. Dis-moi ce que tu cherches et je me mets en chasse !</div>' +
+      '</div>' +
       '<div class="chat-input"><input id="chat-in" type="text" placeholder="Votre message..."><button id="chat-send"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button></div>';
     document.body.appendChild(panel);
 
@@ -784,7 +808,7 @@
       body.appendChild(loading);
       body.scrollTop = body.scrollHeight;
 
-      var chatUserId = (USER && USER.id) ? USER.id : 'anon-' + Date.now();
+      var chatUserId = (USER && USER.id) ? String(USER.id) : ANON_SESSION;
 
       fetch(API + '/api/chat', {
         method: 'POST',
