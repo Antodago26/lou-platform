@@ -649,11 +649,11 @@ def api_chat():
             # Detect city
             if not conv_criteria.get('zones') and not existing_profile.get('zones'):
                 city_map = {
-                    'neuchâtel': ('Neuchâtel', 'NE'), 'neuchatel': ('Neuchâtel', 'NE'),
+                    'neuchâtel': ('Neuchâtel', 'NE'), 'neuchatel': ('Neuchâtel', 'NE'), 'neuch': ('Neuchâtel', 'NE'),
                     'lausanne': ('Lausanne', 'VD'), 'genève': ('Genève', 'GE'), 'geneve': ('Genève', 'GE'),
                     'montreux': ('Montreux', 'VD'), 'fribourg': ('Fribourg', 'FR'), 'sion': ('Sion', 'VS'),
                     'nyon': ('Nyon', 'VD'), 'morges': ('Morges', 'VD'), 'yverdon': ('Yverdon', 'VD'),
-                    'vevey': ('Vevey', 'VD'), 'bienne': ('Bienne', 'BE'),
+                    'vevey': ('Vevey', 'VD'), 'bienne': ('Bienne', 'BE'), 'biel': ('Bienne', 'BE'),
                 }
                 for key, (city_name, canton) in city_map.items():
                     if key in msg_low:
@@ -687,11 +687,11 @@ def api_chat():
             conv_criteria['property_type'] = 'maison'
     if not conv_criteria.get('zones') and not existing_profile.get('zones'):
         city_map_cur = {
-            'neuchâtel': ('Neuchâtel', 'NE'), 'neuchatel': ('Neuchâtel', 'NE'),
+            'neuchâtel': ('Neuchâtel', 'NE'), 'neuchatel': ('Neuchâtel', 'NE'), 'neuch': ('Neuchâtel', 'NE'),
             'lausanne': ('Lausanne', 'VD'), 'genève': ('Genève', 'GE'), 'geneve': ('Genève', 'GE'),
             'montreux': ('Montreux', 'VD'), 'fribourg': ('Fribourg', 'FR'), 'sion': ('Sion', 'VS'),
             'nyon': ('Nyon', 'VD'), 'morges': ('Morges', 'VD'), 'yverdon': ('Yverdon', 'VD'),
-            'vevey': ('Vevey', 'VD'), 'bienne': ('Bienne', 'BE'),
+            'vevey': ('Vevey', 'VD'), 'bienne': ('Bienne', 'BE'), 'biel': ('Bienne', 'BE'),
         }
         for key, (city_name, canton) in city_map_cur.items():
             if key in msg_low:
@@ -782,7 +782,28 @@ REGLES ABSOLUES — NE LES ENFREINS JAMAIS:
 
     # Build messages
     messages = list(history[-10:])
-    messages.append({"role": "user", "content": message})
+
+    # Inject a reminder of known criteria right before user's message
+    # This is more reliable than system prompt alone — Claude can't miss it
+    if all_parts:
+        all_missing_reminder = []
+        if not all_criteria.get('zones'):
+            all_missing_reminder.append('ville/zone')
+        if not all_criteria.get('transaction'):
+            all_missing_reminder.append('transaction')
+        if not all_criteria.get('property_types'):
+            all_missing_reminder.append('type de bien')
+        if not all_criteria.get('budget_max') and not all_criteria.get('budget_min'):
+            all_missing_reminder.append('budget')
+        reminder_parts = ', '.join(all_parts)
+        if all_missing_reminder:
+            reminder = f"[RAPPEL SYSTEME: Critères DEJA connus: {reminder_parts}. Il manque UNIQUEMENT: {', '.join(all_missing_reminder)}. Ne redemande RIEN d'autre.]"
+        else:
+            reminder = f"[RAPPEL SYSTEME: TOUS les critères sont remplis: {reminder_parts}. Ne redemande RIEN. Propose de créer l'espace ou voir les annonces.]"
+        # Add as a system-injected user context before the actual message
+        messages.append({"role": "user", "content": f"{message}\n\n{reminder}"})
+    else:
+        messages.append({"role": "user", "content": message})
 
     try:
         client = Anthropic(api_key=ANTHROPIC_KEY)
@@ -839,11 +860,11 @@ REGLES ABSOLUES — NE LES ENFREINS JAMAIS:
         if not criteria_to_save.get('zones') and not criteria_to_save.get('zone'):
             import re
             city_patterns = {
-                'neuchâtel': 'Neuchâtel', 'neuchatel': 'Neuchâtel',
+                'neuchâtel': 'Neuchâtel', 'neuchatel': 'Neuchâtel', 'neuch': 'Neuchâtel',
                 'lausanne': 'Lausanne', 'genève': 'Genève', 'geneve': 'Genève',
                 'montreux': 'Montreux', 'fribourg': 'Fribourg', 'sion': 'Sion',
                 'nyon': 'Nyon', 'morges': 'Morges', 'yverdon': 'Yverdon',
-                'vevey': 'Vevey', 'bienne': 'Bienne',
+                'vevey': 'Vevey', 'bienne': 'Bienne', 'biel': 'Bienne',
             }
             msg_lower = message.lower()
             # Find ALL city mentions and their positions — take the LAST one
