@@ -70,13 +70,25 @@ def _get_pool():
     return _db_pool
 
 def get_db():
-    """Get a database connection from pool."""
+    """Get a database connection from pool, with SSL health check."""
     pool = _get_pool()
     if pool:
         conn = pool.getconn()
-        # If connection is broken, get a fresh one
-        if conn.closed:
-            pool.putconn(conn, close=True)
+        # Test the connection — SSL errors only show up on actual queries
+        try:
+            if conn.closed:
+                raise Exception("closed")
+            cur = conn.cursor()
+            cur.execute("SELECT 1")
+            cur.close()
+            # Clear the transaction state from our test query
+            conn.rollback()
+        except Exception:
+            # Connection is broken (SSL error, closed, etc.) — discard and get fresh
+            try:
+                pool.putconn(conn, close=True)
+            except Exception:
+                pass
             conn = pool.getconn()
         return conn
     conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
@@ -87,12 +99,22 @@ def return_db(conn):
     pool = _get_pool()
     if pool:
         try:
-            conn.reset()
+            if conn.closed:
+                pool.putconn(conn, close=True)
+                return
+            conn.rollback()  # Clear any pending transaction
         except Exception:
-            pass
+            try:
+                pool.putconn(conn, close=True)
+            except Exception:
+                pass
+            return
         pool.putconn(conn)
     else:
-        conn.close()
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 def token_required(f):
