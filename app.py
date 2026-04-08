@@ -22,7 +22,6 @@ import jwt
 import bcrypt
 import psycopg2
 import psycopg2.extras
-import psycopg2.pool
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from anthropic import Anthropic
@@ -59,90 +58,16 @@ CHAT_RATE_WINDOW = 60  # seconds
 ANON_RATE_LIMIT = 5  # anonymous users get fewer messages per minute
 
 
-_db_pool = None
-import threading as _threading
-_pool_lock = _threading.Lock()
-
-def _get_pool():
-    global _db_pool
-    if _db_pool is None and DATABASE_URL:
-        with _pool_lock:
-            if _db_pool is None:
-                _db_pool = psycopg2.pool.ThreadedConnectionPool(
-                    2, 20, DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor
-                )
-    return _db_pool
-
-def _reset_pool():
-    """Destroy and recreate the connection pool (all connections stale)."""
-    global _db_pool
-    with _pool_lock:
-        old = _db_pool
-        _db_pool = None
-        if old:
-            try:
-                old.closeall()
-            except Exception:
-                pass
-
 def get_db():
-    """Get a database connection from pool, with SSL health check."""
-    pool = _get_pool()
-    if pool:
-        conn = pool.getconn()
-        # Test the connection — SSL errors only show up on actual queries
-        try:
-            if conn.closed:
-                raise Exception("closed")
-            cur = conn.cursor()
-            cur.execute("SELECT 1")
-            cur.close()
-            conn.rollback()
-        except Exception:
-            # Connection is broken — entire pool is likely stale, nuke it
-            log.warning("Stale DB connection detected, resetting pool")
-            try:
-                pool.putconn(conn, close=True)
-            except Exception:
-                pass
-            _reset_pool()
-            # Get a fresh connection from the new pool
-            new_pool = _get_pool()
-            if new_pool:
-                return new_pool.getconn()
-            # Fallback: direct connection
-            return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
-        return conn
+    """Create a fresh database connection (no pool — eliminates SSL stale issues)."""
     return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
 
 def return_db(conn):
-    """Return a connection to the pool."""
-    pool = _get_pool()
-    if pool:
-        try:
-            if conn.closed:
-                pool.putconn(conn, close=True)
-                return
-            conn.rollback()
-        except Exception:
-            try:
-                pool.putconn(conn, close=True)
-            except Exception:
-                pass
-            return
-        try:
-            pool.putconn(conn)
-        except Exception:
-            # Connection doesn't belong to current pool (pool was reset)
-            try:
-                conn.close()
-            except Exception:
-                pass
-    else:
-        try:
-            conn.close()
-        except Exception:
-            pass
+    """Close the database connection."""
+    try:
+        conn.close()
+    except Exception:
+        pass
 
 
 def token_required(f):
