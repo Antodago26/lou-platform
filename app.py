@@ -966,10 +966,12 @@ def api_scrape():
     else:
         cities = [city]
 
-    # Run scraping in background thread to avoid 30s timeout
+    # Run scraping + scoring in background thread to avoid 30s timeout
     def _bg_scrape(city_list, tx, uid):
         from scrapers import scrape_all, save_to_db
+        from scoring_engine import score_property
         bg_conn = get_db()
+        bg_cur = bg_conn.cursor()
         try:
             total_saved = 0
             for c in city_list:
@@ -986,9 +988,69 @@ def api_scrape():
                     except Exception:
                         pass
             log.info(f"User scrape complete: {total_saved} saved for {len(city_list)} cities")
+
+            # Now score all properties for this user's profile
+            try:
+                bg_cur.execute("""
+                    SELECT * FROM search_profiles
+                    WHERE user_id = %s AND is_active = TRUE
+                    ORDER BY created_at DESC LIMIT 1
+                """, (uid,))
+                profile = bg_cur.fetchone()
+                if profile:
+                    profile = dict(profile)
+                    bg_cur.execute("SELECT * FROM search_zones WHERE profile_id = %s", (profile['id'],))
+                    zones = [dict(z) for z in bg_cur.fetchall()]
+
+                    score_query = "SELECT * FROM properties WHERE is_active = TRUE"
+                    score_params = []
+                    if profile.get('transaction'):
+                        score_query += " AND transaction = %s"
+                        score_params.append(profile['transaction'])
+                    if profile.get('budget_max'):
+                        score_query += " AND (price IS NULL OR price <= %s)"
+                        score_params.append(int(profile['budget_max'] * 1.3))
+                    bg_cur.execute(score_query, score_params)
+                    properties = bg_cur.fetchall()
+
+                    scored = 0
+                    for prop in properties:
+                        prop = dict(prop)
+                        result = score_property(prop, profile, zones)
+                        bg_cur.execute("""
+                            INSERT INTO scored_properties
+                                (property_id, profile_id, user_id, total_score, grade,
+                                 score_zone, score_budget, score_type, score_surface,
+                                 score_equipment, score_freshness, distance_km)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            ON CONFLICT (property_id, profile_id)
+                            DO UPDATE SET
+                                total_score = EXCLUDED.total_score, grade = EXCLUDED.grade,
+                                score_zone = EXCLUDED.score_zone, score_budget = EXCLUDED.score_budget,
+                                score_type = EXCLUDED.score_type, score_surface = EXCLUDED.score_surface,
+                                score_equipment = EXCLUDED.score_equipment, score_freshness = EXCLUDED.score_freshness,
+                                distance_km = EXCLUDED.distance_km, scored_at = NOW()
+                        """, (
+                            prop['id'], profile['id'], uid,
+                            result['total_score'], result['grade'],
+                            result['score_zone'], result['score_budget'],
+                            result['score_type'], result['score_surface'],
+                            result['score_equipment'], result['score_freshness'],
+                            result['distance_km']
+                        ))
+                        scored += 1
+                    bg_conn.commit()
+                    log.info(f"User scrape scoring: {scored} properties scored for user {uid}")
+            except Exception as e:
+                log.error(f"User scrape scoring error: {e}", exc_info=True)
+                try:
+                    bg_conn.rollback()
+                except Exception:
+                    pass
         except Exception as e:
             log.error(f"User scrape bg error: {e}", exc_info=True)
         finally:
+            bg_cur.close()
             return_db(bg_conn)
 
     thread = threading.Thread(target=_bg_scrape, args=(cities, transaction, user_id))

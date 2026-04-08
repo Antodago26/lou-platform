@@ -528,22 +528,23 @@
     loadProfileBar();
     loadProperties(1, 'score', 0);
 
-    // Refresh button — scrape + score then reload
+    // Refresh button — launch background scrape+score, then poll for results
     $('refresh-btn').onclick = function () {
       var btn = this;
       btn.disabled = true;
-      btn.textContent = '⟳ Scraping...';
+      btn.textContent = '⟳ Recherche en cours...';
       apiFetch(API + '/api/scrape', { method: 'POST' })
         .then(function () {
-          btn.textContent = '⟳ Scoring...';
-          return apiFetch(API + '/api/score', { method: 'POST' });
-        })
-        .then(function () {
-          loadStats();
-          loadProfileBar();
-          loadProperties(1, 'score', 0);
-          btn.textContent = '↻ Actualiser';
-          btn.disabled = false;
+          // Scraping runs in background (~60s). Wait then reload.
+          btn.textContent = '⟳ Scraping 8 portails...';
+          setTimeout(function () {
+            btn.textContent = '⟳ Mise a jour...';
+            loadStats();
+            loadProfileBar();
+            loadProperties(1, 'score', 0);
+            btn.textContent = '↻ Actualiser';
+            btn.disabled = false;
+          }, 90000); // 90 seconds for background scrape+score to finish
         })
         .catch(function () {
           btn.textContent = '↻ Actualiser';
