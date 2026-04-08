@@ -143,9 +143,19 @@ def _clean_price(val):
         return None
     if isinstance(val, (int, float)):
         return int(val) if val > 0 else None
-    text = str(val).replace('\u2019', "'").replace("'", "").replace(',', '').replace('.–', '').replace('.-', '')
+    text = str(val)
+    # Remove all thousand separators and currency symbols
+    text = text.replace('\u2019', '').replace('\u00a0', '').replace("'", '')
+    text = text.replace(',', '').replace('.–', '').replace('.-', '')
+    # Handle dots as thousand separator (e.g., 2.864.400): if multiple dots, they're separators
+    if text.count('.') > 1:
+        text = text.replace('.', '')
+    elif '.' in text:
+        # Single dot could be decimal (e.g., 1500.00) — remove decimal part
+        text = text.split('.')[0]
     nums = re.findall(r'\d+', text)
     if nums:
+        # Join all consecutive number groups (handles edge cases)
         n = int(nums[0])
         return n if n > 0 else None
     return None
@@ -216,9 +226,9 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=2):
 
                 # Price: look for CHF pattern or number followed by .–
                 price = None
-                price_match = re.search(r"(?:CHF|Fr\.?)\s*([\d'']+)", card_text)
+                price_match = re.search(r"(?:CHF|Fr\.?)\s*([\d'',.\u2019\u00a0]+)", card_text)
                 if not price_match:
-                    price_match = re.search(r"([\d'']+)\s*(?:CHF|Fr|\.–|/mois|/m)", card_text)
+                    price_match = re.search(r"([\d'',.\u2019\u00a0]+)\s*(?:CHF|Fr|\.–|/mois|/m)", card_text)
                 if price_match:
                     price = _clean_price(price_match.group(1))
 
