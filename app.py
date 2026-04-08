@@ -653,7 +653,8 @@ CRITERES A COLLECTER:
 9. Date emmenagement (optionnel)
 
 COMPORTEMENT:
-- Commence par te presenter et demander la region
+- Ne te presente PAS (le message de bienvenue est deja affiche dans l'interface)
+- Reponds directement a ce que dit l'utilisateur
 - Quand tu as zone + type + transaction + budget, propose de creer l'espace
 - Ne force pas les criteres optionnels
 
