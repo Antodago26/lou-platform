@@ -351,6 +351,90 @@ def update_profile():
                 ))
 
         conn.commit()
+
+        # Trigger background scraping + scoring for the user's cities
+        cities = [z.get('city') for z in zones if z.get('city')] if zones else []
+        transaction = data.get('transaction', 'location')
+        if cities:
+            import threading
+            def _bg_scrape_and_score(city_list, tx, pid, uid):
+                from scrapers import scrape_all, save_to_db
+                from scoring_engine import score_property
+                bg_conn = get_db()
+                bg_cur = bg_conn.cursor()
+                try:
+                    for city in city_list:
+                        try:
+                            listings = scrape_all(city=city, transaction=tx)
+                            if listings:
+                                saved = save_to_db(bg_conn, listings)
+                                log.info(f"Profile update scrape: saved {saved} for {city} ({tx})")
+                        except Exception as e:
+                            log.error(f"Profile update scrape failed for {city}: {e}")
+                            try:
+                                bg_conn.rollback()
+                            except Exception:
+                                pass
+
+                    # Score properties for this profile
+                    bg_cur.execute("SELECT * FROM search_profiles WHERE id = %s", (pid,))
+                    profile = dict(bg_cur.fetchone())
+                    bg_cur.execute("SELECT * FROM search_zones WHERE profile_id = %s", (pid,))
+                    zones_data = [dict(z) for z in bg_cur.fetchall()]
+
+                    query = "SELECT * FROM properties WHERE is_active = TRUE"
+                    params = []
+                    if profile.get('transaction'):
+                        query += " AND transaction = %s"
+                        params.append(profile['transaction'])
+                    if profile.get('budget_max'):
+                        query += " AND (price IS NULL OR price <= %s)"
+                        params.append(int(profile['budget_max'] * 1.3))
+                    bg_cur.execute(query, params)
+                    properties = bg_cur.fetchall()
+
+                    scored = 0
+                    for prop in properties:
+                        prop = dict(prop)
+                        result = score_property(prop, profile, zones_data)
+                        bg_cur.execute("""
+                            INSERT INTO scored_properties
+                                (property_id, profile_id, user_id, total_score, grade,
+                                 score_zone, score_budget, score_type, score_surface,
+                                 score_equipment, score_freshness, distance_km)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            ON CONFLICT (property_id, profile_id)
+                            DO UPDATE SET
+                                total_score = EXCLUDED.total_score, grade = EXCLUDED.grade,
+                                score_zone = EXCLUDED.score_zone, score_budget = EXCLUDED.score_budget,
+                                score_type = EXCLUDED.score_type, score_surface = EXCLUDED.score_surface,
+                                score_equipment = EXCLUDED.score_equipment, score_freshness = EXCLUDED.score_freshness,
+                                distance_km = EXCLUDED.distance_km, scored_at = NOW()
+                        """, (
+                            prop['id'], pid, uid,
+                            result['total_score'], result['grade'],
+                            result['score_zone'], result['score_budget'],
+                            result['score_type'], result['score_surface'],
+                            result['score_equipment'], result['score_freshness'],
+                            result['distance_km']
+                        ))
+                        scored += 1
+                    bg_conn.commit()
+                    log.info(f"Profile update scoring: {scored} properties scored for profile {pid}")
+                except Exception as e:
+                    log.error(f"Profile update bg error: {e}", exc_info=True)
+                    try:
+                        bg_conn.rollback()
+                    except Exception:
+                        pass
+                finally:
+                    bg_cur.close()
+                    return_db(bg_conn)
+
+            thread = threading.Thread(target=_bg_scrape_and_score, args=(cities, transaction, profile_id, request.user_id))
+            thread.daemon = True
+            thread.start()
+
         return jsonify({"ok": True, "profile_id": profile_id})
     except Exception as e:
         conn.rollback()
