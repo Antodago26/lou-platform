@@ -31,7 +31,7 @@
   function escapeHtml(text) {
     var div = document.createElement('div');
     div.textContent = text;
-    return div.innerHTML;
+    return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
   // Wrapper for authenticated API calls — handles 401 (expired token)
@@ -838,11 +838,13 @@
         '<div class="prop-address">' + escapeHtml(p.address || '') + '</div>' +
         '<div class="prop-details">' + details.join(' &middot; ') + '</div>' +
         '<div class="prop-scores-mini">' +
-          scoreBar('Zone', p.score_detail.zone) +
-          scoreBar('Budget', p.score_detail.budget) +
-          scoreBar('Type', p.score_detail.type) +
-          scoreBar('Surface', p.score_detail.surface) +
-          scoreBar('Equip.', p.score_detail.equipment) +
+          (p.score_detail ? (
+            scoreBar('Zone', p.score_detail.zone || 0) +
+            scoreBar('Budget', p.score_detail.budget || 0) +
+            scoreBar('Type', p.score_detail.type || 0) +
+            scoreBar('Surface', p.score_detail.surface || 0) +
+            scoreBar('Equip.', p.score_detail.equipment || 0)
+          ) : '') +
         '</div>' +
         '<div class="prop-footer">' +
           '<span class="prop-source">' + escapeHtml(sourceLabel) + '</span>' +
@@ -853,6 +855,7 @@
   }
 
   function scoreBar(label, val) {
+    val = val || 0;
     var color = val >= 80 ? '#059669' : val >= 60 ? '#0369a1' : val >= 40 ? '#d97706' : '#dc2626';
     return '<div class="score-mini-row">' +
       '<span class="score-mini-lbl">' + label + '</span>' +
@@ -936,7 +939,7 @@
       var oldSugs = body.querySelectorAll('.chat-suggestions');
       oldSugs.forEach(function (el) { el.remove(); });
 
-      body.innerHTML += '<div class="chat-msg user">' + escapeHtml(msg) + '</div>';
+      body.insertAdjacentHTML('beforeend', '<div class="chat-msg user">' + escapeHtml(msg) + '</div>');
       body.scrollTop = body.scrollHeight;
 
       var loading = ce('div', 'chat-msg bot', '...');
@@ -956,7 +959,7 @@
         .then(function (data) {
           loading.remove();
           var reply = data.message || data.reply || 'Desole, je n\'ai pas compris.';
-          body.innerHTML += '<div class="chat-msg bot">' + escapeHtml(reply) + '</div>';
+          body.insertAdjacentHTML('beforeend', '<div class="chat-msg bot">' + escapeHtml(reply) + '</div>');
 
           // Accumulate criteria from chatbot responses
           if (data.criteria && typeof data.criteria === 'object') {
@@ -969,10 +972,10 @@
 
           // Handle profile_ready — prompt signup if not logged in
           if (data.profile_ready && !isJWT(TOKEN)) {
-            body.innerHTML += '<div class="chat-msg bot" style="background:#e0f2fe">' +
+            body.insertAdjacentHTML('beforeend', '<div class="chat-msg bot" style="background:#e0f2fe">' +
               'Super, j\'ai tous tes criteres ! ' +
               '<a href="#" class="chat-signup-link" style="color:#0369a1;font-weight:600">Cree ton espace</a> pour que je lance la recherche.' +
-            '</div>';
+            '</div>');
             var signupLink = body.querySelector('.chat-signup-link');
             if (signupLink) signupLink.onclick = function (e) {
               e.preventDefault();
@@ -992,7 +995,7 @@
               sugHtml += '<button class="chat-sug">' + escapeHtml(s) + '</button>';
             });
             sugHtml += '</div>';
-            body.innerHTML += sugHtml;
+            body.insertAdjacentHTML('beforeend', sugHtml);
             body.querySelectorAll('.chat-sug').forEach(function (btn) {
               btn.onclick = function () {
                 $('chat-in').value = this.textContent;
@@ -1004,7 +1007,7 @@
         })
         .catch(function () {
           loading.remove();
-          body.innerHTML += '<div class="chat-msg bot">Erreur de connexion. Reessayez.</div>';
+          body.insertAdjacentHTML('beforeend', '<div class="chat-msg bot">Erreur de connexion. Reessayez.</div>');
           body.scrollTop = body.scrollHeight;
         });
     }

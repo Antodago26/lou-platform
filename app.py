@@ -56,6 +56,7 @@ anthropic_client = Anthropic(api_key=ANTHROPIC_KEY) if ANTHROPIC_KEY else None
 _chat_rate = defaultdict(list)  # user_id -> list of timestamps
 CHAT_RATE_LIMIT = 20  # max requests per minute
 CHAT_RATE_WINDOW = 60  # seconds
+ANON_RATE_LIMIT = 5  # anonymous users get fewer messages per minute
 
 
 _db_pool = None
@@ -115,13 +116,14 @@ def make_token(user_id):
     )
 
 
-def _check_rate_limit(user_id):
+def _check_rate_limit(user_id, is_anonymous=False):
     """Simple in-memory rate limiter. Returns True if allowed."""
     now = time.time()
     timestamps = _chat_rate[user_id]
     # Remove old entries
     _chat_rate[user_id] = [t for t in timestamps if now - t < CHAT_RATE_WINDOW]
-    if len(_chat_rate[user_id]) >= CHAT_RATE_LIMIT:
+    limit = ANON_RATE_LIMIT if is_anonymous else CHAT_RATE_LIMIT
+    if len(_chat_rate[user_id]) >= limit:
         return False
     _chat_rate[user_id].append(now)
     return True
@@ -237,6 +239,10 @@ def login():
             "token": token,
             "user": {"id": user['id'], "email": user['email'], "name": user['name']}
         })
+    except Exception as e:
+        conn.rollback()
+        log.error(f"Login error: {e}")
+        return jsonify({"error": "Erreur serveur"}), 500
     finally:
         cur.close()
         return_db(conn)
@@ -734,11 +740,24 @@ def _parse_llm_json(raw):
 @app.route('/api/chat', methods=['POST'])
 def api_chat():
     data = request.json or {}
-    user_id = str(data.get('user_id', 'anon'))
     message = data.get('message', '').strip()
 
     if not message:
         return jsonify({"error": "Message vide"}), 400
+
+    # Authenticate: use JWT if present, else anonymous session
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    is_anonymous = False
+    if token:
+        try:
+            token_data = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
+            user_id = str(token_data['user_id'])
+        except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
+            user_id = str(data.get('user_id', 'anon'))
+            is_anonymous = True
+    else:
+        user_id = str(data.get('user_id', 'anon'))
+        is_anonymous = True
 
     if not anthropic_client:
         return jsonify({
@@ -747,7 +766,7 @@ def api_chat():
         })
 
     # Rate limiting
-    if not _check_rate_limit(user_id):
+    if not _check_rate_limit(user_id, is_anonymous=is_anonymous):
         return jsonify({
             "message": "Trop de messages. Attends quelques secondes avant de reessayer.",
             "suggestions": [], "criteria": {}, "profile_ready": False, "confirmed": False
@@ -849,7 +868,15 @@ def api_chat():
 @app.route('/api/chat/reset', methods=['POST'])
 def chat_reset():
     data = request.json or {}
-    uid = str(data.get('user_id', 'anon'))
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if token:
+        try:
+            token_data = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
+            uid = str(token_data['user_id'])
+        except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
+            uid = str(data.get('user_id', 'anon'))
+    else:
+        uid = str(data.get('user_id', 'anon'))
     # Delete conversation history from DB
     conn = get_db()
     cur = conn.cursor()
@@ -963,11 +990,10 @@ def api_import():
 @token_required
 def api_score():
     """Score all properties for the current user's profile."""
-    import traceback
+    from scoring_engine import score_property
+    conn = get_db()
+    cur = conn.cursor()
     try:
-        from scoring_engine import score_property
-        conn = get_db()
-        cur = conn.cursor()
 
         # Get user's active profile
         cur.execute("""
@@ -1036,14 +1062,17 @@ def api_score():
             scored += 1
 
         conn.commit()
-        cur.close()
-        return_db(conn)
-
         return jsonify({"ok": True, "scored": scored, "profile_id": profile['id']})
-
     except Exception as e:
         log.error(f"Score error: {e}", exc_info=True)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         return jsonify({"error": "Erreur lors du scoring. Verifiez votre profil."}), 500
+    finally:
+        cur.close()
+        return_db(conn)
 
 
 def _require_cron_secret():

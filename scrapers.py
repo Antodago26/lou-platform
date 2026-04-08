@@ -20,6 +20,7 @@ import logging
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
+from urllib.parse import quote
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger('lou-scrapers')
@@ -577,7 +578,7 @@ def scrape_flatfox(city="Lausanne", transaction="location", limit=30):
                     if transaction == 'location':
                         price = item.get('rent_gross') or item.get('rent_net') or item.get('price_display')
                     else:
-                        price = item.get('price') or item.get('selling_price') or item.get('price_display') or item.get('rent_gross')
+                        price = item.get('price') or item.get('selling_price') or item.get('price_display')
 
                     results.append(_make_property(
                         external_id=f"ff-{pk}", source='Flatfox',
@@ -619,7 +620,7 @@ def scrape_comparis(city="Lausanne", transaction="location", max_pages=1):
     results = []
     tx = "mieten" if transaction == "location" else "kaufen"
 
-    url = f"https://www.comparis.ch/immobilien/result/list?requestobject=%7B%22DealType%22%3A{10 if transaction == 'location' else 20}%2C%22Keyword%22%3A%22{city}%22%2C%22Sort%22%3A4%2C%22Page%22%3A1%7D"
+    url = f"https://www.comparis.ch/immobilien/result/list?requestobject=%7B%22DealType%22%3A{10 if transaction == 'location' else 20}%2C%22Keyword%22%3A%22{quote(city)}%22%2C%22Sort%22%3A4%2C%22Page%22%3A1%7D"
     status, html = _sb_get(url, render_js=True)
 
     if status == 200:
@@ -672,7 +673,7 @@ def scrape_properstar(city="Lausanne", transaction="location", max_pages=1):
     slug = city.lower().replace(' ', '-')
 
     tx_fr = "louer" if transaction == "location" else "acheter"
-    url = f"https://www.properstar.fr/suisse/{slug}/{tx_fr}/appartement"
+    url = f"https://www.properstar.ch/suisse/{slug}/{tx_fr}/appartement"
     status, html = _sb_get(url, render_js=True)
 
     if status == 200:

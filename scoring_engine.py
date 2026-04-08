@@ -16,6 +16,7 @@ from datetime import datetime
 def haversine(lat1, lon1, lat2, lon2):
     """Distance en km entre deux points GPS."""
     R = 6371  # rayon Terre en km
+    lat1, lon1, lat2, lon2 = float(lat1), float(lon1), float(lat2), float(lon2)
     dlat = math.radians(lat2 - lat1)
     dlon = math.radians(lon2 - lon1)
     a = (math.sin(dlat / 2) ** 2 +
@@ -129,7 +130,7 @@ def score_budget(prop, profile):
     budget_max = profile.get('budget_max')
     budget_min = profile.get('budget_min')
 
-    if not price or not budget_max:
+    if not price or not budget_max or budget_max <= 0:
         return 50  # Pas assez d'info → neutre
 
     ratio = price / budget_max
@@ -218,7 +219,7 @@ def score_equipment(prop, profile):
     description = prop.get('description') or ''
 
     matched = sum(1 for p in priorities if match_feature(p, features, description))
-    return int(matched / len(priorities) * 100)
+    return int(matched / len(priorities) * 100) if priorities else 50
 
 
 def score_freshness(prop):
@@ -282,7 +283,7 @@ def score_property(prop, profile, zones):
         'equipment': profile.get('w_equipment', 10),
         'freshness': profile.get('w_freshness', 5),
     }
-    total_weight = sum(w.values()) or 100
+    total_weight = sum(max(0, v) for v in w.values()) or 100
 
     total = round(
         (s_zone * w['zone'] +
