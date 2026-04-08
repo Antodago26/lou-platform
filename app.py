@@ -70,32 +70,16 @@ def _get_pool():
     return _db_pool
 
 def get_db():
-    """Get a database connection from pool. Handles stale connections."""
+    """Get a database connection from pool."""
     pool = _get_pool()
     if pool:
         conn = pool.getconn()
-        try:
-            # Reset any leftover transaction state
-            conn.rollback()
-            # Test if connection is alive
-            cur = conn.cursor()
-            cur.execute("SELECT 1")
-            cur.close()
-            conn.rollback()
-        except Exception:
-            log.warning("Stale DB connection, creating new one")
-            try:
-                pool.putconn(conn, close=True)
-            except Exception:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
+        # If connection is broken, get a fresh one
+        if conn.closed:
+            pool.putconn(conn, close=True)
             conn = pool.getconn()
-        conn.autocommit = False
         return conn
     conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
-    conn.autocommit = False
     return conn
 
 def return_db(conn):
@@ -103,16 +87,10 @@ def return_db(conn):
     pool = _get_pool()
     if pool:
         try:
-            conn.rollback()  # Clean state before returning to pool
+            conn.reset()
         except Exception:
             pass
-        try:
-            pool.putconn(conn)
-        except Exception:
-            try:
-                conn.close()
-            except Exception:
-                pass
+        pool.putconn(conn)
     else:
         conn.close()
 
