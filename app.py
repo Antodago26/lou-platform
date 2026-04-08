@@ -65,31 +65,35 @@ def _get_pool():
     global _db_pool
     if _db_pool is None and DATABASE_URL:
         _db_pool = psycopg2.pool.ThreadedConnectionPool(
-            1, 10, DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor
+            2, 20, DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor
         )
     return _db_pool
 
 def get_db():
-    """Get a database connection from pool. Tests for stale connections."""
+    """Get a database connection from pool. Handles stale connections."""
     pool = _get_pool()
     if pool:
         conn = pool.getconn()
-        # Test if connection is still alive (fixes SSL SYSCALL EOF errors)
         try:
-            conn.cursor().execute("SELECT 1")
-            if conn.closed:
-                raise Exception("Connection closed")
+            # Reset any leftover transaction state
+            conn.rollback()
+            # Test if connection is alive
+            cur = conn.cursor()
+            cur.execute("SELECT 1")
+            cur.close()
+            conn.rollback()
         except Exception:
-            log.warning("Stale DB connection detected, reconnecting...")
+            log.warning("Stale DB connection, creating new one")
             try:
-                conn.close()
+                pool.putconn(conn, close=True)
             except Exception:
-                pass
-            pool.putconn(conn, close=True)
+                try:
+                    conn.close()
+                except Exception:
+                    pass
             conn = pool.getconn()
         conn.autocommit = False
         return conn
-    # Fallback for local dev without pool
     conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
     conn.autocommit = False
     return conn
@@ -99,9 +103,12 @@ def return_db(conn):
     pool = _get_pool()
     if pool:
         try:
+            conn.rollback()  # Clean state before returning to pool
+        except Exception:
+            pass
+        try:
             pool.putconn(conn)
         except Exception:
-            # Connection was bad, just close it
             try:
                 conn.close()
             except Exception:
