@@ -533,7 +533,7 @@
       var btn = this;
       btn.disabled = true;
       btn.textContent = '⟳ Recherche en cours...';
-      apiFetch(API + '/api/scrape', { method: 'POST' })
+      apiFetch(API + '/api/scrape', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
         .then(function () {
           // Scraping runs in background (~60s). Wait then reload.
           btn.textContent = '⟳ Scraping 8 portails...';
@@ -729,7 +729,7 @@
         $('profile-edit-form').style.display = 'none';
         loadProfileBar();
         // Re-score and reload properties
-        apiFetch(API + '/api/score', { method: 'POST' })
+        apiFetch(API + '/api/score', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
           .then(function () { loadProperties(1, 'score', 0); })
           .catch(function () { loadProperties(1, 'score', 0); });
       } else {
@@ -1040,7 +1040,7 @@
       .then(function () {
         loadProfileBar();
         // Trigger scoring + scraping so results appear immediately
-        apiFetch(API + '/api/score', { method: 'POST' })
+        apiFetch(API + '/api/score', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
           .then(function () {
             if (typeof loadProperties === 'function') loadProperties(1, 'score', 0);
             if (typeof loadStats === 'function') loadStats();

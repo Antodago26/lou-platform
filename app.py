@@ -931,7 +931,7 @@ def api_scrape():
        Runs in background thread to avoid Render's 30s timeout."""
     import threading
 
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     city = data.get('city')
     transaction = data.get('transaction', 'location')
     user_id = request.user_id
