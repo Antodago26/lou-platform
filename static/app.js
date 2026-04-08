@@ -528,12 +528,16 @@
     loadProfileBar();
     loadProperties(1, 'score', 0);
 
-    // Refresh button — re-score then reload
+    // Refresh button — scrape + score then reload
     $('refresh-btn').onclick = function () {
       var btn = this;
       btn.disabled = true;
-      btn.textContent = '⟳ Scoring...';
-      apiFetch(API + '/api/score', { method: 'POST' })
+      btn.textContent = '⟳ Scraping...';
+      apiFetch(API + '/api/scrape', { method: 'POST' })
+        .then(function () {
+          btn.textContent = '⟳ Scoring...';
+          return apiFetch(API + '/api/score', { method: 'POST' });
+        })
         .then(function () {
           loadStats();
           loadProfileBar();
