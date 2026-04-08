@@ -60,14 +60,30 @@ ANON_RATE_LIMIT = 5  # anonymous users get fewer messages per minute
 
 
 _db_pool = None
+import threading as _threading
+_pool_lock = _threading.Lock()
 
 def _get_pool():
     global _db_pool
     if _db_pool is None and DATABASE_URL:
-        _db_pool = psycopg2.pool.ThreadedConnectionPool(
-            2, 20, DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor
-        )
+        with _pool_lock:
+            if _db_pool is None:
+                _db_pool = psycopg2.pool.ThreadedConnectionPool(
+                    2, 20, DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor
+                )
     return _db_pool
+
+def _reset_pool():
+    """Destroy and recreate the connection pool (all connections stale)."""
+    global _db_pool
+    with _pool_lock:
+        old = _db_pool
+        _db_pool = None
+        if old:
+            try:
+                old.closeall()
+            except Exception:
+                pass
 
 def get_db():
     """Get a database connection from pool, with SSL health check."""
@@ -81,18 +97,23 @@ def get_db():
             cur = conn.cursor()
             cur.execute("SELECT 1")
             cur.close()
-            # Clear the transaction state from our test query
             conn.rollback()
         except Exception:
-            # Connection is broken (SSL error, closed, etc.) — discard and get fresh
+            # Connection is broken — entire pool is likely stale, nuke it
+            log.warning("Stale DB connection detected, resetting pool")
             try:
                 pool.putconn(conn, close=True)
             except Exception:
                 pass
-            conn = pool.getconn()
+            _reset_pool()
+            # Get a fresh connection from the new pool
+            new_pool = _get_pool()
+            if new_pool:
+                return new_pool.getconn()
+            # Fallback: direct connection
+            return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
         return conn
-    conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
-    return conn
+    return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
 
 def return_db(conn):
     """Return a connection to the pool."""
@@ -102,14 +123,21 @@ def return_db(conn):
             if conn.closed:
                 pool.putconn(conn, close=True)
                 return
-            conn.rollback()  # Clear any pending transaction
+            conn.rollback()
         except Exception:
             try:
                 pool.putconn(conn, close=True)
             except Exception:
                 pass
             return
-        pool.putconn(conn)
+        try:
+            pool.putconn(conn)
+        except Exception:
+            # Connection doesn't belong to current pool (pool was reset)
+            try:
+                conn.close()
+            except Exception:
+                pass
     else:
         try:
             conn.close()
