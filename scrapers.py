@@ -262,6 +262,25 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=2):
                 if not title:
                     title = f"{rooms or '?'} pièces" + (f", {surface} m²" if surface else '')
 
+                # Images: look for img tags in the card
+                images = []
+                for img_el in card.select('img[src]'):
+                    src = img_el.get('src', '')
+                    if src and ('homegate' in src or 'cloudinary' in src or src.startswith('http')) and 'logo' not in src.lower() and 'icon' not in src.lower():
+                        images.append(src)
+                # Also check lazy-loaded images
+                for img_el in card.select('img[data-src], [data-lazy], [data-original]'):
+                    src = img_el.get('data-src') or img_el.get('data-lazy') or img_el.get('data-original') or ''
+                    if src and src.startswith('http') and 'logo' not in src.lower():
+                        images.append(src)
+                # Also check background-image in style attributes
+                for el in card.select('[style*="background"]'):
+                    style = el.get('style', '')
+                    bg_match = re.search(r'url\(["\']?(https?://[^"\')\s]+)', style)
+                    if bg_match:
+                        images.append(bg_match.group(1))
+                images = list(dict.fromkeys(images))[:5]  # dedupe, max 5
+
                 results.append(_make_property(
                     external_id=f"hg-{lid}", source='Homegate',
                     source_url=href,
@@ -273,7 +292,7 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=2):
                     canton=CITY_CANTONS.get(city.lower(), ''),
                     postal_code=_extract_postal(address),
                     latitude=None, longitude=None,
-                    features=[], images=[], published_at=None,
+                    features=[], images=images, published_at=None,
                 ))
             except Exception as e:
                 log.debug(f"[Homegate] Card parse error: {e}")

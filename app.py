@@ -922,12 +922,14 @@ def chat_reset():
 @app.route('/api/scrape', methods=['POST'])
 @token_required
 def api_scrape():
-    """Trigger scraping based on user's search profile zones."""
-    from scrapers import scrape_all, save_to_db
+    """Trigger scraping based on user's search profile zones.
+       Runs in background thread to avoid Render's 30s timeout."""
+    import threading
 
     data = request.json or {}
     city = data.get('city')
     transaction = data.get('transaction', 'location')
+    user_id = request.user_id
 
     # If no city specified, use the user's profile zones
     if not city:
@@ -938,7 +940,7 @@ def api_scrape():
                 SELECT sz.city FROM search_zones sz
                 JOIN search_profiles sp ON sp.id = sz.profile_id
                 WHERE sp.user_id = %s AND sp.is_active = TRUE
-            """, (request.user_id,))
+            """, (user_id,))
             rows = cur.fetchall()
             cities = [r['city'] for r in rows if r['city']]
             if not cities:
@@ -949,7 +951,7 @@ def api_scrape():
                 SELECT transaction FROM search_profiles
                 WHERE user_id = %s AND is_active = TRUE
                 ORDER BY created_at DESC LIMIT 1
-            """, (request.user_id,))
+            """, (user_id,))
             prof = cur.fetchone()
             if prof and prof['transaction']:
                 transaction = prof['transaction']
@@ -959,26 +961,39 @@ def api_scrape():
     else:
         cities = [city]
 
-    # Scrape for each city
-    total_scraped = 0
-    total_saved = 0
-    details = []
-    conn = get_db()
-    try:
-        for c in cities:
-            listings = scrape_all(city=c, transaction=transaction)
-            total_scraped += len(listings)
-            saved = save_to_db(conn, listings)
-            total_saved += saved
-            details.append({"city": c, "scraped": len(listings), "saved": saved})
-    finally:
-        return_db(conn)
+    # Run scraping in background thread to avoid 30s timeout
+    def _bg_scrape(city_list, tx, uid):
+        from scrapers import scrape_all, save_to_db
+        bg_conn = get_db()
+        try:
+            total_saved = 0
+            for c in city_list:
+                try:
+                    listings = scrape_all(city=c, transaction=tx)
+                    if listings:
+                        saved = save_to_db(bg_conn, listings)
+                        total_saved += saved
+                        log.info(f"User scrape: saved {saved} for {c} ({tx})")
+                except Exception as e:
+                    log.error(f"User scrape failed for {c}: {e}")
+                    try:
+                        bg_conn.rollback()
+                    except Exception:
+                        pass
+            log.info(f"User scrape complete: {total_saved} saved for {len(city_list)} cities")
+        except Exception as e:
+            log.error(f"User scrape bg error: {e}", exc_info=True)
+        finally:
+            return_db(bg_conn)
+
+    thread = threading.Thread(target=_bg_scrape, args=(cities, transaction, user_id))
+    thread.daemon = True
+    thread.start()
 
     return jsonify({
         "ok": True,
-        "total_scraped": total_scraped,
-        "total_saved": total_saved,
-        "details": details
+        "message": f"Scraping lance en arriere-plan pour {len(cities)} ville(s)",
+        "cities": cities
     })
 
 
