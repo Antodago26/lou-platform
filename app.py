@@ -70,10 +70,23 @@ def _get_pool():
     return _db_pool
 
 def get_db():
-    """Get a database connection from pool."""
+    """Get a database connection from pool. Tests for stale connections."""
     pool = _get_pool()
     if pool:
         conn = pool.getconn()
+        # Test if connection is still alive (fixes SSL SYSCALL EOF errors)
+        try:
+            conn.cursor().execute("SELECT 1")
+            if conn.closed:
+                raise Exception("Connection closed")
+        except Exception:
+            log.warning("Stale DB connection detected, reconnecting...")
+            try:
+                conn.close()
+            except Exception:
+                pass
+            pool.putconn(conn, close=True)
+            conn = pool.getconn()
         conn.autocommit = False
         return conn
     # Fallback for local dev without pool
@@ -85,7 +98,14 @@ def return_db(conn):
     """Return a connection to the pool."""
     pool = _get_pool()
     if pool:
-        pool.putconn(conn)
+        try:
+            pool.putconn(conn)
+        except Exception:
+            # Connection was bad, just close it
+            try:
+                conn.close()
+            except Exception:
+                pass
     else:
         conn.close()
 
