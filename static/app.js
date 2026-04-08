@@ -819,8 +819,8 @@
     }
 
     var details = [];
-    if (p.rooms) details.push(p.rooms + ' pcs');
-    if (p.surface) details.push(p.surface + ' m2');
+    if (p.rooms && p.rooms > 0 && p.rooms < 20) details.push(p.rooms + ' pcs');
+    if (p.surface && p.surface > 0) details.push(p.surface + ' m\u00B2');
     if (p.floor !== null && p.floor !== undefined) details.push(p.floor + 'e etage');
     if (p.distance_km !== null && p.distance_km !== undefined) details.push(p.distance_km + ' km');
 

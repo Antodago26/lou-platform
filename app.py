@@ -458,20 +458,24 @@ def get_properties():
     conn = get_db()
     cur = conn.cursor()
     try:
-        # Get user's transaction type from their profile to filter results
+        # Get user's active profile (transaction + profile_id)
         cur.execute("""
-            SELECT transaction FROM search_profiles
+            SELECT id, transaction FROM search_profiles
             WHERE user_id = %s AND is_active = TRUE
             ORDER BY created_at DESC LIMIT 1
         """, (user_id,))
         profile_row = cur.fetchone()
         user_transaction = profile_row['transaction'] if profile_row else None
+        active_profile_id = profile_row['id'] if profile_row else None
 
-        # Build transaction filter
+        # Build filters
         tx_filter = ""
         tx_params = [user_id, user_id, min_score]
+        if active_profile_id:
+            tx_filter += " AND sp.profile_id = %s"
+            tx_params.append(active_profile_id)
         if user_transaction:
-            tx_filter = " AND p.transaction = %s"
+            tx_filter += " AND p.transaction = %s"
             tx_params.append(user_transaction)
 
         # Get properties with scores — order is safe (from whitelist above)
@@ -491,8 +495,11 @@ def get_properties():
         # Get total count
         count_params = [user_id, min_score]
         count_tx_filter = ""
+        if active_profile_id:
+            count_tx_filter += " AND sp.profile_id = %s"
+            count_params.append(active_profile_id)
         if user_transaction:
-            count_tx_filter = " AND p.transaction = %s"
+            count_tx_filter += " AND p.transaction = %s"
             count_params.append(user_transaction)
         cur.execute(f"""
             SELECT COUNT(*) as total FROM scored_properties sp
@@ -548,19 +555,23 @@ def get_stats():
     conn = get_db()
     cur = conn.cursor()
     try:
-        # Get user's transaction to filter stats
+        # Get user's active profile
         cur.execute("""
-            SELECT transaction FROM search_profiles
+            SELECT id, transaction FROM search_profiles
             WHERE user_id = %s AND is_active = TRUE
             ORDER BY created_at DESC LIMIT 1
         """, (user_id,))
         prof = cur.fetchone()
         user_tx = prof['transaction'] if prof else None
+        active_pid = prof['id'] if prof else None
 
         tx_filter = ""
         params = [user_id]
+        if active_pid:
+            tx_filter += " AND sp.profile_id = %s"
+            params.append(active_pid)
         if user_tx:
-            tx_filter = " AND p.transaction = %s"
+            tx_filter += " AND p.transaction = %s"
             params.append(user_tx)
 
         cur.execute(f"""
