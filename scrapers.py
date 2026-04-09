@@ -71,6 +71,7 @@ def _sb_get(url, render_js=False):
 
     try:
         r = requests.get(SCRAPINGBEE_URL, params=params, timeout=180)
+        r.encoding = 'utf-8'  # Force UTF-8 to avoid Latin-1 misdetection
         log.info(f"[ScrapingBee] {url[:60]}... → HTTP {r.status_code} ({len(r.text)} bytes)")
         return r.status_code, r.text
     except requests.exceptions.Timeout:
@@ -145,8 +146,10 @@ def _clean_price(val):
         return int(val) if val > 0 else None
     text = str(val)
     # Remove all thousand separators and currency symbols
+    # Remove currency, units, and all thousand separators
+    text = re.sub(r'(?i)CHF|Fr\.?|/mois|/m|/an|par mois|mensuel', '', text)
     text = text.replace('\u2019', '').replace('\u00a0', '').replace("'", '')
-    text = text.replace(',', '').replace('.–', '').replace('.-', '')
+    text = text.replace(',', '').replace('.–', '').replace('.-', '').replace(' ', '')
     # Handle dots as thousand separator (e.g., 2.864.400): if multiple dots, they're separators
     if text.count('.') > 1:
         text = text.replace('.', '')
@@ -155,8 +158,8 @@ def _clean_price(val):
         text = text.split('.')[0]
     nums = re.findall(r'\d+', text)
     if nums:
-        # Join all consecutive number groups (handles edge cases)
-        n = int(nums[0])
+        # Join all digit groups to handle "1 300" → "1300"
+        n = int(''.join(nums))
         return n if n > 0 else None
     return None
 
@@ -439,6 +442,19 @@ def scrape_immobilier_ch(city="Lausanne", transaction="location", max_pages=2):
                     href = 'https://www.immobilier.ch' + href
                 eid = re.search(r'/(\d+)', href)
 
+                # Extract images
+                images = []
+                for img_el in card.select('img[src], img[data-src], img[data-lazy]'):
+                    src = img_el.get('src', '') or img_el.get('data-src', '') or img_el.get('data-lazy', '')
+                    if src and src.startswith('http') and 'logo' not in src.lower() and 'icon' not in src.lower():
+                        images.append(src)
+                for styled in card.select('[style*="background"]'):
+                    style = styled.get('style', '')
+                    bg_match = re.search(r'url\(["\']?(https?://[^"\')\s]+)', style)
+                    if bg_match:
+                        images.append(bg_match.group(1))
+                images = list(dict.fromkeys(images))[:5]
+
                 if title or price:
                     results.append(_make_property(
                         external_id=f"imch-{eid.group(1) if eid else hashlib.sha256((title+address).encode()).hexdigest()[:12]}",
@@ -451,7 +467,7 @@ def scrape_immobilier_ch(city="Lausanne", transaction="location", max_pages=2):
                         canton=CITY_CANTONS.get(city.lower(), ''),
                         postal_code=_extract_postal(address),
                         latitude=None, longitude=None,
-                        features=[], images=[], published_at=None,
+                        features=[], images=images, published_at=None,
                     ))
             except Exception:
                 pass
@@ -721,6 +737,20 @@ def scrape_properstar(city="Lausanne", transaction="location", max_pages=1):
                 if href.startswith('/'):
                     href = 'https://www.properstar.ch' + href
 
+                # Extract images
+                images = []
+                for img_el in card.select('img[src], img[data-src]'):
+                    src = img_el.get('src', '') or img_el.get('data-src', '')
+                    if src and src.startswith('http') and 'logo' not in src.lower() and 'icon' not in src.lower() and 'pixel' not in src.lower():
+                        images.append(src)
+                # Also check background-image in style
+                for styled in card.select('[style*="background"]'):
+                    style = styled.get('style', '')
+                    bg_match = re.search(r'url\(["\']?(https?://[^"\')\s]+)', style)
+                    if bg_match:
+                        images.append(bg_match.group(1))
+                images = list(dict.fromkeys(images))[:5]
+
                 if title or price:
                     results.append(_make_property(
                         external_id=f"ps-{hashlib.sha256((title+href).encode()).hexdigest()[:12]}",
@@ -733,7 +763,7 @@ def scrape_properstar(city="Lausanne", transaction="location", max_pages=1):
                         canton=CITY_CANTONS.get(city.lower(), ''),
                         postal_code=None,
                         latitude=None, longitude=None,
-                        features=[], images=[], published_at=None,
+                        features=[], images=images, published_at=None,
                     ))
             except Exception:
                 pass

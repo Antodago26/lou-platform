@@ -508,9 +508,44 @@ def get_properties():
         """, count_params)
         total = cur.fetchone()['total']
 
-        # Format for frontend
-        results = []
+        # Format for frontend with cross-portal merging
+        def _merge_key(p):
+            """Generate a key to detect same property across portals."""
+            city = (p.get('city') or '').lower().strip()
+            price = p.get('price') or 0
+            # Round price to nearest 50 to catch small variations
+            price_bucket = round(price / 50) * 50 if price else 0
+            # Use first 30 chars of title (normalized) + city + price bucket
+            title_norm = re.sub(r'[^a-z0-9]', '', (p.get('title') or '').lower())[:30]
+            return f"{city}:{price_bucket}:{title_norm}"
+
+        # Group properties by merge key
+        merged = {}
         for p in properties:
+            key = _merge_key(p)
+            if key not in merged:
+                merged[key] = p
+                merged[key]['_all_sources'] = [{'source': p['source'] or '', 'url': p['source_url'] or ''}]
+                # Keep best images
+                merged[key]['_best_images'] = p['images'] or []
+            else:
+                # Merge: add source link, keep better data
+                merged[key]['_all_sources'].append({'source': p['source'] or '', 'url': p['source_url'] or ''})
+                # Keep images from whichever has them
+                if (p['images'] or []) and not merged[key]['_best_images']:
+                    merged[key]['_best_images'] = p['images']
+                # Keep higher score
+                if (p['total_score'] or 0) > (merged[key]['total_score'] or 0):
+                    old_sources = merged[key]['_all_sources']
+                    old_images = merged[key]['_best_images']
+                    merged[key] = p
+                    merged[key]['_all_sources'] = old_sources
+                    merged[key]['_best_images'] = old_images
+
+        results = []
+        for p in merged.values():
+            all_sources = p.pop('_all_sources', [])
+            best_images = p.pop('_best_images', [])
             results.append({
                 'id': p['id'],
                 'title': p['title'] or 'Bien immobilier',
@@ -521,12 +556,13 @@ def get_properties():
                 'surface': p['surface'] or 0,
                 'floor': p['floor'],
                 'features': p['features'] or [],
-                'source': p['source'] or '',
-                'source_url': p['source_url'] or '',
+                'source': all_sources[0]['source'] if all_sources else '',
+                'source_url': all_sources[0]['url'] if all_sources else '',
+                'all_sources': all_sources,
                 'contact_name': p['contact_name'] or '',
                 'contact_phone': p['contact_phone'] or '',
                 'contact_email': p['contact_email'] or '',
-                'images': p['images'] or [],
+                'images': best_images or p['images'] or [],
                 'score': p['total_score'],
                 'grade': p['grade'],
                 'distance_km': float(p['distance_km']) if p['distance_km'] else None,
@@ -542,7 +578,7 @@ def get_properties():
                 'is_favorite': p['is_favorite']
             })
 
-        return jsonify({"properties": results, "total": total, "page": page, "per_page": per_page})
+        return jsonify({"properties": results, "total": len(results), "page": page, "per_page": per_page})
     finally:
         cur.close()
         return_db(conn)

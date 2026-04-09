@@ -70,22 +70,36 @@ def run():
         return
 
     # Step 2: Collect unique city + transaction combos to scrape
+    # Include all major cities in canton Neuchâtel for comprehensive coverage
+    NE_CITIES = [
+        'Neuchâtel', 'La Chaux-de-Fonds', 'Le Locle', 'Cortaillod',
+        'Peseux', 'Boudry', 'Val-de-Travers', 'Milvignes',
+        'Hauterive', 'Saint-Blaise', 'Colombier', 'Corcelles-Cormondrèche',
+        'La Tène', 'Le Landeron', 'Bevaix', 'Val-de-Ruz'
+    ]
+
     scrape_targets = set()
+    transactions_needed = set()
     for p in profiles:
         zones = p.get('zones', [])
         tx = p.get('transaction', 'location')
+        transactions_needed.add(tx)
         if zones:
             for z in zones:
                 if isinstance(z, dict) and z.get('city'):
                     scrape_targets.add((z['city'], tx))
-        # No fallback — skip profiles without zones
+
+    # Add all Neuchâtel canton cities for each transaction type needed
+    for tx in transactions_needed:
+        for city in NE_CITIES:
+            scrape_targets.add((city, tx))
 
     if not scrape_targets:
         log.info("No scrape targets found (profiles have no zones)")
         db.close()
         return
 
-    log.info(f"Scraping {len(scrape_targets)} city/transaction combos")
+    log.info(f"Scraping {len(scrape_targets)} city/transaction combos (canton NE)")
 
     # Step 3: Scrape all targets (commit after each city to avoid losing data)
     total_scraped = 0

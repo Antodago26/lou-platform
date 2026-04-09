@@ -528,29 +528,16 @@
     loadProfileBar();
     loadProperties(1, 'score', 0);
 
-    // Refresh button — launch background scrape+score, then poll for results
+    // Refresh button — reload data from database without scraping
     $('refresh-btn').onclick = function () {
       var btn = this;
       btn.disabled = true;
-      btn.textContent = '⟳ Recherche en cours...';
-      apiFetch(API + '/api/scrape', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
-        .then(function () {
-          // Scraping runs in background (~60s). Wait then reload.
-          btn.textContent = '⟳ Scraping 8 portails...';
-          setTimeout(function () {
-            btn.textContent = '⟳ Mise a jour...';
-            loadStats();
-            loadProfileBar();
-            loadProperties(1, 'score', 0);
-            btn.textContent = '↻ Actualiser';
-            btn.disabled = false;
-          }, 90000); // 90 seconds for background scrape+score to finish
-        })
-        .catch(function () {
-          btn.textContent = '↻ Actualiser';
-          btn.disabled = false;
-          loadProperties(1, 'score', 0);
-        });
+      btn.textContent = '⟳ Chargement...';
+      loadStats();
+      loadProfileBar();
+      loadProperties(1, 'score', 0);
+      btn.textContent = '↻ Actualiser';
+      btn.disabled = false;
     };
 
     // Sort/filter change
@@ -852,8 +839,20 @@
           ) : '') +
         '</div>' +
         '<div class="prop-footer">' +
-          '<span class="prop-source">' + escapeHtml(sourceLabel) + '</span>' +
-          (p.source_url ? '<a href="' + escapeHtml(p.source_url) + '" target="_blank" rel="noopener" class="prop-link">Voir l\'annonce &rarr;</a>' : '') +
+          (function() {
+            var sources = p.all_sources || [{ source: p.source || '', url: p.source_url || '' }];
+            var html = '<div class="prop-sources">';
+            sources.forEach(function(s) {
+              var name = (s.source || '').replace('www.', '').split('.')[0] || 'Source';
+              if (s.url) {
+                html += '<a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener" class="prop-source-link">' + escapeHtml(name) + '</a> ';
+              } else {
+                html += '<span class="prop-source">' + escapeHtml(name) + '</span> ';
+              }
+            });
+            html += '</div>';
+            return html;
+          })() +
         '</div>' +
       '</div>' +
     '</div>';
@@ -1151,6 +1150,9 @@
       // Card footer
       '.prop-footer{display:flex;justify-content:space-between;align-items:center;padding-top:12px;border-top:1px solid #f1f5f9}',
       '.prop-source{font-size:12px;color:#94a3b8;text-transform:capitalize}',
+      '.prop-sources{display:flex;flex-wrap:wrap;gap:6px;align-items:center}',
+      '.prop-source-link{font-size:12px;color:#0369a1;text-decoration:none;font-weight:500;padding:2px 8px;border:1px solid #cbd5e1;border-radius:12px;text-transform:capitalize}',
+      '.prop-source-link:hover{background:#f0f9ff;border-color:#0369a1}',
       '.prop-link{font-size:13px;color:#0369a1;text-decoration:none;font-weight:500}',
       '.prop-link:hover{text-decoration:underline}',
 
