@@ -9,6 +9,7 @@ Usage:
     python3 local_scraper.py --city Genève --transaction achat
 """
 
+import os
 import re
 import sys
 import json
@@ -31,9 +32,9 @@ except ImportError:
 # CONFIG
 # ============================================================
 
-BACKEND_URL = "https://lou-platform.onrender.com"
-LOGIN_EMAIL = "antony@lougarou.ch"
-LOGIN_PASSWORD = "LouGarou2026!"
+BACKEND_URL = os.environ.get("LOU_BACKEND_URL", "https://lou-platform.onrender.com")
+LOGIN_EMAIL = os.environ.get("LOU_LOGIN_EMAIL", "")
+LOGIN_PASSWORD = os.environ.get("LOU_LOGIN_PASSWORD", "")
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',

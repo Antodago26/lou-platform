@@ -8,7 +8,8 @@
   // Dynamic API URL — works on any host (garou.ch, onrender, localhost)
   var API = window.location.origin;
   var TOKEN = localStorage.getItem('lou_token');
-  var USER = JSON.parse(localStorage.getItem('lou_user') || 'null');
+  var USER = null;
+  try { USER = JSON.parse(localStorage.getItem('lou_user') || 'null'); } catch(e) { localStorage.removeItem('lou_user'); }
 
   // Accumulated chatbot criteria (persists across messages)
   var chatCriteria = {};

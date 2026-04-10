@@ -4,49 +4,92 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Lou Garou — Mon Profil</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#0f172a;--card:#1e293b;--bd:#334155;--ac:#0ea5e9;--tx:#f1f5f9;--mt:#94a3b8;--gn:#059669;--rd:#ef4444}
-body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--tx);min-height:100vh}
-.nav{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:var(--card);border-bottom:1px solid var(--bd)}
-.nav-brand{display:flex;align-items:center;gap:8px;font-size:18px;font-weight:700}
-.nav-links{display:flex;gap:16px;font-size:13px}
-.nav-links a{color:var(--mt);text-decoration:none}
-.nav-links a.on{color:var(--tx)}
-.wrap{max-width:900px;margin:0 auto;padding:20px}
-h1{font-size:20px;margin-bottom:4px}
-.sub{color:var(--mt);font-size:13px;margin-bottom:20px}
-.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:18px;margin-bottom:14px}
-.card h3{font-size:14px;margin-bottom:12px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-@media(max-width:600px){.grid{grid-template-columns:1fr}}
-.fg{display:flex;flex-direction:column;gap:4px}
-.fg label{font-size:12px;color:var(--mt)}
-.fg input,.fg select{background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:8px 12px;color:var(--tx);font-size:13px;outline:none}
+:root{--bg:#0f172a;--card:#1e293b;--bd:#334155;--ac:#0ea5e9;--ac2:#0284c7;--tx:#f1f5f9;--mt:#94a3b8;--gn:#059669;--rd:#ef4444;--amber:#f59e0b}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--tx);min-height:100vh}
+a{color:var(--ac);text-decoration:none}
+
+/* NAV */
+.nav{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;background:var(--card);border-bottom:1px solid var(--bd)}
+.nav-brand{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:700}
+.nav-links{display:flex;gap:20px;font-size:14px}
+.nav-links a{color:var(--mt);transition:color .2s}
+.nav-links a:hover{color:var(--tx)}
+.nav-links a.on{color:var(--tx);font-weight:600}
+
+/* LAYOUT */
+.wrap{max-width:960px;margin:0 auto;padding:24px 20px}
+h1{font-size:24px;font-weight:700;margin-bottom:4px}
+.sub{color:var(--mt);font-size:14px;margin-bottom:24px}
+
+/* CARDS */
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:24px;margin-bottom:16px}
+.card-title{font-size:16px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.card-desc{font-size:13px;color:var(--mt);margin-bottom:16px}
+
+/* GRID */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:640px){.grid{grid-template-columns:1fr}}
+
+/* FORM */
+.fg{display:flex;flex-direction:column;gap:6px}
+.fg label{font-size:13px;font-weight:500;color:var(--mt)}
+.fg input,.fg select{background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:10px 14px;color:var(--tx);font-size:14px;outline:none;transition:border-color .2s}
 .fg input:focus,.fg select:focus{border-color:var(--ac)}
-.chips{display:flex;flex-wrap:wrap;gap:6px}
-.chip{padding:5px 12px;border-radius:18px;font-size:12px;cursor:pointer;border:1px solid var(--bd);color:var(--mt);transition:all .2s;user-select:none}
-.chip.on{background:var(--ac);border-color:var(--ac);color:#fff}
-.zone-list{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
-.zone{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:8px 12px;font-size:13px}
+.fg input::placeholder{color:#475569}
+
+/* ZONES */
+.zone-list{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.zone{display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:10px 14px;font-size:14px}
 .zone .city{flex:1;font-weight:500}
-.zone .km{color:var(--ac);font-size:12px}
-.zone .rm{background:none;border:none;color:var(--rd);cursor:pointer;font-size:14px}
-.add-row{display:flex;gap:6px}
-.add-row input{flex:1}
-.add-row select{width:90px}
-.btn{padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .2s}
+.zone .km{font-size:13px;color:var(--ac);font-weight:600}
+.zone .rm{background:none;border:none;color:var(--rd);cursor:pointer;font-size:16px;padding:0 4px;transition:opacity .2s}
+.zone .rm:hover{opacity:.7}
+.add-row{display:flex;gap:8px;align-items:end}
+.add-row .fg{flex:1}
+.add-row select{width:120px}
+
+/* CHIPS */
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{padding:7px 16px;border-radius:20px;font-size:13px;cursor:pointer;border:1px solid var(--bd);background:var(--bg);color:var(--mt);transition:all .2s;user-select:none}
+.chip:hover{border-color:var(--ac);color:var(--tx)}
+.chip.on{background:var(--ac);border-color:var(--ac);color:#fff}
+
+/* RANGE SLIDER */
+.range-r{display:flex;align-items:center;gap:12px}
+.range-r input[type=range]{flex:1;accent-color:var(--ac);height:6px;cursor:pointer}
+.range-v{font-size:14px;font-weight:600;min-width:100px;text-align:right;color:var(--ac)}
+
+/* BUTTONS */
+.btn{padding:11px 24px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;border:none;transition:all .2s}
 .btn-p{background:var(--ac);color:#fff}
-.btn-p:hover{background:#0284c7}
+.btn-p:hover{background:var(--ac2);transform:translateY(-1px);box-shadow:0 4px 12px rgba(14,165,233,.3)}
 .btn-o{background:transparent;border:1px solid var(--bd);color:var(--tx)}
-.btn-row{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
-.msg{padding:12px;border-radius:8px;margin-bottom:14px;font-size:13px;display:none}
-.msg.ok{display:block;background:#059669;color:#fff}
-.msg.err{display:block;background:#ef4444;color:#fff}
-.loading{text-align:center;padding:40px;color:var(--mt)}
-.range-r{display:flex;align-items:center;gap:8px}
-.range-r input[type=range]{flex:1;accent-color:var(--ac)}
-.range-v{font-size:13px;font-weight:600;color:var(--ac);min-width:70px;text-align:right}
+.btn-o:hover{border-color:var(--ac);color:var(--ac)}
+.btn-row{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+
+/* MESSAGES */
+.msg{padding:14px 18px;border-radius:10px;margin-bottom:16px;font-size:14px;display:none;font-weight:500}
+.msg.ok{display:block;background:rgba(5,150,105,.15);color:#34d399;border:1px solid rgba(5,150,105,.3)}
+.msg.err{display:block;background:rgba(239,68,68,.15);color:#fca5a5;border:1px solid rgba(239,68,68,.3)}
+.loading{text-align:center;padding:60px;color:var(--mt);font-size:15px}
+
+/* SCORING EXPLAIN */
+.score-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:640px){.score-grid{grid-template-columns:1fr}}
+.score-factor{display:flex;align-items:center;gap:10px;font-size:13px;padding:8px 0}
+.score-factor span:first-child{min-width:110px;color:var(--mt)}
+.score-bar{height:6px;border-radius:3px;background:var(--bd);flex:1;overflow:hidden}
+.score-bar-fill{height:100%;border-radius:3px;background:var(--ac)}
+.score-val{font-size:13px;font-weight:600;color:var(--ac);min-width:35px;text-align:right}
+
+/* GRADES */
+.grades{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;padding:14px;background:var(--bg);border-radius:8px;font-size:13px}
+.grades span{font-weight:600}
+.g-a{color:var(--gn)}.g-b{color:#0369a1}.g-c{color:var(--amber)}.g-d{color:#64748b}
 </style>
 </head>
 <body>
@@ -62,25 +105,29 @@ h1{font-size:20px;margin-bottom:4px}
 
 <div class="wrap">
   <h1>Mon profil de recherche</h1>
-  <div class="sub">Affinez vos criteres pour des resultats plus precis</div>
+  <div class="sub">Affinez vos criteres pour des resultats plus precis — Lou ajustera le scoring en consequence</div>
 
   <div class="msg" id="msg"></div>
   <div class="loading" id="loading">Chargement du profil...</div>
 
   <div id="formWrap" style="display:none">
 
+    <!-- ZONES -->
     <div class="card">
-      <h3>📍 Zones geographiques</h3>
+      <div class="card-title">📍 Zones geographiques</div>
+      <div class="card-desc">Ajoutez les villes et definissez un rayon de recherche autour de chaque point</div>
       <div class="zone-list" id="zoneList"></div>
       <div class="add-row">
-        <div class="fg" style="flex:1"><input type="text" id="newCity" placeholder="Ville..."></div>
-        <div class="fg"><select id="newKm"><option>1</option><option>2</option><option selected>3</option><option>5</option><option>10</option><option>15</option></select></div>
-        <button class="btn btn-o" onclick="addZone()">+</button>
+        <div class="fg"><label>Ville</label><input type="text" id="newCity" placeholder="Ex: Lausanne, Bienne, La Chaux-de-Fonds..."></div>
+        <div class="fg"><label>Rayon</label><select id="newKm"><option value="1">1 km</option><option value="2">2 km</option><option value="3" selected>3 km</option><option value="5">5 km</option><option value="10">10 km</option><option value="15">15 km</option><option value="20">20 km</option></select></div>
+        <button class="btn btn-o" onclick="addZone()" style="height:41px;margin-top:auto">+ Ajouter</button>
       </div>
     </div>
 
+    <!-- TYPE DE BIEN -->
     <div class="card">
-      <h3>🏠 Type de bien</h3>
+      <div class="card-title">🏠 Type de bien</div>
+      <div class="card-desc">Selectionnez un ou plusieurs types de bien recherches</div>
       <div class="chips" id="typeChips">
         <span class="chip" data-v="appartement" onclick="tc(this)">Appartement</span>
         <span class="chip" data-v="maison" onclick="tc(this)">Maison</span>
@@ -89,38 +136,78 @@ h1{font-size:20px;margin-bottom:4px}
         <span class="chip" data-v="loft" onclick="tc(this)">Loft</span>
         <span class="chip" data-v="attique" onclick="tc(this)">Attique</span>
         <span class="chip" data-v="duplex" onclick="tc(this)">Duplex</span>
+        <span class="chip" data-v="colocation" onclick="tc(this)">Colocation</span>
       </div>
     </div>
 
+    <!-- TRANSACTION & BUDGET -->
     <div class="card">
-      <h3>💰 Transaction & Budget</h3>
+      <div class="card-title">💰 Transaction & Budget</div>
+      <div class="card-desc">Definissez votre fourchette de prix avec les curseurs</div>
       <div class="grid">
-        <div class="fg"><label>Transaction</label><select id="fTx"><option value="location">Location</option><option value="achat">Achat</option></select></div>
+        <div class="fg"><label>Transaction</label><select id="fTx" onchange="updateBudgetRange()"><option value="location">Location</option><option value="achat">Achat</option></select></div>
         <div class="fg"><label>Devise</label><select id="fCur"><option>CHF</option><option>EUR</option></select></div>
-        <div class="fg"><label>Budget min (CHF)</label><input type="number" id="fBmin" step="100" placeholder="Ex: 1000"></div>
-        <div class="fg"><label>Budget max (CHF)</label><input type="number" id="fBmax" step="100" placeholder="Ex: 2500"></div>
+        <div class="fg">
+          <label>Budget min</label>
+          <div class="range-r">
+            <input type="range" id="fBmin" min="0" max="5000" step="100" value="0" oninput="updateBudgetLabel('fBmin')">
+            <span class="range-v" id="fBminLabel">—</span>
+          </div>
+        </div>
+        <div class="fg">
+          <label>Budget max</label>
+          <div class="range-r">
+            <input type="range" id="fBmax" min="0" max="5000" step="100" value="2500" oninput="updateBudgetLabel('fBmax')">
+            <span class="range-v" id="fBmaxLabel">CHF 2'500</span>
+          </div>
+        </div>
       </div>
     </div>
 
+    <!-- CARACTERISTIQUES -->
     <div class="card">
-      <h3>📐 Caracteristiques</h3>
+      <div class="card-title">📐 Caracteristiques</div>
       <div class="grid">
-        <div class="fg"><label>Pieces min</label><input type="number" id="fRmin" step="0.5" placeholder="Ex: 3"></div>
-        <div class="fg"><label>Pieces max</label><input type="number" id="fRmax" step="0.5" placeholder="Ex: 5"></div>
-        <div class="fg"><label>Surface min (m²)</label><input type="number" id="fSmin" placeholder="Ex: 70"></div>
-        <div class="fg"><label>Surface max (m²)</label><input type="number" id="fSmax" placeholder="Ex: 150"></div>
+        <div class="fg"><label>Pieces min</label>
+          <div class="range-r">
+            <input type="range" id="fRmin" min="1" max="10" step="0.5" value="3" oninput="this.nextElementSibling.textContent=this.value+' pcs'">
+            <span class="range-v">3 pcs</span>
+          </div>
+        </div>
+        <div class="fg"><label>Pieces max</label>
+          <div class="range-r">
+            <input type="range" id="fRmax" min="1" max="10" step="0.5" value="6" oninput="this.nextElementSibling.textContent=this.value+' pcs'">
+            <span class="range-v">6 pcs</span>
+          </div>
+        </div>
+        <div class="fg"><label>Surface min (m²)</label>
+          <div class="range-r">
+            <input type="range" id="fSmin" min="20" max="300" step="5" value="60" oninput="this.nextElementSibling.textContent=this.value+' m²'">
+            <span class="range-v">60 m²</span>
+          </div>
+        </div>
+        <div class="fg"><label>Surface max (m²)</label>
+          <div class="range-r">
+            <input type="range" id="fSmax" min="20" max="500" step="5" value="200" oninput="this.nextElementSibling.textContent=this.value+' m²'">
+            <span class="range-v">200 m²</span>
+          </div>
+        </div>
       </div>
     </div>
 
+    <!-- PRIORITES -->
     <div class="card">
-      <h3>⭐ Priorites</h3>
+      <div class="card-title">⭐ Priorites & Equipements</div>
+      <div class="card-desc">Selectionnez ce qui est important pour vous — Lou ajustera le scoring en consequence</div>
       <div class="chips" id="prioChips">
-        <span class="chip" data-v="vue" onclick="tc(this)">Vue</span>
-        <span class="chip" data-v="balcon" onclick="tc(this)">Balcon</span>
+        <span class="chip" data-v="vue" onclick="tc(this)">Vue degagee</span>
+        <span class="chip" data-v="balcon" onclick="tc(this)">Balcon/terrasse</span>
         <span class="chip" data-v="calme" onclick="tc(this)">Calme</span>
         <span class="chip" data-v="parking" onclick="tc(this)">Parking</span>
-        <span class="chip" data-v="transports" onclick="tc(this)">Transports</span>
-        <span class="chip" data-v="animaux" onclick="tc(this)">Animaux</span>
+        <span class="chip" data-v="transports" onclick="tc(this)">Proche transports</span>
+        <span class="chip" data-v="ecoles" onclick="tc(this)">Proche ecoles</span>
+        <span class="chip" data-v="commerces" onclick="tc(this)">Proche commerces</span>
+        <span class="chip" data-v="animaux" onclick="tc(this)">Animaux acceptes</span>
         <span class="chip" data-v="cave" onclick="tc(this)">Cave</span>
         <span class="chip" data-v="jardin" onclick="tc(this)">Jardin</span>
         <span class="chip" data-v="ascenseur" onclick="tc(this)">Ascenseur</span>
@@ -131,32 +218,56 @@ h1{font-size:20px;margin-bottom:4px}
       </div>
     </div>
 
+    <!-- POIDS SCORING -->
     <div class="card">
-      <h3>⚙️ Poids du scoring</h3>
-      <div class="grid">
-        <div class="fg"><label>Zone geographique</label><div class="range-r"><input type="range" id="wZone" min="0" max="50" value="30" oninput="this.nextElementSibling.textContent=this.value+'%'"><span class="range-v">30%</span></div></div>
-        <div class="fg"><label>Budget</label><div class="range-r"><input type="range" id="wBudget" min="0" max="50" value="25" oninput="this.nextElementSibling.textContent=this.value+'%'"><span class="range-v">25%</span></div></div>
-        <div class="fg"><label>Type & pieces</label><div class="range-r"><input type="range" id="wType" min="0" max="50" value="20" oninput="this.nextElementSibling.textContent=this.value+'%'"><span class="range-v">20%</span></div></div>
-        <div class="fg"><label>Surface</label><div class="range-r"><input type="range" id="wSurface" min="0" max="50" value="10" oninput="this.nextElementSibling.textContent=this.value+'%'"><span class="range-v">10%</span></div></div>
-        <div class="fg"><label>Equipements</label><div class="range-r"><input type="range" id="wEquip" min="0" max="50" value="10" oninput="this.nextElementSibling.textContent=this.value+'%'"><span class="range-v">10%</span></div></div>
-        <div class="fg"><label>Fraicheur</label><div class="range-r"><input type="range" id="wFresh" min="0" max="50" value="5" oninput="this.nextElementSibling.textContent=this.value+'%'"><span class="range-v">5%</span></div></div>
+      <div class="card-title">⚙️ Poids du scoring</div>
+      <div class="card-desc">Ajustez l'importance de chaque critere selon vos preferences</div>
+
+      <div class="score-grid" id="scorePreview">
+        <div class="score-factor"><span>Zone geographique</span><div class="score-bar"><div class="score-bar-fill" id="barZone" style="width:30%"></div></div><span class="score-val" id="valZone">30%</span></div>
+        <div class="score-factor"><span>Budget</span><div class="score-bar"><div class="score-bar-fill" id="barBudget" style="width:25%"></div></div><span class="score-val" id="valBudget">25%</span></div>
+        <div class="score-factor"><span>Type & pieces</span><div class="score-bar"><div class="score-bar-fill" id="barType" style="width:20%"></div></div><span class="score-val" id="valType">20%</span></div>
+        <div class="score-factor"><span>Surface</span><div class="score-bar"><div class="score-bar-fill" id="barSurface" style="width:10%"></div></div><span class="score-val" id="valSurface">10%</span></div>
+        <div class="score-factor"><span>Equipements</span><div class="score-bar"><div class="score-bar-fill" id="barEquip" style="width:10%"></div></div><span class="score-val" id="valEquip">10%</span></div>
+        <div class="score-factor"><span>Fraicheur annonce</span><div class="score-bar"><div class="score-bar-fill" id="barFresh" style="width:5%"></div></div><span class="score-val" id="valFresh">5%</span></div>
+      </div>
+
+      <div style="margin-top:16px">
+        <div class="grid">
+          <div class="fg"><label>Zone geographique</label><div class="range-r"><input type="range" id="wZone" min="0" max="50" value="30" oninput="updateWeight('Zone',this.value)"><span class="range-v">30%</span></div></div>
+          <div class="fg"><label>Budget</label><div class="range-r"><input type="range" id="wBudget" min="0" max="50" value="25" oninput="updateWeight('Budget',this.value)"><span class="range-v">25%</span></div></div>
+          <div class="fg"><label>Type & pieces</label><div class="range-r"><input type="range" id="wType" min="0" max="50" value="20" oninput="updateWeight('Type',this.value)"><span class="range-v">20%</span></div></div>
+          <div class="fg"><label>Surface</label><div class="range-r"><input type="range" id="wSurface" min="0" max="50" value="10" oninput="updateWeight('Surface',this.value)"><span class="range-v">10%</span></div></div>
+          <div class="fg"><label>Equipements</label><div class="range-r"><input type="range" id="wEquip" min="0" max="50" value="10" oninput="updateWeight('Equip',this.value)"><span class="range-v">10%</span></div></div>
+          <div class="fg"><label>Fraicheur</label><div class="range-r"><input type="range" id="wFresh" min="0" max="50" value="5" oninput="updateWeight('Fresh',this.value)"><span class="range-v">5%</span></div></div>
+        </div>
+      </div>
+
+      <div class="grades">
+        <span class="g-a">A (85-100)</span> Excellente &nbsp;|&nbsp;
+        <span class="g-b">B (70-84)</span> Tres bon &nbsp;|&nbsp;
+        <span class="g-c">C (55-69)</span> Partielle &nbsp;|&nbsp;
+        <span class="g-d">D (0-54)</span> Faible
       </div>
     </div>
 
     <div class="btn-row">
       <button class="btn btn-o" onclick="window.location.href=homeUrl">Annuler</button>
-      <button class="btn btn-p" onclick="saveProfile()">Sauvegarder & relancer Lou 🐺</button>
+      <button class="btn btn-p" id="saveBtn" onclick="saveProfile()">Sauvegarder & relancer Lou 🐺</button>
     </div>
   </div>
 </div>
 
 <script>
 var API = window.location.origin;
-var TOKEN = new URLSearchParams(window.location.search).get('token') || '';
+var TOKEN = localStorage.getItem('lou_token') || new URLSearchParams(window.location.search).get('token') || '';
+if (new URLSearchParams(window.location.search).get('token')) {
+  localStorage.setItem('lou_token', TOKEN);
+  window.history.replaceState({}, '', window.location.pathname);
+}
 var homeUrl = 'https://www.lougarou.ch';
 var zones = [];
 
-// Set dashboard link
 document.getElementById('linkHome').href = homeUrl;
 document.getElementById('linkFav').href = homeUrl;
 
@@ -165,21 +276,68 @@ function tc(el) { el.classList.toggle('on'); }
 function getChips(id) {
   return Array.from(document.querySelectorAll('#' + id + ' .chip.on')).map(function(c) { return c.dataset.v; });
 }
-
 function setChips(id, values) {
   document.querySelectorAll('#' + id + ' .chip').forEach(function(c) {
     c.classList.toggle('on', (values || []).indexOf(c.dataset.v) > -1);
   });
 }
 
+function esc(text) {
+  var d = document.createElement('div');
+  d.textContent = text;
+  return d.innerHTML;
+}
+
+// ---- Budget slider helpers ----
+function formatCHF(v) {
+  if (!v || v === 0) return '—';
+  if (v >= 1000000) return "CHF " + (v/1000000).toFixed(1).replace('.0','') + " M";
+  if (v >= 1000) return "CHF " + v.toString().replace(/\B(?=(\d{3})+(?!\d))/g, "'");
+  return "CHF " + v;
+}
+
+function updateBudgetLabel(id) {
+  var val = parseInt(document.getElementById(id).value);
+  document.getElementById(id + 'Label').textContent = formatCHF(val);
+}
+
+function updateBudgetRange() {
+  var tx = document.getElementById('fTx').value;
+  var bmin = document.getElementById('fBmin');
+  var bmax = document.getElementById('fBmax');
+  if (tx === 'achat') {
+    bmin.min = 0; bmin.max = 3000000; bmin.step = 50000;
+    bmax.min = 0; bmax.max = 3000000; bmax.step = 50000;
+    if (parseInt(bmax.value) < 50000) { bmax.value = 500000; }
+    if (parseInt(bmin.value) > 0 && parseInt(bmin.value) < 50000) { bmin.value = 100000; }
+  } else {
+    bmin.min = 0; bmin.max = 5000; bmin.step = 100;
+    bmax.min = 0; bmax.max = 5000; bmax.step = 100;
+    if (parseInt(bmax.value) > 5000) { bmax.value = 2500; }
+    if (parseInt(bmin.value) > 5000) { bmin.value = 0; }
+  }
+  updateBudgetLabel('fBmin');
+  updateBudgetLabel('fBmax');
+}
+
+// ---- Weight helpers ----
+function updateWeight(name, val) {
+  var slider = document.getElementById('w' + name);
+  slider.nextElementSibling.textContent = val + '%';
+  var bar = document.getElementById('bar' + name);
+  var valEl = document.getElementById('val' + name);
+  if (bar) { bar.style.width = (val * 2) + '%'; }
+  if (valEl) { valEl.textContent = val + '%'; }
+}
+
+// ---- Zones ----
 function renderZones() {
   var h = '';
   zones.forEach(function(z, i) {
-    h += '<div class="zone"><span class="city">📍 ' + z.city + '</span><span class="km">' + z.radius_km + ' km</span><button class="rm" onclick="rmZone(' + i + ')">✕</button></div>';
+    h += '<div class="zone"><span class="city">📍 ' + esc(z.city) + '</span><span class="km">' + esc(String(z.radius_km)) + ' km</span><button class="rm" onclick="rmZone(' + i + ')">✕</button></div>';
   });
   document.getElementById('zoneList').innerHTML = h;
 }
-
 function addZone() {
   var city = document.getElementById('newCity').value.trim();
   var km = parseFloat(document.getElementById('newKm').value);
@@ -188,16 +346,26 @@ function addZone() {
   document.getElementById('newCity').value = '';
   renderZones();
 }
-
 function rmZone(i) { zones.splice(i, 1); renderZones(); }
 
+// ---- Messages ----
 function showMsg(text, ok) {
   var m = document.getElementById('msg');
   m.textContent = text;
   m.className = 'msg ' + (ok ? 'ok' : 'err');
-  setTimeout(function() { m.className = 'msg'; }, 4000);
+  setTimeout(function() { m.className = 'msg'; }, 5000);
 }
 
+// ---- Slider helper: set value + label ----
+function setSlider(id, val, suffix) {
+  var el = document.getElementById(id);
+  if (!val && val !== 0) return;
+  el.value = val;
+  var label = el.nextElementSibling;
+  if (label) label.textContent = val + (suffix || '');
+}
+
+// ---- API: Load profile ----
 function loadProfile() {
   if (!TOKEN) {
     document.getElementById('loading').textContent = 'Non authentifie. Connectez-vous depuis le site.';
@@ -206,28 +374,42 @@ function loadProfile() {
   fetch(API + '/api/profile', {
     headers: { 'Authorization': 'Bearer ' + TOKEN }
   })
-  .then(function(r) { return r.json(); })
+  .then(function(r) {
+    if (r.status === 401) { document.getElementById('loading').textContent = 'Session expiree. Reconnectez-vous.'; return Promise.reject('401'); }
+    return r.json();
+  })
   .then(function(d) {
+    if (!d) return;
     document.getElementById('loading').style.display = 'none';
     document.getElementById('formWrap').style.display = 'block';
     if (d.profile) {
       var p = d.profile;
       setChips('typeChips', p.property_types);
       document.getElementById('fTx').value = p.transaction || 'location';
-      document.getElementById('fBmin').value = p.budget_min || '';
-      document.getElementById('fBmax').value = p.budget_max || '';
-      document.getElementById('fRmin').value = p.rooms_min || '';
-      document.getElementById('fRmax').value = p.rooms_max || '';
-      document.getElementById('fSmin').value = p.surface_min || '';
-      document.getElementById('fSmax').value = p.surface_max || '';
+      updateBudgetRange();
+      // Budget
+      if (p.budget_min) { document.getElementById('fBmin').value = p.budget_min; updateBudgetLabel('fBmin'); }
+      if (p.budget_max) { document.getElementById('fBmax').value = p.budget_max; updateBudgetLabel('fBmax'); }
+      // Rooms & surface
+      if (p.rooms_min) setSlider('fRmin', p.rooms_min, ' pcs');
+      if (p.rooms_max) setSlider('fRmax', p.rooms_max, ' pcs');
+      if (p.surface_min) setSlider('fSmin', p.surface_min, ' m²');
+      if (p.surface_max) setSlider('fSmax', p.surface_max, ' m²');
       setChips('prioChips', p.priorities);
       // Weights
-      if (p.w_zone) { document.getElementById('wZone').value = p.w_zone; document.querySelector('#wZone + .range-v').textContent = p.w_zone + '%'; }
-      if (p.w_budget) { document.getElementById('wBudget').value = p.w_budget; document.querySelector('#wBudget + .range-v').textContent = p.w_budget + '%'; }
-      if (p.w_type) { document.getElementById('wType').value = p.w_type; document.querySelector('#wType + .range-v').textContent = p.w_type + '%'; }
-      if (p.w_surface) { document.getElementById('wSurface').value = p.w_surface; document.querySelector('#wSurface + .range-v').textContent = p.w_surface + '%'; }
-      if (p.w_equipment) { document.getElementById('wEquip').value = p.w_equipment; document.querySelector('#wEquip + .range-v').textContent = p.w_equipment + '%'; }
-      if (p.w_freshness) { document.getElementById('wFresh').value = p.w_freshness; document.querySelector('#wFresh + .range-v').textContent = p.w_freshness + '%'; }
+      if (p.w_zone) updateWeight('Zone', p.w_zone);
+      if (p.w_budget) updateWeight('Budget', p.w_budget);
+      if (p.w_type) updateWeight('Type', p.w_type);
+      if (p.w_surface) updateWeight('Surface', p.w_surface);
+      if (p.w_equipment) updateWeight('Equip', p.w_equipment);
+      if (p.w_freshness) updateWeight('Fresh', p.w_freshness);
+      // Also set slider positions for weights
+      if (p.w_zone) document.getElementById('wZone').value = p.w_zone;
+      if (p.w_budget) document.getElementById('wBudget').value = p.w_budget;
+      if (p.w_type) document.getElementById('wType').value = p.w_type;
+      if (p.w_surface) document.getElementById('wSurface').value = p.w_surface;
+      if (p.w_equipment) document.getElementById('wEquip').value = p.w_equipment;
+      if (p.w_freshness) document.getElementById('wFresh').value = p.w_freshness;
       // Zones
       var pz = p.zones;
       if (pz && Array.isArray(pz)) {
@@ -236,18 +418,29 @@ function loadProfile() {
       }
     }
   })
-  .catch(function() {
+  .catch(function(e) {
+    if (e === '401') return;
     document.getElementById('loading').textContent = 'Erreur de chargement.';
   });
 }
 
+// ---- API: Save profile ----
 function saveProfile() {
+  var btn = document.getElementById('saveBtn');
+  btn.textContent = 'Sauvegarde en cours...';
+  btn.disabled = true;
+
+  var bmin = parseInt(document.getElementById('fBmin').value) || null;
+  var bmax = parseInt(document.getElementById('fBmax').value) || null;
+  if (bmin === 0) bmin = null;
+  if (bmax === 0) bmax = null;
+
   var data = {
     zones: zones,
     property_types: getChips('typeChips'),
     transaction: document.getElementById('fTx').value,
-    budget_min: parseInt(document.getElementById('fBmin').value) || null,
-    budget_max: parseInt(document.getElementById('fBmax').value) || null,
+    budget_min: bmin,
+    budget_max: bmax,
     rooms_min: parseFloat(document.getElementById('fRmin').value) || null,
     rooms_max: parseFloat(document.getElementById('fRmax').value) || null,
     surface_min: parseInt(document.getElementById('fSmin').value) || null,
@@ -273,15 +466,23 @@ function saveProfile() {
   })
   .then(function(r) { return r.json(); })
   .then(function(d) {
+    btn.textContent = 'Sauvegarder & relancer Lou 🐺';
+    btn.disabled = false;
     if (d.ok) {
       showMsg('Criteres sauvegardes ! Lou relance la recherche 🐺', true);
     } else {
       showMsg(d.error || 'Erreur', false);
     }
   })
-  .catch(function() { showMsg('Erreur reseau', false); });
+  .catch(function() {
+    btn.textContent = 'Sauvegarder & relancer Lou 🐺';
+    btn.disabled = false;
+    showMsg('Erreur reseau', false);
+  });
 }
 
+// Init
+updateBudgetRange();
 loadProfile();
 </script>
 </body>

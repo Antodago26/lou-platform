@@ -36,6 +36,18 @@ log = logging.getLogger('lou-app')
 
 app = Flask(__name__, static_folder='static')
 
+
+@app.after_request
+def add_security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    if request.is_secure:
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    return response
+
+
 # CORS: restrict to known domains (add your domains here)
 ALLOWED_ORIGINS = os.environ.get('ALLOWED_ORIGINS', 'https://garou.ch,https://www.garou.ch,https://lou-platform.onrender.com,http://localhost:5000').split(',')
 CORS(app, resources={r"/api/*": {"origins": ALLOWED_ORIGINS}})
@@ -92,7 +104,7 @@ def token_required(f):
 def make_token(user_id):
     """Generate a JWT token."""
     return jwt.encode(
-        {'user_id': user_id, 'exp': datetime.now(timezone.utc) + timedelta(days=30)},
+        {'user_id': user_id, 'exp': datetime.now(timezone.utc) + timedelta(days=7)},
         JWT_SECRET, algorithm='HS256'
     )
 
@@ -140,10 +152,10 @@ def signup():
     name = data.get('name', '')
     criteria = data.get('criteria', {})
 
-    if not email or '@' not in email:
+    if not email or not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
         return jsonify({"error": "Email invalide"}), 400
-    if len(password) < 6:
-        return jsonify({"error": "Mot de passe trop court (6 car. min)"}), 400
+    if len(password) < 8:
+        return jsonify({"error": "Mot de passe trop court (8 car. min)"}), 400
 
     pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
@@ -191,7 +203,8 @@ def signup():
         return jsonify({"error": "Email déjà utilisé"}), 409
     except Exception as e:
         conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Signup error: {e}")
+        return jsonify({"error": "Erreur serveur lors de l'inscription"}), 500
     finally:
         cur.close()
         return_db(conn)
@@ -425,7 +438,8 @@ def update_profile():
         return jsonify({"ok": True, "profile_id": profile_id})
     except Exception as e:
         conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        log.error(f"Profile update error: {e}")
+        return jsonify({"error": "Erreur serveur lors de la mise a jour du profil"}), 500
     finally:
         cur.close()
         return_db(conn)
@@ -511,12 +525,23 @@ def get_properties():
 
         # Format for frontend with cross-portal merging
         def _merge_key(p):
-            """Generate a key to detect same property across portals."""
-            city = (p.get('city') or '').lower().strip()
+            """Generate a key to detect same property across portals.
+            Primary: postal_code + price±100 + rooms + surface±5m2 (robust across portals).
+            Fallback: city + price±100 + normalized title (when data is incomplete).
+            """
+            postal = (p.get('postal_code') or '').strip()
             price = p.get('price') or 0
-            # Round price to nearest 50 to catch small variations
-            price_bucket = round(price / 50) * 50 if price else 0
-            # Use first 30 chars of title (normalized) + city + price bucket
+            price_bucket = round(price / 100) * 100 if price else 0
+            rooms = p.get('rooms')
+            surface = p.get('surface') or 0
+            surface_bucket = round(surface / 5) * 5 if surface else 0
+
+            # Primary key: postal + price + rooms + surface (title-independent)
+            if postal and price and rooms:
+                return f"{postal}:{price_bucket}:{rooms}:{surface_bucket}"
+
+            # Fallback: city + price + title
+            city = (p.get('city') or '').lower().strip()
             title_norm = re.sub(r'[^a-z0-9]', '', (p.get('title') or '').lower())[:30]
             return f"{city}:{price_bucket}:{title_norm}"
 
@@ -603,13 +628,13 @@ def get_stats():
         active_pid = prof['id'] if prof else None
 
         tx_filter = ""
-        params = [user_id]
+        extra_params = []
         if active_pid:
             tx_filter += " AND sp.profile_id = %s"
-            params.append(active_pid)
+            extra_params.append(active_pid)
         if user_tx:
             tx_filter += " AND p.transaction = %s"
-            params.append(user_tx)
+            extra_params.append(user_tx)
 
         cur.execute(f"""
             SELECT
@@ -619,7 +644,7 @@ def get_stats():
             FROM scored_properties sp
             JOIN properties p ON p.id = sp.property_id
             WHERE sp.user_id = %s AND p.is_active = TRUE{tx_filter}
-        """, [user_id] + params)
+        """, [user_id, user_id] + extra_params)
         stats = dict(cur.fetchone())
         return jsonify(stats)
     finally:
@@ -775,6 +800,10 @@ def api_chat():
     if not message:
         return jsonify({"error": "Message vide"}), 400
 
+    # Limit message size to prevent abuse (max 2000 chars)
+    if len(message) > 2000:
+        return jsonify({"error": "Message trop long (2000 caracteres max)"}), 400
+
     # Authenticate: use JWT if present, else anonymous session
     token = request.headers.get('Authorization', '').replace('Bearer ', '')
     is_anonymous = False
@@ -783,10 +812,14 @@ def api_chat():
             token_data = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
             user_id = str(token_data['user_id'])
         except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
-            user_id = str(data.get('user_id', 'anon'))
+            # Invalid token — use anonymous session ID (not client-provided user_id)
+            session_id = data.get('session_id', 'anon')
+            user_id = f"anon-{session_id}"
             is_anonymous = True
     else:
-        user_id = str(data.get('user_id', 'anon'))
+        # No token — use anonymous session ID (not client-provided user_id)
+        session_id = data.get('session_id', 'anon')
+        user_id = f"anon-{session_id}"
         is_anonymous = True
 
     if not anthropic_client:
@@ -923,9 +956,11 @@ def chat_reset():
             token_data = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
             uid = str(token_data['user_id'])
         except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
-            uid = str(data.get('user_id', 'anon'))
+            session_id = data.get('session_id', 'anon')
+            uid = f"anon-{session_id}"
     else:
-        uid = str(data.get('user_id', 'anon'))
+        session_id = data.get('session_id', 'anon')
+        uid = f"anon-{session_id}"
     # Delete conversation history from DB
     conn = get_db()
     cur = conn.cursor()
@@ -1098,6 +1133,17 @@ def api_import():
 
     if not listings:
         return jsonify({"error": "No listings provided"}), 400
+    if not isinstance(listings, list) or len(listings) > 500:
+        return jsonify({"error": "Listings invalides (max 500)"}), 400
+
+    # Validate each listing has required fields
+    required_fields = ['title', 'source', 'source_url']
+    for i, listing in enumerate(listings):
+        if not isinstance(listing, dict):
+            return jsonify({"error": f"Listing {i} invalide"}), 400
+        for field in required_fields:
+            if not listing.get(field):
+                return jsonify({"error": f"Listing {i}: champ '{field}' requis"}), 400
 
     conn = get_db()
     try:
@@ -1202,9 +1248,12 @@ def api_score():
 
 
 def _require_cron_secret():
-    """Check that the request has the correct cron secret."""
-    secret = request.args.get('secret', '')
-    if not CRON_SECRET or secret != CRON_SECRET:
+    """Check that the request has the correct cron secret (via header or query param)."""
+    secret = request.headers.get('X-Cron-Secret', '') or request.args.get('secret', '')
+    if not CRON_SECRET:
+        log.warning("CRON_SECRET not configured — cron endpoints are disabled")
+        return False
+    if secret != CRON_SECRET:
         return False
     return True
 
@@ -1224,8 +1273,7 @@ def api_scrape_debug():
 
         results = {
             "scrapingbee_key_set": bool(sb_key and sb_key != 'NOT SET'),
-            "scrapingbee_key_start": sb_key[:8] + '...' if sb_key and sb_key != 'NOT SET' else 'NOT SET',
-            "key_from_scrapers": SCRAPINGBEE_KEY[:8] + '...' if SCRAPINGBEE_KEY else 'EMPTY',
+            "key_from_scrapers_set": bool(SCRAPINGBEE_KEY),
         }
 
         # Test 1: Simple ScrapingBee connectivity test with httpbin
@@ -1237,7 +1285,8 @@ def api_scrape_debug():
                 "html_start": html_test[:200] if html_test else '',
             }
         except Exception as e:
-            results["httpbin_test"] = {"error": str(e)}
+            log.error(f"httpbin test error: {e}")
+            results["httpbin_test"] = {"error": type(e).__name__}
 
         # Test 2: Run actual Homegate scraper
         try:
@@ -1260,7 +1309,7 @@ def api_scrape_debug():
             }
         except Exception as e:
             log.error(f"Homegate scraper error: {e}", exc_info=True)
-            results["homegate_scraper"] = {"error": str(e)}
+            results["homegate_scraper"] = {"error": type(e).__name__}
 
         return jsonify(results)
 
@@ -1299,7 +1348,8 @@ def api_scrape_test():
             is_json = r.headers.get('content-type', '').startswith('application/json')
             results[endpoint_name] = {"http": r.status_code, "is_json": is_json, "body_preview": body}
         except Exception as e:
-            results[endpoint_name] = {"error": str(e)}
+            log.error(f"{endpoint_name} test error: {e}")
+            results[endpoint_name] = {"error": type(e).__name__}
 
     # 2. Homegate API
     try:
@@ -1310,7 +1360,8 @@ def api_scrape_test():
         body = r.text[:500]
         results['Homegate_API'] = {"http": r.status_code, "body_preview": body}
     except Exception as e:
-        results['Homegate_API'] = {"error": str(e)}
+        log.error(f"Homegate API test error: {e}")
+        results['Homegate_API'] = {"error": type(e).__name__}
 
     # 3. Homegate __NEXT_DATA__
     try:
@@ -1325,7 +1376,8 @@ def api_scrape_test():
             next_snippet = m.group(1) if m else ''
         results['Homegate_Page'] = {"http": r.status_code, "has_NEXT_DATA": has_next, "snippet": next_snippet[:300], "page_size": len(r.text)}
     except Exception as e:
-        results['Homegate_Page'] = {"error": str(e)}
+        log.error(f"Homegate Page test error: {e}")
+        results['Homegate_Page'] = {"error": type(e).__name__}
 
     # 4. ImmoScout24
     try:
@@ -1335,7 +1387,8 @@ def api_scrape_test():
         has_next = '__NEXT_DATA__' in r.text
         results['ImmoScout24'] = {"http": r.status_code, "has_NEXT_DATA": has_next, "page_size": len(r.text)}
     except Exception as e:
-        results['ImmoScout24'] = {"error": str(e)}
+        log.error(f"ImmoScout24 test error: {e}")
+        results['ImmoScout24'] = {"error": type(e).__name__}
 
     # 5. Comparis API
     try:
@@ -1346,7 +1399,8 @@ def api_scrape_test():
         body = r.text[:500]
         results['Comparis_API'] = {"http": r.status_code, "body_preview": body}
     except Exception as e:
-        results['Comparis_API'] = {"error": str(e)}
+        log.error(f"Comparis API test error: {e}")
+        results['Comparis_API'] = {"error": type(e).__name__}
 
     return jsonify({"city": city, "transaction": tx, "results": results})
 
