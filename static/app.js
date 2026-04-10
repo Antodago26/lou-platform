@@ -626,6 +626,57 @@
       .catch(function () {});
   }
 
+  // Profile form state
+  var _pfZones = [];
+
+  function _pfFormatCHF(v) {
+    if (!v || v === 0) return '—';
+    if (v >= 1000000) return "CHF " + (v/1000000).toFixed(1).replace('.0','') + " M";
+    return "CHF " + v.toString().replace(/\B(?=(\d{3})+(?!\d))/g, "'");
+  }
+
+  function _pfRenderZones() {
+    var c = $('pf-zone-list');
+    if (!c) return;
+    c.innerHTML = _pfZones.map(function (z, i) {
+      return '<div class="pf-zone"><span>📍 ' + escapeHtml(z.city) + '</span><span style="color:#0ea5e9;font-size:12px;font-weight:600">' + z.radius_km + ' km</span><button onclick="_pfRmZone(' + i + ')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px">✕</button></div>';
+    }).join('');
+  }
+
+  // Expose globally for onclick
+  window._pfRmZone = function (i) { _pfZones.splice(i, 1); _pfRenderZones(); };
+  window._pfAddZone = function () {
+    var city = $('pf-new-city').value.trim();
+    var km = parseFloat($('pf-new-km').value) || 3;
+    if (!city) return;
+    _pfZones.push({ city: city, canton: '', radius_km: km });
+    $('pf-new-city').value = '';
+    _pfRenderZones();
+  };
+  window._pfToggleChip = function (el) { el.classList.toggle('on'); };
+  window._pfUpdateBudget = function (id) {
+    var val = parseInt($(id).value);
+    $(id + '-label').textContent = _pfFormatCHF(val);
+  };
+  window._pfUpdateRange = function (el) {
+    el.nextElementSibling.textContent = el.value + (el.dataset.unit || '');
+  };
+  window._pfSetTx = function () {
+    var tx = $('pf-transaction').value;
+    var bmin = $('pf-budget-min'), bmax = $('pf-budget-max');
+    if (tx === 'achat') {
+      bmin.min=0; bmin.max=3000000; bmin.step=50000;
+      bmax.min=0; bmax.max=3000000; bmax.step=50000;
+      if (parseInt(bmax.value)<50000) bmax.value=500000;
+    } else {
+      bmin.min=0; bmin.max=5000; bmin.step=100;
+      bmax.min=0; bmax.max=5000; bmax.step=100;
+      if (parseInt(bmax.value)>5000) bmax.value=2500;
+      if (parseInt(bmin.value)>5000) bmin.value=0;
+    }
+    _pfUpdateBudget('pf-budget-min'); _pfUpdateBudget('pf-budget-max');
+  };
+
   function toggleProfileForm() {
     var formWrap = $('profile-edit-form');
     if (!formWrap) return;
@@ -634,72 +685,103 @@
       return;
     }
     var p = _currentProfile || {};
-    var zones = (p.zones || []).filter(function (z) { return z && z.city; });
-    var zoneVal = zones.map(function (z) { return z.city; }).join(', ');
+    _pfZones = (p.zones || []).filter(function (z) { return z && z.city; }).map(function (z) { return { city: z.city, canton: z.canton || '', radius_km: z.radius_km || 3 }; });
+
+    var types = ['appartement','maison','villa','studio','loft','attique','duplex','colocation'];
+    var pTypes = p.property_types || [];
+    var typeChips = types.map(function (t) {
+      return '<span class="pf-chip' + (pTypes.indexOf(t) > -1 ? ' on' : '') + '" data-v="' + t + '" onclick="_pfToggleChip(this)">' + t.charAt(0).toUpperCase() + t.slice(1) + '</span>';
+    }).join('');
+
+    var prios = ['vue','balcon','calme','parking','transports','ecoles','commerces','animaux','cave','jardin','ascenseur','renove','minergie','meuble','buanderie'];
+    var prioLabels = {'vue':'Vue degagee','balcon':'Balcon/terrasse','calme':'Calme','parking':'Parking','transports':'Proche transports','ecoles':'Proche ecoles','commerces':'Proche commerces','animaux':'Animaux acceptes','cave':'Cave','jardin':'Jardin','ascenseur':'Ascenseur','renove':'Renove','minergie':'Minergie','meuble':'Meuble','buanderie':'Buanderie'};
+    var pPrios = p.priorities || [];
+    var prioChips = prios.map(function (pr) {
+      return '<span class="pf-chip' + (pPrios.indexOf(pr) > -1 ? ' on' : '') + '" data-v="' + pr + '" onclick="_pfToggleChip(this)">' + escapeHtml(prioLabels[pr] || pr) + '</span>';
+    }).join('');
+
+    var isAchat = p.transaction === 'achat';
+    var bMinMax = isAchat ? 3000000 : 5000;
+    var bStep = isAchat ? 50000 : 100;
+    var bMinVal = p.budget_min || 0;
+    var bMaxVal = p.budget_max || (isAchat ? 500000 : 2500);
+    var rMinVal = p.rooms_min || 3;
+    var rMaxVal = p.rooms_max || 6;
+    var sMinVal = p.surface_min || 60;
+    var sMaxVal = p.surface_max || 200;
 
     formWrap.innerHTML =
       '<div class="profile-form">' +
-        '<div class="pf-row">' +
-          '<label>Transaction</label>' +
-          '<select id="pf-transaction">' +
-            '<option value="location"' + (p.transaction === 'location' ? ' selected' : '') + '>Location</option>' +
-            '<option value="achat"' + (p.transaction === 'achat' ? ' selected' : '') + '>Achat</option>' +
-          '</select>' +
+        // Zones
+        '<div class="pf-section"><div class="pf-section-title">📍 Zones geographiques</div>' +
+          '<div id="pf-zone-list" class="pf-zone-list"></div>' +
+          '<div class="pf-zone-add">' +
+            '<input id="pf-new-city" type="text" placeholder="Ajouter une ville..." style="flex:1">' +
+            '<select id="pf-new-km"><option value="1">1 km</option><option value="2">2 km</option><option value="3" selected>3 km</option><option value="5">5 km</option><option value="10">10 km</option><option value="15">15 km</option><option value="20">20 km</option></select>' +
+            '<button class="pf-add-btn" onclick="_pfAddZone()">+</button>' +
+          '</div>' +
         '</div>' +
-        '<div class="pf-row">' +
-          '<label>Type de bien</label>' +
-          '<input id="pf-types" placeholder="appartement, maison" value="' + escapeHtml((p.property_types || []).join(', ')) + '">' +
+        // Type de bien
+        '<div class="pf-section"><div class="pf-section-title">🏠 Type de bien</div>' +
+          '<div class="pf-chips" id="pf-types">' + typeChips + '</div>' +
         '</div>' +
-        '<div class="pf-row">' +
-          '<label>Budget max (CHF)</label>' +
-          '<input id="pf-budget-max" type="number" value="' + (p.budget_max || '') + '">' +
+        // Transaction & Budget
+        '<div class="pf-section"><div class="pf-section-title">💰 Transaction & Budget</div>' +
+          '<div class="pf-grid">' +
+            '<div class="pf-field"><label>Transaction</label><select id="pf-transaction" onchange="_pfSetTx()">' +
+              '<option value="location"' + (p.transaction !== 'achat' ? ' selected' : '') + '>Location</option>' +
+              '<option value="achat"' + (p.transaction === 'achat' ? ' selected' : '') + '>Achat</option>' +
+            '</select></div>' +
+            '<div class="pf-field"><label>Budget min</label>' +
+              '<div class="pf-range"><input type="range" id="pf-budget-min" min="0" max="' + bMinMax + '" step="' + bStep + '" value="' + bMinVal + '" oninput="_pfUpdateBudget(\'pf-budget-min\')"><span id="pf-budget-min-label">' + _pfFormatCHF(bMinVal) + '</span></div></div>' +
+            '<div class="pf-field"><label>Budget max</label>' +
+              '<div class="pf-range"><input type="range" id="pf-budget-max" min="0" max="' + bMinMax + '" step="' + bStep + '" value="' + bMaxVal + '" oninput="_pfUpdateBudget(\'pf-budget-max\')"><span id="pf-budget-max-label">' + _pfFormatCHF(bMaxVal) + '</span></div></div>' +
+          '</div>' +
         '</div>' +
-        '<div class="pf-row">' +
-          '<label>Budget min (CHF)</label>' +
-          '<input id="pf-budget-min" type="number" value="' + (p.budget_min || '') + '">' +
+        // Caracteristiques
+        '<div class="pf-section"><div class="pf-section-title">📐 Caracteristiques</div>' +
+          '<div class="pf-grid">' +
+            '<div class="pf-field"><label>Pieces min</label><div class="pf-range"><input type="range" id="pf-rooms-min" min="1" max="10" step="0.5" value="' + rMinVal + '" data-unit=" pcs" oninput="_pfUpdateRange(this)"><span>' + rMinVal + ' pcs</span></div></div>' +
+            '<div class="pf-field"><label>Pieces max</label><div class="pf-range"><input type="range" id="pf-rooms-max" min="1" max="10" step="0.5" value="' + rMaxVal + '" data-unit=" pcs" oninput="_pfUpdateRange(this)"><span>' + rMaxVal + ' pcs</span></div></div>' +
+            '<div class="pf-field"><label>Surface min (m²)</label><div class="pf-range"><input type="range" id="pf-surface-min" min="20" max="300" step="5" value="' + sMinVal + '" data-unit=" m²" oninput="_pfUpdateRange(this)"><span>' + sMinVal + ' m²</span></div></div>' +
+            '<div class="pf-field"><label>Surface max (m²)</label><div class="pf-range"><input type="range" id="pf-surface-max" min="20" max="500" step="5" value="' + sMaxVal + '" data-unit=" m²" oninput="_pfUpdateRange(this)"><span>' + sMaxVal + ' m²</span></div></div>' +
+          '</div>' +
         '</div>' +
-        '<div class="pf-row">' +
-          '<label>Pieces min</label>' +
-          '<input id="pf-rooms-min" type="number" step="0.5" value="' + (p.rooms_min || '') + '">' +
+        // Priorites
+        '<div class="pf-section"><div class="pf-section-title">⭐ Priorites & Equipements</div>' +
+          '<div class="pf-chips" id="pf-priorities">' + prioChips + '</div>' +
         '</div>' +
-        '<div class="pf-row">' +
-          '<label>Surface min (m2)</label>' +
-          '<input id="pf-surface-min" type="number" value="' + (p.surface_min || '') + '">' +
-        '</div>' +
-        '<div class="pf-row">' +
-          '<label>Villes (separees par virgule)</label>' +
-          '<input id="pf-zones" placeholder="Lausanne, Geneve" value="' + escapeHtml(zoneVal) + '">' +
-        '</div>' +
-        '<div class="pf-row">' +
-          '<label>Priorites (separees par virgule)</label>' +
-          '<input id="pf-priorities" placeholder="balcon, calme, parking" value="' + escapeHtml((p.priorities || []).join(', ')) + '">' +
-        '</div>' +
+        // Actions
         '<div class="pf-actions">' +
-          '<button id="pf-save" class="pf-save-btn">Sauvegarder</button>' +
+          '<button id="pf-save" class="pf-save-btn">Sauvegarder & relancer Lou 🐺</button>' +
           '<button id="pf-cancel" class="pf-cancel-btn">Annuler</button>' +
         '</div>' +
       '</div>';
 
     formWrap.style.display = 'block';
+    _pfRenderZones();
 
     $('pf-cancel').onclick = function () { formWrap.style.display = 'none'; };
     $('pf-save').onclick = function () { saveProfileForm(); };
   }
 
   function saveProfileForm() {
+    var bmin = parseInt($('pf-budget-min').value) || null;
+    var bmax = parseInt($('pf-budget-max').value) || null;
+    if (bmin === 0) bmin = null;
+    if (bmax === 0) bmax = null;
+
     var payload = {
       transaction: $('pf-transaction').value,
-      property_types: $('pf-types').value.split(',').map(function (s) { return s.trim(); }).filter(Boolean),
-      budget_max: parseInt($('pf-budget-max').value) || null,
-      budget_min: parseInt($('pf-budget-min').value) || null,
+      property_types: Array.from(document.querySelectorAll('#pf-types .pf-chip.on')).map(function (c) { return c.dataset.v; }),
+      budget_max: bmax,
+      budget_min: bmin,
       rooms_min: parseFloat($('pf-rooms-min').value) || null,
+      rooms_max: parseFloat($('pf-rooms-max').value) || null,
       surface_min: parseInt($('pf-surface-min').value) || null,
-      priorities: $('pf-priorities').value.split(',').map(function (s) { return s.trim(); }).filter(Boolean),
-      zones: $('pf-zones').value.split(',').map(function (s) {
-        var city = s.trim();
-        if (!city) return null;
-        return { city: city, radius_km: 3 };
-      }).filter(Boolean)
+      surface_max: parseInt($('pf-surface-max').value) || null,
+      priorities: Array.from(document.querySelectorAll('#pf-priorities .pf-chip.on')).map(function (c) { return c.dataset.v; }),
+      zones: _pfZones
     };
 
     var btn = $('pf-save');
@@ -1106,16 +1188,34 @@
       '.dash-profile-row{display:flex;align-items:center;justify-content:space-between;gap:12px}',
       '.dash-edit-btn{padding:8px 18px;background:#0369a1;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;white-space:nowrap;transition:background .2s}',
       '.dash-edit-btn:hover{background:#024e7a}',
-      '.profile-form{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:12px}',
-      '.pf-row{display:flex;flex-direction:column;gap:4px}',
-      '.pf-row label{font-size:12px;color:#64748b;font-weight:600}',
-      '.pf-row input,.pf-row select{padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:inherit}',
-      '.pf-row input:focus,.pf-row select:focus{border-color:#0369a1;outline:none}',
-      '.pf-actions{grid-column:1/-1;display:flex;gap:10px;justify-content:flex-end;margin-top:4px}',
-      '.pf-save-btn{padding:10px 24px;background:#0369a1;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600}',
-      '.pf-save-btn:hover{background:#024e7a}',
-      '.pf-cancel-btn{padding:10px 24px;background:#f1f5f9;color:#64748b;border:none;border-radius:8px;font-size:14px;cursor:pointer}',
-      '@media(max-width:768px){.profile-form{grid-template-columns:1fr}.dash-profile-row{flex-direction:column;align-items:stretch}}',
+      '.profile-form{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:24px;margin-top:12px}',
+      '.pf-section{margin-bottom:20px}',
+      '.pf-section-title{font-size:15px;font-weight:700;margin-bottom:12px;color:#0f172a}',
+      '.pf-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}',
+      '.pf-field{display:flex;flex-direction:column;gap:6px}',
+      '.pf-field label{font-size:12px;color:#64748b;font-weight:600}',
+      '.pf-field input,.pf-field select{padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:inherit}',
+      '.pf-field input:focus,.pf-field select:focus{border-color:#0369a1;outline:none}',
+      '.pf-range{display:flex;align-items:center;gap:10px}',
+      '.pf-range input[type=range]{flex:1;accent-color:#0369a1;cursor:pointer}',
+      '.pf-range span{font-size:13px;font-weight:600;color:#0369a1;min-width:90px;text-align:right;white-space:nowrap}',
+      '.pf-chips{display:flex;flex-wrap:wrap;gap:8px}',
+      '.pf-chip{padding:7px 14px;border-radius:20px;font-size:13px;cursor:pointer;border:1px solid #e2e8f0;background:#f8fafc;color:#64748b;transition:all .15s;user-select:none}',
+      '.pf-chip:hover{border-color:#0369a1;color:#0f172a}',
+      '.pf-chip.on{background:#0369a1;border-color:#0369a1;color:#fff}',
+      '.pf-zone-list{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}',
+      '.pf-zone{display:flex;align-items:center;gap:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px;font-size:14px}',
+      '.pf-zone span:first-child{flex:1;font-weight:500}',
+      '.pf-zone-add{display:flex;gap:8px;align-items:center}',
+      '.pf-zone-add input{flex:1;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:inherit}',
+      '.pf-zone-add input:focus{border-color:#0369a1;outline:none}',
+      '.pf-zone-add select{padding:9px 8px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px}',
+      '.pf-add-btn{padding:8px 14px;background:#0369a1;color:#fff;border:none;border-radius:8px;font-size:16px;cursor:pointer;font-weight:700}',
+      '.pf-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:8px;padding-top:16px;border-top:1px solid #e2e8f0}',
+      '.pf-save-btn{padding:11px 24px;background:#0369a1;color:#fff;border:none;border-radius:10px;font-size:14px;cursor:pointer;font-weight:600;transition:all .2s}',
+      '.pf-save-btn:hover{background:#024e7a;transform:translateY(-1px);box-shadow:0 4px 12px rgba(3,105,161,.3)}',
+      '.pf-cancel-btn{padding:11px 24px;background:#f1f5f9;color:#64748b;border:none;border-radius:10px;font-size:14px;cursor:pointer}',
+      '@media(max-width:768px){.pf-grid{grid-template-columns:1fr}.dash-profile-row{flex-direction:column;align-items:stretch}.pf-zone-add{flex-wrap:wrap}}',
 
       // Properties grid
       '.prop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:20px}',
