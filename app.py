@@ -579,7 +579,7 @@ def get_properties():
                 'is_favorite': p['is_favorite']
             })
 
-        return jsonify({"properties": results, "total": len(results), "page": page, "per_page": per_page})
+        return jsonify({"properties": results, "total": total, "page": page, "per_page": per_page})
     finally:
         cur.close()
         return_db(conn)
