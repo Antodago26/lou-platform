@@ -951,14 +951,13 @@
       body.appendChild(loading);
       body.scrollTop = body.scrollHeight;
 
-      var chatUserId = (USER && USER.id) ? String(USER.id) : ANON_SESSION;
+      var chatHeaders = { 'Content-Type': 'application/json' };
+      if (TOKEN) chatHeaders['Authorization'] = 'Bearer ' + TOKEN;
 
       fetch(API + '/api/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ message: msg, user_id: chatUserId })
+        headers: chatHeaders,
+        body: JSON.stringify({ message: msg, session_id: ANON_SESSION })
       })
         .then(function (r) { return r.json(); })
         .then(function (data) {

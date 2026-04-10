@@ -838,20 +838,25 @@ def api_chat():
     # Load history from DB
     history = _load_chat_history(user_id)
 
-    # Extract already-collected criteria from the last assistant message with criteria
+    # Extract already-collected criteria by merging ALL assistant messages (not just the last)
     collected = {}
-    for h in reversed(history):
+    for h in history:
         if h['role'] == 'assistant':
             try:
                 parsed = _parse_llm_json(h['content'])
                 if parsed and parsed.get('criteria'):
-                    collected = parsed['criteria']
-                    break
+                    c = parsed['criteria']
+                    for k, v in c.items():
+                        if v is not None and v != [] and v != '':
+                            collected[k] = v
             except Exception:
                 pass
 
     # Build messages — clean assistant history to just message text
+    # If no history, inject the welcome message so Claude has context
     messages = []
+    if not history:
+        messages.append({"role": "assistant", "content": "Salut ! Je suis Lou, ton chasseur immobilier digital. Dis-moi ce que tu cherches et je me mets en chasse !"})
     for h in history:
         if h['role'] == 'assistant':
             try:
@@ -910,7 +915,7 @@ def api_chat():
     try:
         response = anthropic_client.messages.create(
             model="claude-sonnet-4-20250514",
-            max_tokens=500,
+            max_tokens=800,
             system=LOU_SYSTEM_PROMPT,
             messages=messages
         )
