@@ -10,6 +10,7 @@ Environment variables needed on Render:
 """
 
 import os
+import re
 import json
 import hashlib
 import time
