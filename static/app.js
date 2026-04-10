@@ -677,6 +677,21 @@
     _pfUpdateBudget('pf-budget-min'); _pfUpdateBudget('pf-budget-max');
   };
 
+  // Image carousel navigation
+  window.carouselNav = function (cid, dir) {
+    var el = document.getElementById(cid);
+    if (!el) return;
+    var imgs = el.querySelectorAll('.prop-img');
+    var dots = el.querySelectorAll('.carousel-dot');
+    var cur = 0;
+    imgs.forEach(function (im, i) { if (im.classList.contains('active')) cur = i; });
+    imgs[cur].classList.remove('active');
+    if (dots[cur]) dots[cur].classList.remove('active');
+    cur = (cur + dir + imgs.length) % imgs.length;
+    imgs[cur].classList.add('active');
+    if (dots[cur]) dots[cur].classList.add('active');
+  };
+
   function toggleProfileForm() {
     var formWrap = $('profile-edit-form');
     if (!formWrap) return;
@@ -875,9 +890,25 @@
     var gradeColors = { A: '#059669', B: '#0369a1', C: '#d97706', D: '#dc2626' };
     var gc = gradeColors[p.grade] || '#94a3b8';
 
-    var img = (p.images && p.images.length > 0)
-      ? '<img src="' + escapeHtml(p.images[0]) + '" alt="" class="prop-img" onerror="this.style.display=\'none\'">'
-      : '';
+    var imgHtml = '';
+    if (p.images && p.images.length > 1) {
+      // Carousel with arrows
+      var cid = 'carousel-' + p.id;
+      imgHtml = '<div class="prop-carousel" id="' + cid + '">';
+      for (var ii = 0; ii < p.images.length; ii++) {
+        imgHtml += '<img src="' + escapeHtml(p.images[ii]) + '" alt="" class="prop-img' + (ii === 0 ? ' active' : '') + '" data-idx="' + ii + '" onerror="this.style.display=\'none\'">';
+      }
+      imgHtml += '<button class="carousel-btn prev" onclick="carouselNav(\'' + cid + '\',-1)">&#8249;</button>';
+      imgHtml += '<button class="carousel-btn next" onclick="carouselNav(\'' + cid + '\',1)">&#8250;</button>';
+      imgHtml += '<span class="carousel-dots">';
+      for (var di = 0; di < p.images.length; di++) {
+        imgHtml += '<span class="carousel-dot' + (di === 0 ? ' active' : '') + '"></span>';
+      }
+      imgHtml += '</span>';
+      imgHtml += '</div>';
+    } else if (p.images && p.images.length === 1) {
+      imgHtml = '<img src="' + escapeHtml(p.images[0]) + '" alt="" class="prop-img active" onerror="this.style.display=\'none\'">';
+    }
 
     var priceText = p.price ? formatPrice(p.price) + ' CHF' : 'Prix sur demande';
     if (p.unit && p.price) {
@@ -898,7 +929,7 @@
 
     return '<div class="prop-card">' +
       '<div class="prop-card-top">' +
-        (img || '<div class="prop-img-placeholder"></div>') +
+        (imgHtml || '<div class="prop-img-placeholder"></div>') +
         '<div class="prop-score" style="background:' + gc + '">' +
           '<span class="prop-score-num">' + p.score + '</span>' +
           '<span class="prop-score-grade">' + p.grade + '</span>' +
@@ -1222,7 +1253,16 @@
       '.prop-card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;transition:all .2s}',
       '.prop-card:hover{box-shadow:0 8px 24px rgba(0,0,0,.08);border-color:#cbd5e1;transform:translateY(-2px)}',
       '.prop-card-top{position:relative;height:180px;background:#e2e8f0;overflow:hidden}',
-      '.prop-img{width:100%;height:100%;object-fit:cover}',
+      '.prop-carousel{position:relative;width:100%;height:100%}',
+      '.prop-img{width:100%;height:100%;object-fit:cover;display:none}',
+      '.prop-img.active{display:block}',
+      '.carousel-btn{position:absolute;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.45);color:#fff;border:none;font-size:22px;width:30px;height:30px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2;line-height:1}',
+      '.carousel-btn.prev{left:6px}',
+      '.carousel-btn.next{right:6px}',
+      '.carousel-btn:hover{background:rgba(0,0,0,.7)}',
+      '.carousel-dots{position:absolute;bottom:6px;left:50%;transform:translateX(-50%);display:flex;gap:4px;z-index:2}',
+      '.carousel-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.5)}',
+      '.carousel-dot.active{background:#fff}',
       '.prop-img-placeholder{width:100%;height:100%;background:linear-gradient(135deg,#e2e8f0,#cbd5e1);display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:13px}',
       '.prop-img-placeholder::after{content:"Pas d\'image";opacity:.6}',
       '.prop-score{position:absolute;top:12px;left:12px;display:flex;align-items:center;gap:4px;padding:6px 12px;border-radius:8px;color:#fff;font-weight:700}',

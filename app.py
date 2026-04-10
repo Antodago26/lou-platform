@@ -536,12 +536,17 @@ def get_properties():
             surface = p.get('surface') or 0
             surface_bucket = round(surface / 5) * 5 if surface else 0
 
+            city = (p.get('city') or '').lower().strip()
+
             # Primary key: postal + price + rooms + surface (title-independent)
             if postal and price and rooms:
                 return f"{postal}:{price_bucket}:{rooms}:{surface_bucket}"
 
-            # Fallback: city + price + title
-            city = (p.get('city') or '').lower().strip()
+            # Secondary: city + price + rooms + surface (no postal needed)
+            if city and price and rooms:
+                return f"{city}:{price_bucket}:{rooms}:{surface_bucket}"
+
+            # Last resort: city + price + title prefix
             title_norm = re.sub(r'[^a-z0-9]', '', (p.get('title') or '').lower())[:30]
             return f"{city}:{price_bucket}:{title_norm}"
 
@@ -555,11 +560,18 @@ def get_properties():
                 # Keep best images
                 merged[key]['_best_images'] = p['images'] or []
             else:
-                # Merge: add source link, keep better data
-                merged[key]['_all_sources'].append({'source': p['source'] or '', 'url': p['source_url'] or ''})
-                # Keep images from whichever has them
-                if (p['images'] or []) and not merged[key]['_best_images']:
-                    merged[key]['_best_images'] = p['images']
+                # Merge: add source link (skip if same portal already listed)
+                new_src = p['source'] or ''
+                existing_sources = {s['source'] for s in merged[key]['_all_sources']}
+                if new_src not in existing_sources:
+                    merged[key]['_all_sources'].append({'source': new_src, 'url': p['source_url'] or ''})
+                # Combine images from all sources (deduplicated)
+                if p['images']:
+                    existing_imgs = set(merged[key]['_best_images'])
+                    for img in p['images']:
+                        if img and img not in existing_imgs:
+                            merged[key]['_best_images'].append(img)
+                            existing_imgs.add(img)
                 # Keep higher score
                 if (p['total_score'] or 0) > (merged[key]['total_score'] or 0):
                     old_sources = merged[key]['_all_sources']
@@ -577,7 +589,7 @@ def get_properties():
                 'title': p['title'] or 'Bien immobilier',
                 'address': p['address'] or '',
                 'price': p['price'] or 0,
-                'unit': f"{p['currency'] or 'CHF'}/{p['price_unit'] or 'mois'}",
+                'unit': f"{(p['currency'] or 'CHF').encode('ascii', 'ignore').decode()}/{(p['price_unit'] or 'mois').encode('ascii', 'ignore').decode()}",
                 'rooms': float(p['rooms']) if p['rooms'] else 0,
                 'surface': p['surface'] or 0,
                 'floor': p['floor'],

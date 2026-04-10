@@ -156,6 +156,8 @@ def _clean_price(val):
     text = re.sub(r'(?i)CHF|Fr\.?|/mois|/m|/an|par mois|mensuel', '', text)
     text = text.replace('\u2019', '').replace('\u00a0', '').replace("'", '')
     text = text.replace(',', '').replace('.–', '').replace('.-', '').replace(' ', '')
+    # Strip any remaining non-ASCII characters (garbled UTF-8 like â, Â, etc.)
+    text = re.sub(r'[^\x00-\x7F]', '', text)
     # Handle dots as thousand separator (e.g., 2.864.400): if multiple dots, they're separators
     if text.count('.') > 1:
         text = text.replace('.', '')
