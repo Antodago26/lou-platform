@@ -111,6 +111,16 @@ def _run_migrations():
         cur.execute("CREATE INDEX IF NOT EXISTS idx_price_hist_prop ON price_history(property_id, detected_at DESC)")
         # Backfill first_seen_at from scraped_at for existing rows
         cur.execute("UPDATE properties SET first_seen_at = scraped_at WHERE first_seen_at IS NULL")
+        # Auto-create alert rows for users who have an active profile but no alert
+        cur.execute("""
+            INSERT INTO alerts (user_id, profile_id, channel, frequency, min_score, is_active)
+            SELECT DISTINCT ON (u.id) u.id, sp.id, 'email', 'daily', 70, TRUE
+            FROM users u
+            JOIN search_profiles sp ON sp.user_id = u.id AND sp.is_active = TRUE
+            LEFT JOIN alerts a ON a.user_id = u.id
+            WHERE a.id IS NULL AND u.is_active = TRUE
+            ORDER BY u.id, sp.created_at
+        """)
         db.commit()
         cur.close()
         return_db(db)
@@ -827,6 +837,9 @@ def get_properties():
                 'images': best_images or p['images'] or [],
                 'score': p['total_score'],
                 'grade': p['grade'],
+                'latitude': p.get('latitude'),
+                'longitude': p.get('longitude'),
+                'city': p.get('city'),
                 'distance_km': float(p['distance_km']) if p['distance_km'] else None,
                 'score_detail': {
                     'zone': p['score_zone'],
@@ -1031,6 +1044,8 @@ def get_favorites():
                 'features': p.get('features'),
                 'score': p.get('total_score') or 0,
                 'grade': p.get('grade') or 'D',
+                'latitude': p.get('latitude'),
+                'longitude': p.get('longitude'),
                 'distance_km': p.get('distance_km'),
                 'is_favorite': True,
                 'fav_note': p.get('fav_note') or '',
@@ -1092,6 +1107,131 @@ def export_favorites():
         response.headers['Content-Type'] = 'text/csv; charset=utf-8'
         response.headers['Content-Disposition'] = 'attachment; filename=favoris-bonhome.csv'
         return response
+    finally:
+        cur.close()
+        return_db(conn)
+
+
+# ============================================================
+# ALERT SETTINGS ENDPOINTS
+# ============================================================
+
+@app.route('/api/alerts', methods=['GET'])
+@token_required
+def get_alerts():
+    """Get user's alert settings (auto-create if none exists)."""
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT id, frequency, min_score, is_active, channel, last_sent, created_at FROM alerts WHERE user_id = %s LIMIT 1",
+            (request.user_id,)
+        )
+        alert = cur.fetchone()
+        if not alert:
+            # Get user's first active profile
+            cur.execute(
+                "SELECT id FROM search_profiles WHERE user_id = %s AND is_active = TRUE ORDER BY created_at LIMIT 1",
+                (request.user_id,)
+            )
+            profile = cur.fetchone()
+            profile_id = profile['id'] if profile else None
+            cur.execute("""
+                INSERT INTO alerts (user_id, profile_id, channel, frequency, min_score, is_active)
+                VALUES (%s, %s, 'email', 'daily', 70, TRUE)
+                RETURNING id, frequency, min_score, is_active, channel, last_sent, created_at
+            """, (request.user_id, profile_id))
+            alert = cur.fetchone()
+            conn.commit()
+        return jsonify({
+            "id": alert['id'],
+            "frequency": alert['frequency'] if alert['is_active'] else 'off',
+            "min_score": alert['min_score'],
+            "is_active": alert['is_active'],
+            "channel": alert['channel'],
+            "last_sent": alert['last_sent'].isoformat() if alert['last_sent'] else None,
+        })
+    except Exception as e:
+        conn.rollback()
+        log.error(f"GET /api/alerts error: {e}")
+        return jsonify({"error": "Erreur serveur"}), 500
+    finally:
+        cur.close()
+        return_db(conn)
+
+
+@app.route('/api/alerts', methods=['PUT'])
+@token_required
+def update_alerts():
+    """Update alert settings."""
+    data = request.json or {}
+    frequency = data.get('frequency')
+    min_score = data.get('min_score')
+
+    if frequency and frequency not in ('daily', 'instant', 'weekly', 'off'):
+        return jsonify({"error": "Frequence invalide"}), 400
+    if min_score is not None:
+        try:
+            min_score = int(min_score)
+            if min_score < 0 or min_score > 100:
+                raise ValueError
+        except (ValueError, TypeError):
+            return jsonify({"error": "Score minimum invalide"}), 400
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # Ensure alert row exists
+        cur.execute("SELECT id FROM alerts WHERE user_id = %s LIMIT 1", (request.user_id,))
+        alert = cur.fetchone()
+        if not alert:
+            cur.execute(
+                "SELECT id FROM search_profiles WHERE user_id = %s AND is_active = TRUE ORDER BY created_at LIMIT 1",
+                (request.user_id,)
+            )
+            profile = cur.fetchone()
+            profile_id = profile['id'] if profile else None
+            cur.execute("""
+                INSERT INTO alerts (user_id, profile_id, channel, frequency, min_score, is_active)
+                VALUES (%s, %s, 'email', 'daily', 70, TRUE)
+                RETURNING id
+            """, (request.user_id, profile_id))
+            alert = cur.fetchone()
+            conn.commit()
+
+        updates = []
+        params = []
+        if frequency == 'off':
+            updates.append("is_active = FALSE")
+        elif frequency:
+            updates.append("frequency = %s")
+            updates.append("is_active = TRUE")
+            params.append(frequency)
+        if min_score is not None:
+            updates.append("min_score = %s")
+            params.append(min_score)
+
+        if updates:
+            params.append(alert['id'])
+            cur.execute(f"UPDATE alerts SET {', '.join(updates)} WHERE id = %s", params)
+            conn.commit()
+
+        # Return updated row
+        cur.execute(
+            "SELECT id, frequency, min_score, is_active, channel, last_sent FROM alerts WHERE id = %s",
+            (alert['id'],)
+        )
+        updated = cur.fetchone()
+        return jsonify({
+            "ok": True,
+            "frequency": updated['frequency'] if updated['is_active'] else 'off',
+            "min_score": updated['min_score'],
+            "is_active": updated['is_active'],
+        })
+    except Exception as e:
+        conn.rollback()
+        log.error(f"PUT /api/alerts error: {e}")
+        return jsonify({"error": "Erreur serveur"}), 500
     finally:
         cur.close()
         return_db(conn)
@@ -2027,6 +2167,11 @@ def api_cron_scrape():
 @app.route('/')
 def index():
     return send_from_directory('static', 'index.html')
+
+
+@app.route('/manifest.json')
+def manifest_json():
+    return send_from_directory('static', 'manifest.json')
 
 
 @app.route('/dashboard')

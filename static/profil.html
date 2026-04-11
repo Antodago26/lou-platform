@@ -218,6 +218,32 @@ h1{font-size:24px;font-weight:700;margin-bottom:4px}
       </div>
     </div>
 
+    <!-- ALERTES -->
+    <div class="card">
+      <div class="card-title">🔔 Alertes email</div>
+      <div class="card-desc">Recevez un email quand de nouveaux biens correspondent a vos criteres</div>
+      <div class="grid">
+        <div class="fg">
+          <label>Frequence</label>
+          <select id="alertFreq">
+            <option value="instant">Instantane (toutes les 2h)</option>
+            <option value="daily" selected>Quotidien</option>
+            <option value="weekly">Hebdomadaire</option>
+            <option value="off">Desactive</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label>Score minimum</label>
+          <select id="alertMinScore">
+            <option value="85">Classe A uniquement (85+)</option>
+            <option value="70" selected>Classe A et B (70+)</option>
+            <option value="55">Classe A, B et C (55+)</option>
+            <option value="0">Tous les biens</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
     <!-- POIDS SCORING -->
     <div class="card">
       <div class="card-title">⚙️ Poids du scoring</div>
@@ -422,6 +448,19 @@ function loadProfile() {
     if (e === '401') return;
     document.getElementById('loading').textContent = 'Erreur de chargement.';
   });
+
+  // Load alert preferences
+  fetch(API + '/api/alerts', {
+    headers: { 'Authorization': 'Bearer ' + TOKEN }
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.alert) {
+      document.getElementById('alertFreq').value = d.alert.frequency || 'daily';
+      document.getElementById('alertMinScore').value = String(d.alert.min_score || 70);
+    }
+  })
+  .catch(function() {});
 }
 
 // ---- API: Save profile ----
@@ -470,6 +509,18 @@ function saveProfile() {
     btn.disabled = false;
     if (d.ok) {
       showMsg('Criteres sauvegardes ! Lou relance la recherche 🔍', true);
+      // Save alert preferences
+      fetch(API + '/api/alerts', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + TOKEN
+        },
+        body: JSON.stringify({
+          frequency: document.getElementById('alertFreq').value,
+          min_score: parseInt(document.getElementById('alertMinScore').value)
+        })
+      }).catch(function() {});
     } else {
       showMsg(d.error || 'Erreur', false);
     }

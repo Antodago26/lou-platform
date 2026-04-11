@@ -11,8 +11,10 @@ Run every 2 hours via Render Cron Job:
 import os
 import sys
 import logging
+from datetime import datetime, timedelta, timezone
 import psycopg2
 import psycopg2.extras
+import requests as http_requests
 
 from scrapers import scrape_all, save_to_db
 from scoring_engine import score_all_for_profile
@@ -21,6 +23,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(name)s] %(message
 log = logging.getLogger('lou-cron')
 
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
+RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
 
 
 def get_db():
@@ -47,6 +50,194 @@ def get_active_profiles(db):
     profiles = cur.fetchall()
     cur.close()
     return profiles
+
+
+def _format_price(price):
+    """Format price with apostrophes (Swiss style): 1250000 -> 1'250'000."""
+    if not price:
+        return '—'
+    s = str(int(price))
+    parts = []
+    while s:
+        parts.append(s[-3:])
+        s = s[:-3]
+    return "'".join(reversed(parts))
+
+
+def _grade_color(grade):
+    """Return badge color for a grade."""
+    return {
+        'A': '#16a34a', 'B': '#65a30d', 'C': '#ca8a04', 'D': '#dc2626'
+    }.get(grade, '#64748b')
+
+
+def _build_alert_email(properties, count_total):
+    """Build HTML email for property alerts."""
+    rows_html = ''
+    for p in properties:
+        grade = p.get('grade', '?')
+        score = p.get('total_score', 0)
+        title = p.get('title') or 'Bien immobilier'
+        price = _format_price(p.get('price'))
+        unit = p.get('unit') or 'CHF'
+        address = p.get('address') or p.get('city') or ''
+        source_url = p.get('source_url') or 'https://www.bonhome.ch'
+        rooms = p.get('rooms')
+        surface = p.get('surface')
+        details = []
+        if rooms:
+            details.append(f"{rooms} pcs")
+        if surface:
+            details.append(f"{int(surface)} m²")
+        details_str = ' · '.join(details)
+
+        rows_html += f'''
+        <tr>
+          <td style="padding:16px;border-bottom:1px solid #e2e8f0">
+            <div style="display:flex;justify-content:space-between;align-items:start">
+              <div style="flex:1">
+                <a href="{source_url}" style="color:#0369a1;text-decoration:none;font-weight:600;font-size:15px">{title}</a>
+                <div style="color:#64748b;font-size:13px;margin-top:4px">{address}</div>
+                <div style="color:#334155;font-size:14px;margin-top:4px;font-weight:500">{price} {unit}</div>
+                <div style="color:#64748b;font-size:13px;margin-top:2px">{details_str}</div>
+              </div>
+              <div style="text-align:center;margin-left:16px">
+                <span style="display:inline-block;background:{_grade_color(grade)};color:#fff;font-weight:700;font-size:14px;width:36px;height:36px;line-height:36px;border-radius:50%;text-align:center">{grade}</span>
+                <div style="color:#64748b;font-size:12px;margin-top:2px">{score}/100</div>
+              </div>
+            </div>
+          </td>
+        </tr>'''
+
+    return f'''<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+  <div style="max-width:600px;margin:0 auto;padding:24px 16px">
+    <!-- Header -->
+    <div style="background:#0369a1;border-radius:12px 12px 0 0;padding:24px;text-align:center">
+      <h1 style="margin:0;color:#ffffff;font-size:24px;letter-spacing:0.5px">Bon Home</h1>
+      <p style="margin:8px 0 0;color:#bae6fd;font-size:14px">Votre chasseur immobilier digital</p>
+    </div>
+    <!-- Body -->
+    <div style="background:#ffffff;padding:24px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">
+      <h2 style="margin:0 0 8px;color:#0f172a;font-size:18px">{count_total} nouveau{"x" if count_total > 1 else ""} bien{"s" if count_total > 1 else ""} correspond{"ent" if count_total > 1 else ""} a vos criteres</h2>
+      <p style="margin:0 0 20px;color:#64748b;font-size:14px">Voici les meilleurs resultats depuis notre derniere alerte :</p>
+      <table style="width:100%;border-collapse:collapse">
+        {rows_html}
+      </table>
+    </div>
+    <!-- CTA -->
+    <div style="background:#ffffff;padding:0 24px 24px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;text-align:center">
+      <a href="https://www.bonhome.ch" style="display:inline-block;background:#0369a1;color:#ffffff;text-decoration:none;padding:12px 32px;border-radius:8px;font-weight:600;font-size:15px;margin-top:16px">Voir tous mes resultats</a>
+    </div>
+    <!-- Footer -->
+    <div style="background:#f8fafc;border-radius:0 0 12px 12px;padding:20px 24px;text-align:center;border:1px solid #e2e8f0;border-top:none">
+      <p style="margin:0;color:#94a3b8;font-size:12px">Vous recevez cet email car vous avez active les alertes sur Bon Home.</p>
+      <p style="margin:8px 0 0;color:#94a3b8;font-size:12px">Pour modifier la frequence ou desactiver les alertes, rendez-vous dans vos <a href="https://www.bonhome.ch" style="color:#0369a1">parametres</a>.</p>
+    </div>
+  </div>
+</body>
+</html>'''
+
+
+def _send_alert_email(email, html, count):
+    """Send a single alert email via Resend."""
+    if not RESEND_API_KEY:
+        log.warning("RESEND_API_KEY not set, skipping alert email")
+        return False
+    try:
+        subject = f"{count} nouveau{'x' if count > 1 else ''} bien{'s' if count > 1 else ''} — Bon Home"
+        resp = http_requests.post('https://api.resend.com/emails', json={
+            'from': 'Bon Home <noreply@bonhome.ch>',
+            'to': [email],
+            'subject': subject,
+            'html': html,
+        }, headers={
+            'Authorization': f'Bearer {RESEND_API_KEY}',
+            'Content-Type': 'application/json',
+        }, timeout=10)
+        if resp.status_code >= 400:
+            log.error(f"Resend API error ({resp.status_code}): {resp.text}")
+            return False
+        return True
+    except Exception as e:
+        log.error(f"Failed to send alert email to {email}: {e}")
+        return False
+
+
+def _send_alerts(db):
+    """Check all active alerts and send emails for users with new matches."""
+    cur = db.cursor()
+    try:
+        now = datetime.now(timezone.utc)
+        # Fetch alerts that are due to be sent
+        cur.execute("""
+            SELECT a.id, a.user_id, a.profile_id, a.frequency, a.min_score, a.last_sent,
+                   u.email
+            FROM alerts a
+            JOIN users u ON u.id = a.user_id AND u.is_active = TRUE
+            WHERE a.is_active = TRUE
+              AND a.channel = 'email'
+              AND (
+                  a.frequency = 'instant'
+                  OR (a.frequency = 'daily' AND (a.last_sent IS NULL OR a.last_sent < NOW() - INTERVAL '24 hours'))
+                  OR (a.frequency = 'weekly' AND (a.last_sent IS NULL OR a.last_sent < NOW() - INTERVAL '7 days'))
+              )
+        """)
+        alerts = cur.fetchall()
+        log.info(f"Found {len(alerts)} alerts due for sending")
+
+        for alert in alerts:
+            try:
+                since = alert['last_sent'] or (now - timedelta(days=30))
+                # Get new scored properties since last_sent meeting min_score threshold
+                cur.execute("""
+                    SELECT sp.total_score, sp.grade, sp.scored_at,
+                           p.title, p.price, p.unit, p.address, p.city, p.rooms, p.surface,
+                           p.source_url, p.source
+                    FROM scored_properties sp
+                    JOIN properties p ON p.id = sp.property_id
+                    WHERE sp.profile_id = %s
+                      AND sp.scored_at > %s
+                      AND sp.total_score >= %s
+                      AND p.is_active = TRUE
+                    ORDER BY sp.total_score DESC
+                """, (alert['profile_id'], since, alert['min_score']))
+                properties = cur.fetchall()
+
+                if not properties:
+                    log.info(f"Alert {alert['id']} ({alert['email']}): no new matches")
+                    continue
+
+                count_total = len(properties)
+                top_5 = properties[:5]
+
+                html = _build_alert_email(top_5, count_total)
+                success = _send_alert_email(alert['email'], html, count_total)
+
+                if success:
+                    cur.execute("UPDATE alerts SET last_sent = NOW() WHERE id = %s", (alert['id'],))
+                    db.commit()
+                    log.info(f"Alert sent to {alert['email']}: {count_total} matches")
+                else:
+                    log.warning(f"Alert email failed for {alert['email']}, will retry next run")
+
+            except Exception as e:
+                log.error(f"Error processing alert {alert['id']}: {e}")
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+
+    except Exception as e:
+        log.error(f"Alert sending failed: {e}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    finally:
+        cur.close()
 
 
 def run():
@@ -141,21 +332,8 @@ def run():
             log.error(f"Scoring failed for profile {p['id']}: {e}")
             db.rollback()
 
-    # Step 6: TODO - Send alerts for new high-score matches
-    # This would check alerts table and send emails/SMS
-    # For now, just log new A/B matches
-    cur = db.cursor()
-    cur.execute("""
-        SELECT sp.user_id, u.email, COUNT(*) as new_matches
-        FROM scored_properties sp
-        JOIN users u ON u.id = sp.user_id
-        WHERE sp.scored_at > NOW() - INTERVAL '2 hours'
-        AND sp.grade IN ('A', 'B')
-        GROUP BY sp.user_id, u.email
-    """)
-    for row in cur.fetchall():
-        log.info(f"New matches for {row['email']}: {row['new_matches']} (A/B grade)")
-    cur.close()
+    # Step 6: Send email alerts for new high-score matches
+    _send_alerts(db)
 
     db.close()
     log.info("=" * 50)

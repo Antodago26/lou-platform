@@ -609,6 +609,7 @@
       '<div class="dash-tabs" id="dash-tabs">' +
         '<button class="dash-tab active" data-view="properties">Tous les biens</button>' +
         '<button class="dash-tab" data-view="favorites">&#9829; Mes favoris</button>' +
+        '<button class="dash-tab" data-view="map">&#128506; Carte</button>' +
       '</div>' +
       // Profile summary
       '<div id="profile-bar" class="dash-profile-bar"></div>' +
@@ -631,6 +632,8 @@
       '<div id="properties-list" class="dash-properties"><div class="dash-loading">Chargement des biens...</div></div>' +
       // Favorites list (hidden by default)
       '<div id="favorites-list" class="dash-properties" style="display:none"></div>' +
+      // Map view (hidden by default)
+      '<div id="map-view" class="map-view" style="display:none"></div>' +
       // Compare panel (hidden by default)
       '<div id="compare-panel" class="compare-panel" style="display:none"></div>' +
       // Pagination
@@ -692,15 +695,213 @@
         t.classList.toggle('active', t.dataset.view === view);
       });
       var isFav = view === 'favorites';
-      $('properties-list').style.display = isFav ? 'none' : '';
+      var isMap = view === 'map';
+      $('properties-list').style.display = (isFav || isMap) ? 'none' : '';
       $('favorites-list').style.display = isFav ? '' : 'none';
-      $('pagination').style.display = isFav ? 'none' : '';
+      $('map-view').style.display = isMap ? '' : 'none';
+      $('pagination').style.display = (isFav || isMap) ? 'none' : '';
       $('fav-toolbar').style.display = isFav ? '' : 'none';
-      $('sort-select').style.display = isFav ? 'none' : '';
-      $('grade-filter').style.display = isFav ? 'none' : '';
+      $('sort-select').style.display = (isFav || isMap) ? 'none' : '';
+      $('grade-filter').style.display = (isFav || isMap) ? 'none' : '';
       $('compare-panel').style.display = 'none';
       if (isFav) {
         loadFavorites();
+      }
+      if (isMap) {
+        loadMapView();
+      }
+    }
+
+    // ---- Map View ----
+    var _mapInstance = null;
+    var _mapMarkers = null;
+    var _leafletLoaded = false;
+
+    var SWISS_CITY_COORDS = {
+      'lausanne': [46.5197, 6.6323],
+      'geneve': [46.2044, 6.1432],
+      'geneva': [46.2044, 6.1432],
+      'berne': [46.9480, 7.4474],
+      'bern': [46.9480, 7.4474],
+      'zurich': [47.3769, 8.5417],
+      'zuerich': [47.3769, 8.5417],
+      'neuchatel': [46.9900, 6.9293],
+      'fribourg': [46.8065, 7.1620],
+      'bienne': [47.1368, 7.2467],
+      'biel': [47.1368, 7.2467],
+      'la chaux-de-fonds': [47.0997, 6.8261],
+      'sion': [46.2333, 7.3607],
+      'montreux': [46.4312, 6.9107],
+      'nyon': [46.3833, 6.2348],
+      'yverdon': [46.7785, 6.6413],
+      'yverdon-les-bains': [46.7785, 6.6413],
+      'morges': [46.5110, 6.4985],
+      'vevey': [46.4628, 6.8431],
+      'delemont': [47.3656, 7.3430],
+      'bulle': [46.6197, 7.0569],
+      'thun': [46.7580, 7.6280],
+      'basel': [47.5596, 7.5886],
+      'bale': [47.5596, 7.5886],
+      'luzern': [47.0502, 8.3093],
+      'lucerne': [47.0502, 8.3093],
+      'lugano': [46.0037, 8.9511],
+      'winterthur': [47.5001, 8.7240],
+      'st. gallen': [47.4245, 9.3767],
+      'saint-gall': [47.4245, 9.3767],
+      'aarau': [47.3925, 8.0442],
+      'sierre': [46.2919, 7.5350],
+      'martigny': [46.0986, 7.0722],
+      'renens': [46.5400, 6.5882],
+      'pully': [46.5100, 6.6615],
+      'ecublens': [46.5295, 6.5603],
+      'prilly': [46.5369, 6.5972],
+      'monthey': [46.2547, 6.9553],
+      'aigle': [46.3180, 6.9706],
+      'payerne': [46.8216, 6.9393]
+    };
+
+    function geocodeCity(city) {
+      if (!city) return null;
+      var key = city.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      // Try exact match first
+      if (SWISS_CITY_COORDS[key]) return SWISS_CITY_COORDS[key];
+      // Try partial match
+      for (var k in SWISS_CITY_COORDS) {
+        if (key.indexOf(k) !== -1 || k.indexOf(key) !== -1) return SWISS_CITY_COORDS[k];
+      }
+      return null;
+    }
+
+    function loadLeaflet(cb) {
+      if (_leafletLoaded && window.L) { cb(); return; }
+      var link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+
+      var mcLink = document.createElement('link');
+      mcLink.rel = 'stylesheet';
+      mcLink.href = 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css';
+      document.head.appendChild(mcLink);
+
+      var mcDefLink = document.createElement('link');
+      mcDefLink.rel = 'stylesheet';
+      mcDefLink.href = 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css';
+      document.head.appendChild(mcDefLink);
+
+      var script = document.createElement('script');
+      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      script.onload = function () {
+        var mcScript = document.createElement('script');
+        mcScript.src = 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js';
+        mcScript.onload = function () {
+          _leafletLoaded = true;
+          cb();
+        };
+        document.head.appendChild(mcScript);
+      };
+      document.head.appendChild(script);
+    }
+
+    function loadMapView() {
+      var container = $('map-view');
+      if (!container) return;
+      container.style.display = '';
+
+      if (_mapInstance) {
+        // Refresh markers with current data
+        _refreshMapMarkers();
+        _mapInstance.invalidateSize();
+        return;
+      }
+
+      container.innerHTML = '<div style="text-align:center;padding:48px;color:#64748b">Chargement de la carte...</div>';
+
+      loadLeaflet(function () {
+        container.innerHTML = '';
+        var mapDiv = ce('div', '', '');
+        mapDiv.style.width = '100%';
+        mapDiv.style.height = '100%';
+        container.appendChild(mapDiv);
+
+        _mapInstance = L.map(mapDiv).setView([46.8, 8.2], 8);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap contributors',
+          maxZoom: 19
+        }).addTo(_mapInstance);
+
+        _refreshMapMarkers();
+
+        // Fix tile rendering after container becomes visible
+        setTimeout(function () { _mapInstance.invalidateSize(); }, 200);
+      });
+    }
+
+    function _refreshMapMarkers() {
+      if (!_mapInstance || !window.L) return;
+
+      if (_mapMarkers) {
+        _mapInstance.removeLayer(_mapMarkers);
+      }
+      _mapMarkers = L.markerClusterGroup();
+
+      var gradeColors = { A: '#059669', B: '#0369a1', C: '#d97706', D: '#dc2626' };
+      var data = window._propData || {};
+      var bounds = [];
+
+      Object.keys(data).forEach(function (id) {
+        var p = data[id];
+        var lat = p.latitude;
+        var lng = p.longitude;
+
+        if (!lat || !lng) {
+          var cityCoords = geocodeCity(p.city || '');
+          if (!cityCoords) {
+            // Try to extract city from address
+            cityCoords = geocodeCity(p.address || '');
+          }
+          if (cityCoords) {
+            // Add small random offset to avoid stacking markers at same city center
+            lat = cityCoords[0] + (Math.random() - 0.5) * 0.008;
+            lng = cityCoords[1] + (Math.random() - 0.5) * 0.008;
+          }
+        }
+
+        if (!lat || !lng) return;
+
+        var color = gradeColors[p.grade] || '#94a3b8';
+        var icon = L.divIcon({
+          className: 'map-marker-custom',
+          html: '<div style="background:' + color + ';width:28px;height:28px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700">' + (p.grade || '?') + '</div>',
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
+          popupAnchor: [0, -16]
+        });
+
+        var priceStr = p.price ? formatPrice(p.price) : '?';
+        var scoreStr = p.score ? p.score + '/100' : '-';
+        var gradeStr = p.grade || '-';
+        var titleStr = escapeHtml(p.title || 'Bien immobilier');
+
+        var popup = '<div style="min-width:200px;font-family:Inter,sans-serif">' +
+          '<div style="font-weight:700;font-size:14px;margin-bottom:4px">' + titleStr + '</div>' +
+          '<div style="font-size:16px;font-weight:800;color:#0f172a;margin-bottom:4px">' + priceStr + ' <span style="font-size:12px;color:#64748b;font-weight:400">' + escapeHtml(p.unit || '') + '</span></div>' +
+          '<div style="font-size:13px;color:#64748b;margin-bottom:8px">' + escapeHtml(p.address || '') + '</div>' +
+          '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">' +
+            '<span style="background:' + color + ';color:#fff;padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700">' + gradeStr + ' - ' + scoreStr + '</span>' +
+          '</div>' +
+          '<a href="#" onclick="openPropertyDetail(' + p.id + ');return false;" style="color:#0369a1;font-size:13px;font-weight:600;text-decoration:none">Voir le detail &rarr;</a>' +
+        '</div>';
+
+        var marker = L.marker([lat, lng], { icon: icon }).bindPopup(popup);
+        _mapMarkers.addLayer(marker);
+        bounds.push([lat, lng]);
+      });
+
+      _mapInstance.addLayer(_mapMarkers);
+
+      if (bounds.length > 0) {
+        _mapInstance.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
       }
     }
 
@@ -2122,6 +2323,10 @@
       '.lou-auth-switch a{color:#0369a1;cursor:pointer;text-decoration:underline}',
       '.lou-auth-err{color:#dc2626;font-size:13px;margin-top:8px;display:none;text-align:center}',
 
+      // Map view
+      '.map-view{height:calc(100vh - 280px);min-height:400px;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0}',
+      '.map-marker-custom{background:transparent;border:none}',
+
       // Responsive
       '@media(max-width:768px){',
         '.dash-stats{grid-template-columns:repeat(2,1fr)}',
@@ -2144,6 +2349,7 @@
         '.compare-table th{min-width:120px}',
         '.note-modal{width:95vw}',
         '.dash-tabs{overflow-x:auto}',
+        '.map-view{height:calc(100vh - 200px)}',
       '}'
     ].join('');
   }
@@ -2179,6 +2385,10 @@
     } else {
       initLanding();
     }
+  }
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/static/sw.js').catch(function(){});
   }
 
 })();
