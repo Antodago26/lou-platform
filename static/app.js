@@ -14,6 +14,10 @@
   // Accumulated chatbot criteria (persists across messages)
   var chatCriteria = {};
 
+  // Favorites compare state (shared between showDashboard and helper functions)
+  var compareMode = false;
+  var compareSet = {};
+
   // hCaptcha site key (set via backend config endpoint, or use default)
   var HCAPTCHA_SITEKEY = '';
   // Load hCaptcha script once
@@ -598,13 +602,37 @@
       '<div class="dash-stats" id="dash-stats">' +
         '<div class="dash-stat"><div class="dash-stat-num" id="stat-total">-</div><div class="dash-stat-lbl">Biens analyses</div></div>' +
         '<div class="dash-stat"><div class="dash-stat-num" id="stat-new">-</div><div class="dash-stat-lbl">Nouveaux (24h)</div></div>' +
-        '<div class="dash-stat"><div class="dash-stat-num" id="stat-favs">-</div><div class="dash-stat-lbl">Favoris</div></div>' +
+        '<div class="dash-stat clickable" id="stat-fav-card" style="cursor:pointer"><div class="dash-stat-num" id="stat-favs">-</div><div class="dash-stat-lbl">Favoris</div></div>' +
         '<div class="dash-stat"><div class="dash-stat-num" id="stat-grade-a">-</div><div class="dash-stat-lbl">Classe A</div></div>' +
+      '</div>' +
+      // View tabs
+      '<div class="dash-tabs" id="dash-tabs">' +
+        '<button class="dash-tab active" data-view="properties">Tous les biens</button>' +
+        '<button class="dash-tab" data-view="favorites">&#9829; Mes favoris</button>' +
       '</div>' +
       // Profile summary
       '<div id="profile-bar" class="dash-profile-bar"></div>' +
+      // Favorites toolbar (hidden by default)
+      '<div id="fav-toolbar" class="fav-toolbar" style="display:none">' +
+        '<div class="fav-toolbar-left">' +
+          '<select id="fav-sort" class="dash-select">' +
+            '<option value="date">Plus recents</option>' +
+            '<option value="score">Meilleur score</option>' +
+            '<option value="price_asc">Prix croissant</option>' +
+            '<option value="price_desc">Prix decroissant</option>' +
+          '</select>' +
+          '<button id="fav-compare-btn" class="fav-action-btn">&#9878; Comparer</button>' +
+        '</div>' +
+        '<div class="fav-toolbar-right">' +
+          '<button id="fav-export-btn" class="fav-action-btn">&#8681; Exporter CSV</button>' +
+        '</div>' +
+      '</div>' +
       // Properties list
       '<div id="properties-list" class="dash-properties"><div class="dash-loading">Chargement des biens...</div></div>' +
+      // Favorites list (hidden by default)
+      '<div id="favorites-list" class="dash-properties" style="display:none"></div>' +
+      // Compare panel (hidden by default)
+      '<div id="compare-panel" class="compare-panel" style="display:none"></div>' +
       // Pagination
       '<div id="pagination" class="dash-pagination"></div>';
 
@@ -643,6 +671,60 @@
     };
     $('grade-filter').onchange = function () {
       loadProperties(1, $('sort-select').value, parseInt(this.value));
+    };
+
+    // View tabs
+    var currentView = 'properties';
+    document.querySelectorAll('.dash-tab').forEach(function (tab) {
+      tab.onclick = function () {
+        switchView(this.dataset.view);
+      };
+    });
+
+    // Click on Favoris stat card
+    $('stat-fav-card').onclick = function () {
+      switchView('favorites');
+    };
+
+    function switchView(view) {
+      currentView = view;
+      document.querySelectorAll('.dash-tab').forEach(function (t) {
+        t.classList.toggle('active', t.dataset.view === view);
+      });
+      var isFav = view === 'favorites';
+      $('properties-list').style.display = isFav ? 'none' : '';
+      $('favorites-list').style.display = isFav ? '' : 'none';
+      $('pagination').style.display = isFav ? 'none' : '';
+      $('fav-toolbar').style.display = isFav ? '' : 'none';
+      $('sort-select').style.display = isFav ? 'none' : '';
+      $('grade-filter').style.display = isFav ? 'none' : '';
+      $('compare-panel').style.display = 'none';
+      if (isFav) {
+        loadFavorites();
+      }
+    }
+
+    // Favorites toolbar events
+    $('fav-sort').onchange = function () { loadFavorites(); };
+    $('fav-export-btn').onclick = function () {
+      window.open(API + '/api/favorites/export?token=' + TOKEN, '_blank');
+    };
+
+    compareMode = false;
+    compareSet = {};
+    $('fav-compare-btn').onclick = function () {
+      compareMode = !compareMode;
+      this.classList.toggle('active', compareMode);
+      this.textContent = compareMode ? '\u2715 Annuler' : '\u2696 Comparer';
+      compareSet = {};
+      $('compare-panel').style.display = 'none';
+      // Re-render to show checkboxes
+      if (document.querySelectorAll('.fav-card').length > 0) {
+        document.querySelectorAll('.fav-compare-check').forEach(function (cb) {
+          cb.style.display = compareMode ? '' : 'none';
+          cb.checked = false;
+        });
+      }
     };
 
     // Init chat widget
@@ -1307,6 +1389,304 @@
   }
 
   // ============================================================
+  // FAVORITES VIEW
+  // ============================================================
+  function loadFavorites() {
+    var list = $('favorites-list');
+    list.innerHTML = '<div class="dash-loading">Chargement des favoris...</div>';
+    var sort = $('fav-sort') ? $('fav-sort').value : 'date';
+    apiFetch(API + '/api/favorites?sort=' + sort)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data.favorites || data.favorites.length === 0) {
+          list.innerHTML = '<div class="dash-empty">' +
+            '<div style="font-size:48px;margin-bottom:16px">&#9825;</div>' +
+            '<div style="font-size:16px;font-weight:600;margin-bottom:8px">Aucun favori</div>' +
+            '<div>Cliquez sur le coeur d\'un bien pour l\'ajouter a vos favoris</div>' +
+          '</div>';
+          return;
+        }
+
+        // Store for detail view
+        window._propData = window._propData || {};
+        data.favorites.forEach(function (p) { window._propData[p.id] = p; });
+
+        var html = '<div class="prop-grid">';
+        data.favorites.forEach(function (p) {
+          html += renderFavoriteCard(p);
+        });
+        html += '</div>';
+        list.innerHTML = html;
+
+        // Hook favorite buttons
+        list.querySelectorAll('.fav-btn').forEach(function (btn) {
+          btn.onclick = function (e) {
+            e.stopPropagation();
+            var id = parseInt(this.dataset.id);
+            toggleFavorite(id, this);
+            // After removing, reload favorites view after short delay
+            var self = this;
+            setTimeout(function () { loadFavorites(); loadStats(); }, 400);
+          };
+        });
+
+        // Hook note buttons
+        list.querySelectorAll('.fav-note-btn').forEach(function (btn) {
+          btn.onclick = function (e) {
+            e.stopPropagation();
+            var id = parseInt(this.dataset.id);
+            var currentNote = this.dataset.note || '';
+            showNoteModal(id, currentNote);
+          };
+        });
+
+        // Hook compare checkboxes
+        list.querySelectorAll('.fav-compare-check').forEach(function (cb) {
+          cb.onchange = function (e) {
+            e.stopPropagation();
+            var id = parseInt(this.dataset.id);
+            if (this.checked) {
+              compareSet[id] = window._propData[id];
+            } else {
+              delete compareSet[id];
+            }
+            var count = Object.keys(compareSet).length;
+            if (count >= 2) {
+              renderCompare();
+            } else {
+              $('compare-panel').style.display = 'none';
+            }
+          };
+        });
+      })
+      .catch(function () {
+        list.innerHTML = '<div class="dash-empty">Erreur de chargement des favoris</div>';
+      });
+  }
+
+  function renderFavoriteCard(p) {
+    var gradeColors = { A: '#059669', B: '#0369a1', C: '#d97706', D: '#dc2626' };
+    var gc = gradeColors[p.grade] || '#94a3b8';
+
+    var imgHtml = '';
+    if (p.images && p.images.length > 1) {
+      var cid = 'fav-carousel-' + p.id;
+      imgHtml = '<div class="prop-carousel" id="' + cid + '">';
+      for (var ii = 0; ii < p.images.length; ii++) {
+        imgHtml += '<img src="' + escapeHtml(p.images[ii]) + '" alt="" class="prop-img' + (ii === 0 ? ' active' : '') + '" data-idx="' + ii + '" onerror="this.style.display=\'none\';_checkAllImgsFailed(this.parentNode)">';
+      }
+      imgHtml += '<button class="carousel-btn prev" onclick="event.stopPropagation();carouselNav(\'' + cid + '\',-1)">&#8249;</button>';
+      imgHtml += '<button class="carousel-btn next" onclick="event.stopPropagation();carouselNav(\'' + cid + '\',1)">&#8250;</button>';
+      imgHtml += '</div>';
+    } else if (p.images && p.images.length === 1) {
+      imgHtml = '<img src="' + escapeHtml(p.images[0]) + '" alt="" class="prop-img active" onerror="this.style.display=\'none\';_checkAllImgsFailed(this.parentNode)">';
+    }
+
+    var daysOnline = p.days_online || 0;
+    var daysText = daysOnline <= 1 ? 'Nouveau' : daysOnline + 'j';
+    var daysColor = daysOnline <= 3 ? '#059669' : daysOnline <= 14 ? '#0369a1' : daysOnline <= 30 ? '#d97706' : '#94a3b8';
+
+    var priceText = p.price ? formatPrice(p.price) + ' CHF' : 'Prix sur demande';
+    if (p.unit && p.price) {
+      var unitPart = (p.unit.split('/')[1] || '').toLowerCase();
+      if (unitPart && unitPart !== 'total' && unitPart !== 'one-time') {
+        priceText += '<small>/' + escapeHtml(unitPart) + '</small>';
+      }
+    }
+    if (p.price_drop) {
+      priceText = '<span class="price-drop-badge">\u2193 ' + Math.round(p.price_drop.change_pct) + '%</span> ' + priceText + '<del class="old-price">' + formatPrice(p.price_drop.old_price) + ' CHF</del>';
+    }
+
+    var details = [];
+    if (p.rooms && p.rooms > 0 && p.rooms < 20) details.push(p.rooms + ' pcs');
+    if (p.surface && p.surface > 0) details.push(p.surface + ' m\u00B2');
+    if (p.floor !== null && p.floor !== undefined) details.push(p.floor + 'e etage');
+
+    var noteSnippet = p.fav_note ? '<div class="fav-note-preview">' + escapeHtml(p.fav_note.substring(0, 60)) + (p.fav_note.length > 60 ? '...' : '') + '</div>' : '';
+    var favDate = p.fav_date ? new Date(p.fav_date).toLocaleDateString('fr-CH') : '';
+
+    return '<div class="prop-card fav-card" onclick="openPropertyDetail(' + p.id + ')" style="cursor:pointer">' +
+      '<div class="prop-card-top">' +
+        (imgHtml || '<div class="prop-img-placeholder"></div>') +
+        '<div class="prop-score" style="background:' + gc + '">' +
+          '<span class="prop-score-num">' + p.score + '</span>' +
+          '<span class="prop-score-grade">' + p.grade + '</span>' +
+        '</div>' +
+        '<div class="prop-days" style="background:' + daysColor + '">' + daysText + '</div>' +
+        '<button class="fav-btn active" data-id="' + p.id + '" title="Retirer des favoris">&#9829;</button>' +
+        '<input type="checkbox" class="fav-compare-check" data-id="' + p.id + '" title="Selectionner pour comparer" style="display:' + (compareMode ? '' : 'none') + '">' +
+      '</div>' +
+      '<div class="prop-card-body">' +
+        '<div class="prop-price">' + priceText + '</div>' +
+        '<div class="prop-title">' + escapeHtml(p.title || 'Bien immobilier') + '</div>' +
+        '<div class="prop-address">' + escapeHtml(p.address || '') + '</div>' +
+        '<div class="prop-details">' + details.join(' &middot; ') + '</div>' +
+        noteSnippet +
+        '<div class="fav-card-footer">' +
+          '<button class="fav-note-btn" data-id="' + p.id + '" data-note="' + escapeHtml(p.fav_note || '') + '" onclick="event.stopPropagation()" title="Ajouter une note">' +
+            (p.fav_note ? '&#9998; Note' : '&#43; Note') +
+          '</button>' +
+          '<span class="fav-date">' + favDate + '</span>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  // ============================================================
+  // NOTE MODAL
+  // ============================================================
+  function showNoteModal(propertyId, currentNote) {
+    // Remove existing modal
+    var old = document.querySelector('.note-modal-overlay');
+    if (old) old.remove();
+
+    var overlay = document.createElement('div');
+    overlay.className = 'note-modal-overlay';
+    overlay.innerHTML =
+      '<div class="note-modal">' +
+        '<div class="note-modal-head">' +
+          '<h3>Note sur ce bien</h3>' +
+          '<button class="note-modal-close">&times;</button>' +
+        '</div>' +
+        '<textarea id="note-textarea" class="note-textarea" placeholder="Vos remarques, questions, points d\'attention..." maxlength="500">' + escapeHtml(currentNote) + '</textarea>' +
+        '<div class="note-modal-footer">' +
+          '<span class="note-char-count"><span id="note-chars">' + currentNote.length + '</span>/500</span>' +
+          '<div class="note-modal-actions">' +
+            '<button class="note-cancel-btn">Annuler</button>' +
+            '<button class="note-save-btn">Sauvegarder</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+
+    var textarea = overlay.querySelector('#note-textarea');
+    textarea.focus();
+    textarea.oninput = function () {
+      overlay.querySelector('#note-chars').textContent = this.value.length;
+    };
+
+    overlay.querySelector('.note-modal-close').onclick = function () { overlay.remove(); };
+    overlay.querySelector('.note-cancel-btn').onclick = function () { overlay.remove(); };
+    overlay.onclick = function (e) { if (e.target === overlay) overlay.remove(); };
+
+    overlay.querySelector('.note-save-btn').onclick = function () {
+      var note = textarea.value.trim();
+      var btn = this;
+      btn.textContent = '...';
+      btn.disabled = true;
+      apiFetch(API + '/api/favorite/' + propertyId + '/note', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: note })
+      })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.ok) {
+          overlay.remove();
+          loadFavorites();
+        } else {
+          btn.textContent = 'Erreur';
+          btn.disabled = false;
+        }
+      })
+      .catch(function () {
+        btn.textContent = 'Erreur';
+        btn.disabled = false;
+      });
+    };
+  }
+
+  // ============================================================
+  // COMPARE MODE
+  // ============================================================
+  function renderCompare() {
+    var panel = $('compare-panel');
+    var ids = Object.keys(compareSet);
+    if (ids.length < 2) {
+      panel.style.display = 'none';
+      return;
+    }
+
+    var props = ids.map(function (id) { return compareSet[id]; });
+    var gradeColors = { A: '#059669', B: '#0369a1', C: '#d97706', D: '#dc2626' };
+
+    // Build comparison table
+    var html = '<div class="compare-header">' +
+      '<h3>&#9878; Comparaison (' + props.length + ' biens)</h3>' +
+      '<button class="compare-close-btn" onclick="document.getElementById(\'compare-panel\').style.display=\'none\'">&times;</button>' +
+    '</div>';
+
+    html += '<div class="compare-scroll"><table class="compare-table"><thead><tr><th>Critere</th>';
+    props.forEach(function (p) {
+      var gc = gradeColors[p.grade] || '#94a3b8';
+      html += '<th>' +
+        '<div class="compare-th-score" style="background:' + gc + '">' + p.score + ' ' + p.grade + '</div>' +
+        '<div class="compare-th-title">' + escapeHtml((p.title || '').substring(0, 40)) + '</div>' +
+      '</th>';
+    });
+    html += '</tr></thead><tbody>';
+
+    // Rows
+    var rows = [
+      { label: 'Prix', key: 'price', fmt: function (v) { return v ? formatPrice(v) + ' CHF' : '-'; } },
+      { label: 'Pieces', key: 'rooms', fmt: function (v) { return v || '-'; } },
+      { label: 'Surface', key: 'surface', fmt: function (v) { return v ? v + ' m\u00B2' : '-'; } },
+      { label: 'Ville', key: 'city', fmt: function (v) { return v || '-'; } },
+      { label: 'Etage', key: 'floor', fmt: function (v) { return v !== null && v !== undefined ? v + 'e' : '-'; } },
+      { label: 'Score', key: 'score', fmt: function (v) { return v || 0; } },
+      { label: 'En ligne', key: 'days_online', fmt: function (v) { return v ? v + ' jours' : '-'; } },
+    ];
+
+    rows.forEach(function (row) {
+      html += '<tr><td class="compare-label">' + row.label + '</td>';
+      var values = props.map(function (p) { return p[row.key]; });
+      // Highlight best
+      var best = null;
+      if (row.key === 'price') best = Math.min.apply(null, values.filter(function (v) { return v; }));
+      if (row.key === 'surface' || row.key === 'score') best = Math.max.apply(null, values.filter(function (v) { return v; }));
+
+      props.forEach(function (p) {
+        var val = p[row.key];
+        var isBest = best !== null && val === best;
+        html += '<td' + (isBest ? ' class="compare-best"' : '') + '>' + row.fmt(val) + '</td>';
+      });
+      html += '</tr>';
+    });
+
+    // Score detail rows
+    if (props[0].score_detail) {
+      var scoreKeys = [
+        { label: 'Zone', key: 'zone' },
+        { label: 'Budget', key: 'budget' },
+        { label: 'Type', key: 'type' },
+        { label: 'Surface', key: 'surface' },
+        { label: 'Equip.', key: 'equipment' },
+      ];
+      scoreKeys.forEach(function (sk) {
+        html += '<tr><td class="compare-label">' + sk.label + '</td>';
+        props.forEach(function (p) {
+          var v = p.score_detail ? (p.score_detail[sk.key] || 0) : 0;
+          var color = v >= 80 ? '#059669' : v >= 60 ? '#0369a1' : v >= 40 ? '#d97706' : '#dc2626';
+          html += '<td><span style="color:' + color + ';font-weight:600">' + v + '</span></td>';
+        });
+        html += '</tr>';
+      });
+    }
+
+    // Notes row
+    html += '<tr><td class="compare-label">Notes</td>';
+    props.forEach(function (p) {
+      html += '<td class="compare-note">' + escapeHtml(p.fav_note || '-') + '</td>';
+    });
+    html += '</tr>';
+
+    html += '</tbody></table></div>';
+
+    panel.innerHTML = html;
+    panel.style.display = '';
+  }
+
+  // ============================================================
   // CHAT WIDGET
   // ============================================================
   function initChat() {
@@ -1675,6 +2055,59 @@
       '.detail-source-text{padding:10px 20px;background:#f1f5f9;border-radius:10px;font-size:14px;color:#64748b;text-transform:capitalize}',
       '@media(max-width:768px){.detail-overlay{padding:0}.detail-panel{border-radius:0;max-width:100%;min-height:100vh}.detail-gallery{height:260px}.detail-body{padding:20px}.detail-price{font-size:22px}.detail-table{grid-template-columns:1fr}.detail-score-wrap{flex-direction:column}}',
 
+      // View tabs
+      '.dash-tabs{display:flex;gap:0;margin-bottom:20px;border-bottom:2px solid #e2e8f0}',
+      '.dash-tab{padding:10px 20px;border:none;background:none;font-size:14px;font-weight:600;cursor:pointer;color:#64748b;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .2s}',
+      '.dash-tab:hover{color:#0369a1}',
+      '.dash-tab.active{color:#0369a1;border-bottom-color:#0369a1}',
+
+      // Favorites toolbar
+      '.fav-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px;flex-wrap:wrap}',
+      '.fav-toolbar-left{display:flex;gap:10px;align-items:center}',
+      '.fav-toolbar-right{display:flex;gap:10px;align-items:center}',
+      '.fav-action-btn{padding:8px 16px;border:1px solid #e2e8f0;background:#fff;border-radius:8px;font-size:13px;cursor:pointer;color:#334155;font-weight:500;transition:all .2s}',
+      '.fav-action-btn:hover{border-color:#0369a1;color:#0369a1}',
+      '.fav-action-btn.active{background:#0369a1;color:#fff;border-color:#0369a1}',
+
+      // Favorite card extras
+      '.fav-note-preview{font-size:12px;color:#64748b;background:#f8fafc;padding:6px 10px;border-radius:6px;margin-bottom:8px;border-left:3px solid #0369a1;font-style:italic}',
+      '.fav-card-footer{display:flex;justify-content:space-between;align-items:center;padding-top:10px;border-top:1px solid #f1f5f9}',
+      '.fav-note-btn{background:none;border:1px solid #e2e8f0;padding:5px 12px;border-radius:6px;font-size:12px;color:#64748b;cursor:pointer;transition:all .2s}',
+      '.fav-note-btn:hover{border-color:#0369a1;color:#0369a1}',
+      '.fav-date{font-size:11px;color:#94a3b8}',
+      '.fav-compare-check{position:absolute;top:12px;left:52px;width:20px;height:20px;accent-color:#0369a1;cursor:pointer;z-index:3}',
+      '.dash-stat.clickable:hover{border-color:#0369a1;box-shadow:0 4px 16px rgba(3,105,161,.1)}',
+
+      // Note modal
+      '.note-modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:3000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)}',
+      '.note-modal{background:#fff;border-radius:16px;padding:24px;width:440px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,.3);color:#0f172a}',
+      '.note-modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}',
+      '.note-modal-head h3{margin:0;font-size:18px;font-weight:700}',
+      '.note-modal-close{background:none;border:none;font-size:24px;cursor:pointer;color:#94a3b8}',
+      '.note-textarea{width:100%;height:120px;border:1px solid #e2e8f0;border-radius:10px;padding:12px;font-size:14px;font-family:Inter,sans-serif;resize:vertical;outline:none;box-sizing:border-box}',
+      '.note-textarea:focus{border-color:#0369a1;box-shadow:0 0 0 3px rgba(3,105,161,.1)}',
+      '.note-modal-footer{display:flex;justify-content:space-between;align-items:center;margin-top:12px}',
+      '.note-char-count{font-size:12px;color:#94a3b8}',
+      '.note-modal-actions{display:flex;gap:8px}',
+      '.note-cancel-btn{padding:8px 16px;background:#f1f5f9;border:none;border-radius:8px;font-size:13px;cursor:pointer;color:#64748b}',
+      '.note-save-btn{padding:8px 16px;background:#0369a1;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600;transition:background .2s}',
+      '.note-save-btn:hover{background:#0284c7}',
+
+      // Compare panel
+      '.compare-panel{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:24px;margin-bottom:24px;box-shadow:0 4px 16px rgba(0,0,0,.06)}',
+      '.compare-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}',
+      '.compare-header h3{margin:0;font-size:18px;font-weight:700}',
+      '.compare-close-btn{background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8}',
+      '.compare-scroll{overflow-x:auto}',
+      '.compare-table{width:100%;border-collapse:collapse;font-size:13px}',
+      '.compare-table th{padding:12px 10px;text-align:center;border-bottom:2px solid #e2e8f0;min-width:140px}',
+      '.compare-th-score{display:inline-block;padding:4px 12px;border-radius:8px;color:#fff;font-weight:700;font-size:14px;margin-bottom:4px}',
+      '.compare-th-title{font-size:12px;color:#64748b;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}',
+      '.compare-table td{padding:10px;text-align:center;border-bottom:1px solid #f1f5f9}',
+      '.compare-label{text-align:left!important;color:#64748b;font-weight:600}',
+      '.compare-best{background:#f0fdf4;color:#059669;font-weight:700}',
+      '.compare-note{font-size:12px;color:#64748b;text-align:left!important;max-width:180px}',
+
       // Auth overlay (for landing page)
       '.lou-overlay{position:fixed;inset:0;background:rgba(15,23,42,.7);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(4px)}',
       '.lou-auth-box{background:#fff;border-radius:16px;padding:36px;width:400px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,.3);position:relative;color:#0f172a}',
@@ -1706,6 +2139,11 @@
         '.chat-panel{width:100vw;height:calc(100vh - 60px);right:0;bottom:0;border-radius:16px 16px 0 0;max-height:100dvh}',
         '.chat-input{padding:12px;padding-bottom:max(12px,env(safe-area-inset-bottom))}',
         '.chat-input input{font-size:16px}',
+        '.fav-toolbar{flex-direction:column;align-items:stretch}',
+        '.fav-toolbar-left,.fav-toolbar-right{justify-content:center}',
+        '.compare-table th{min-width:120px}',
+        '.note-modal{width:95vw}',
+        '.dash-tabs{overflow-x:auto}',
       '}'
     ].join('');
   }

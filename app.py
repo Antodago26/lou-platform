@@ -24,7 +24,7 @@ import bcrypt
 import psycopg2
 import psycopg2.extras
 import requests as http_requests
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, make_response
 from flask_cors import CORS
 from anthropic import Anthropic
 
@@ -126,6 +126,8 @@ def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        if not token:
+            token = request.args.get('token', '')
         if not token:
             return jsonify({"error": "Token manquant"}), 401
         try:
@@ -263,29 +265,51 @@ def signup():
         user = dict(cur.fetchone())
 
         # Create default search profile from chatbot criteria
+        # Lou sends: property_types (array), transaction, budget_max (int),
+        #            rooms_min (float), zones (array of {city, canton, radius_km})
         if criteria:
+            prop_types = criteria.get('property_types') or [criteria.get('property_type', 'appartement')]
+            if isinstance(prop_types, str):
+                prop_types = [prop_types]
+            transaction = criteria.get('transaction') or criteria.get('transaction_type', 'location')
+            budget_max = criteria.get('budget_max') or _parse_budget(criteria.get('budget', ''))
+            rooms_min = criteria.get('rooms_min') or _parse_rooms(criteria.get('rooms', ''))
+
             cur.execute("""
                 INSERT INTO search_profiles (user_id, property_types, transaction, budget_max, rooms_min, priorities)
                 VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
             """, (
                 user['id'],
-                [criteria.get('property_type', 'appartement')],
-                criteria.get('transaction_type', 'location'),
-                _parse_budget(criteria.get('budget', '')),
-                _parse_rooms(criteria.get('rooms', '')),
+                prop_types,
+                transaction,
+                budget_max,
+                rooms_min,
                 criteria.get('priorities', [])
             ))
             profile = cur.fetchone()
             profile_id = profile['id']
 
-            # Create search zone
-            city = criteria.get('city', '')
-            canton = criteria.get('canton', '')
-            if city:
-                cur.execute("""
-                    INSERT INTO search_zones (profile_id, city, canton, radius_km)
-                    VALUES (%s, %s, %s, %s)
-                """, (profile_id, city, canton, 3.0))
+            # Create search zones from Lou's zones array
+            zones = criteria.get('zones', [])
+            if zones and isinstance(zones, list):
+                for z in zones:
+                    city = z.get('city', '')
+                    canton = z.get('canton', '')
+                    radius = z.get('radius_km', 3.0)
+                    if city:
+                        cur.execute("""
+                            INSERT INTO search_zones (profile_id, city, canton, radius_km)
+                            VALUES (%s, %s, %s, %s)
+                        """, (profile_id, city, canton, radius))
+            else:
+                # Fallback: flat city/canton fields (legacy)
+                city = criteria.get('city', '')
+                canton = criteria.get('canton', '')
+                if city:
+                    cur.execute("""
+                        INSERT INTO search_zones (profile_id, city, canton, radius_km)
+                        VALUES (%s, %s, %s, %s)
+                    """, (profile_id, city, canton, 3.0))
 
         conn.commit()
         token = make_token(user['id'])
@@ -725,8 +749,9 @@ def get_properties():
         # Format for frontend with cross-portal merging
         def _merge_key(p):
             """Generate a key to detect same property across portals.
-            Primary: postal_code + price±100 + rooms + surface±5m2 (robust across portals).
-            Fallback: city + price±100 + normalized title (when data is incomplete).
+            Primary: postal_code + price±5000 + rooms + surface±10m2 (robust across portals).
+            Secondary: city + price±5000 + rooms + surface±10m2.
+            Fallback: city + price±5000 + normalized title (when data is incomplete).
             """
             postal = (p.get('postal_code') or '').strip()
             price = p.get('price') or 0
@@ -900,6 +925,173 @@ def toggle_favorite(property_id):
             action = 'added'
         conn.commit()
         return jsonify({"ok": True, "action": action})
+    finally:
+        cur.close()
+        return_db(conn)
+
+
+@app.route('/api/favorite/<int:property_id>/note', methods=['PUT'])
+@token_required
+def update_favorite_note(property_id):
+    """Update the note on a favorited property."""
+    data = request.json or {}
+    note = (data.get('note') or '').strip()[:500]  # Max 500 chars
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "UPDATE favorites SET notes = %s WHERE user_id = %s AND property_id = %s RETURNING id",
+            (note or None, request.user_id, property_id)
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify({"error": "Favori non trouve"}), 404
+        conn.commit()
+        return jsonify({"ok": True})
+    finally:
+        cur.close()
+        return_db(conn)
+
+
+@app.route('/api/favorites', methods=['GET'])
+@token_required
+def get_favorites():
+    """Get all favorites with full property data, scores, and notes."""
+    user_id = request.user_id
+    sort = request.args.get('sort', 'date')
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        order_map = {
+            'date': 'f.created_at DESC',
+            'score': 'sp.total_score DESC',
+            'price_asc': 'p.price ASC NULLS LAST',
+            'price_desc': 'p.price DESC NULLS LAST',
+        }
+        order = order_map.get(sort, 'f.created_at DESC')
+
+        cur.execute(f"""
+            SELECT p.*, f.notes as fav_note, f.created_at as fav_date,
+                   sp.total_score, sp.grade, sp.distance_km,
+                   sp.score_zone, sp.score_budget, sp.score_type,
+                   sp.score_surface, sp.score_equipment, sp.score_freshness,
+                   p.first_seen_at,
+                   (SELECT json_agg(json_build_object('old_price', ph.old_price, 'new_price', ph.new_price, 'change_pct', ph.change_pct, 'detected_at', ph.detected_at) ORDER BY ph.detected_at DESC) FROM price_history ph WHERE ph.property_id = p.id) as price_changes
+            FROM favorites f
+            JOIN properties p ON p.id = f.property_id
+            LEFT JOIN scored_properties sp ON sp.property_id = p.id AND sp.user_id = %s
+            WHERE f.user_id = %s AND p.is_active = TRUE
+            ORDER BY {order}
+        """, (user_id, user_id))
+        rows = [dict(r) for r in cur.fetchall()]
+
+        # Format like /api/properties
+        formatted = []
+        for p in rows:
+            images = p.get('images') or []
+            if isinstance(images, str):
+                try:
+                    images = json.loads(images)
+                except Exception:
+                    images = [images] if images else []
+
+            title = re.sub(r'[^\x00-\x7F]', '', p.get('title') or '').strip()
+            address = re.sub(r'[^\x00-\x7F]', '', p.get('address') or '').strip()
+
+            days_online = 0
+            if p.get('first_seen_at'):
+                days_online = _days_since(p['first_seen_at'])
+
+            price_drop = None
+            changes = p.get('price_changes')
+            if changes and isinstance(changes, list) and len(changes) > 0:
+                latest = changes[0]
+                if latest.get('change_pct') and latest['change_pct'] < 0:
+                    price_drop = {
+                        'old_price': latest['old_price'],
+                        'new_price': latest['new_price'],
+                        'change_pct': latest['change_pct']
+                    }
+
+            item = {
+                'id': p['id'],
+                'title': title,
+                'address': address,
+                'city': p.get('city'),
+                'price': p.get('price'),
+                'unit': p.get('unit'),
+                'rooms': p.get('rooms'),
+                'surface': p.get('surface'),
+                'floor': p.get('floor'),
+                'images': images,
+                'source': p.get('source'),
+                'source_url': p.get('source_url'),
+                'transaction': p.get('transaction'),
+                'description': p.get('description'),
+                'features': p.get('features'),
+                'score': p.get('total_score') or 0,
+                'grade': p.get('grade') or 'D',
+                'distance_km': p.get('distance_km'),
+                'is_favorite': True,
+                'fav_note': p.get('fav_note') or '',
+                'fav_date': p.get('fav_date').isoformat() if p.get('fav_date') else None,
+                'days_online': days_online,
+                'price_drop': price_drop,
+                'score_detail': {
+                    'zone': p.get('score_zone') or 0,
+                    'budget': p.get('score_budget') or 0,
+                    'type': p.get('score_type') or 0,
+                    'surface': p.get('score_surface') or 0,
+                    'equipment': p.get('score_equipment') or 0,
+                    'freshness': p.get('score_freshness') or 0,
+                },
+            }
+            formatted.append(item)
+
+        return jsonify({"favorites": formatted, "total": len(formatted)})
+    finally:
+        cur.close()
+        return_db(conn)
+
+
+@app.route('/api/favorites/export', methods=['GET'])
+@token_required
+def export_favorites():
+    """Export favorites as CSV."""
+    user_id = request.user_id
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT p.title, p.address, p.city, p.price, p.unit, p.rooms, p.surface,
+                   p.source, p.source_url, p.transaction,
+                   sp.total_score, sp.grade, f.notes, f.created_at as fav_date
+            FROM favorites f
+            JOIN properties p ON p.id = f.property_id
+            LEFT JOIN scored_properties sp ON sp.property_id = p.id AND sp.user_id = %s
+            WHERE f.user_id = %s AND p.is_active = TRUE
+            ORDER BY f.created_at DESC
+        """, (user_id, user_id))
+        rows = cur.fetchall()
+
+        import io, csv
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['Titre', 'Adresse', 'Ville', 'Prix', 'Unite', 'Pieces', 'Surface m2',
+                         'Source', 'URL', 'Transaction', 'Score', 'Grade', 'Notes', 'Date favori'])
+        for r in rows:
+            title = re.sub(r'[^\x00-\x7F]', '', r.get('title') or '').strip()
+            writer.writerow([
+                title, r.get('address'), r.get('city'), r.get('price'), r.get('unit'),
+                r.get('rooms'), r.get('surface'), r.get('source'), r.get('source_url'),
+                r.get('transaction'), r.get('total_score'), r.get('grade'),
+                r.get('notes') or '', r.get('fav_date', '')
+            ])
+
+        response = make_response(output.getvalue())
+        response.headers['Content-Type'] = 'text/csv; charset=utf-8'
+        response.headers['Content-Disposition'] = 'attachment; filename=favoris-bonhome.csv'
+        return response
     finally:
         cur.close()
         return_db(conn)
