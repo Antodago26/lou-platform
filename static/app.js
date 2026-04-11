@@ -773,7 +773,25 @@
     _pfUpdateBudget('pf-budget-min'); _pfUpdateBudget('pf-budget-max');
   };
 
-  // Image carousel navigation
+  // If all images fail to load, show placeholder
+  window._checkAllImgsFailed = function (container) {
+    if (!container) return;
+    var imgs = container.querySelectorAll('.prop-img');
+    var allHidden = true;
+    for (var i = 0; i < imgs.length; i++) {
+      if (imgs[i].style.display !== 'none') { allHidden = false; break; }
+    }
+    if (allHidden) {
+      // Hide carousel buttons/dots, show placeholder
+      var btns = container.querySelectorAll('.carousel-btn, .carousel-dots');
+      for (var j = 0; j < btns.length; j++) btns[j].style.display = 'none';
+      var ph = document.createElement('div');
+      ph.className = 'prop-img-placeholder';
+      container.appendChild(ph);
+    }
+  };
+
+  // Image carousel navigation — skip broken images
   window.carouselNav = function (cid, dir) {
     var el = document.getElementById(cid);
     if (!el) return;
@@ -783,7 +801,12 @@
     imgs.forEach(function (im, i) { if (im.classList.contains('active')) cur = i; });
     imgs[cur].classList.remove('active');
     if (dots[cur]) dots[cur].classList.remove('active');
-    cur = (cur + dir + imgs.length) % imgs.length;
+    // Skip hidden/broken images
+    var attempts = imgs.length;
+    do {
+      cur = (cur + dir + imgs.length) % imgs.length;
+      attempts--;
+    } while (imgs[cur].style.display === 'none' && attempts > 0);
     imgs[cur].classList.add('active');
     if (dots[cur]) dots[cur].classList.add('active');
   };
@@ -992,7 +1015,7 @@
       var cid = 'carousel-' + p.id;
       imgHtml = '<div class="prop-carousel" id="' + cid + '">';
       for (var ii = 0; ii < p.images.length; ii++) {
-        imgHtml += '<img src="' + escapeHtml(p.images[ii]) + '" alt="" class="prop-img' + (ii === 0 ? ' active' : '') + '" data-idx="' + ii + '" onerror="this.style.display=\'none\'">';
+        imgHtml += '<img src="' + escapeHtml(p.images[ii]) + '" alt="" class="prop-img' + (ii === 0 ? ' active' : '') + '" data-idx="' + ii + '" onerror="this.style.display=\'none\';_checkAllImgsFailed(this.parentNode)">';
       }
       imgHtml += '<button class="carousel-btn prev" onclick="carouselNav(\'' + cid + '\',-1)">&#8249;</button>';
       imgHtml += '<button class="carousel-btn next" onclick="carouselNav(\'' + cid + '\',1)">&#8250;</button>';
@@ -1003,7 +1026,7 @@
       imgHtml += '</span>';
       imgHtml += '</div>';
     } else if (p.images && p.images.length === 1) {
-      imgHtml = '<img src="' + escapeHtml(p.images[0]) + '" alt="" class="prop-img active" onerror="this.style.display=\'none\'">';
+      imgHtml = '<img src="' + escapeHtml(p.images[0]) + '" alt="" class="prop-img active" onerror="this.style.display=\'none\';_checkAllImgsFailed(this.parentNode)">';
     }
 
     var priceText = p.price ? formatPrice(p.price) + ' CHF' : 'Prix sur demande';

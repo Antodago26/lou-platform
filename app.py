@@ -683,10 +683,10 @@ def get_properties():
             """
             postal = (p.get('postal_code') or '').strip()
             price = p.get('price') or 0
-            price_bucket = round(price / 100) * 100 if price else 0
+            price_bucket = round(price / 5000) * 5000 if price else 0
             rooms = p.get('rooms')
             surface = p.get('surface') or 0
-            surface_bucket = round(surface / 5) * 5 if surface else 0
+            surface_bucket = round(surface / 10) * 10 if surface else 0
 
             city = (p.get('city') or '').lower().strip()
 
@@ -738,8 +738,8 @@ def get_properties():
             best_images = p.pop('_best_images', [])
             results.append({
                 'id': p['id'],
-                'title': p['title'] or 'Bien immobilier',
-                'address': p['address'] or '',
+                'title': re.sub(r'[^\x00-\x7F]', '', p['title'] or '').strip() or 'Bien immobilier',
+                'address': re.sub(r'[^\x00-\x7F]', '', p['address'] or '').strip(),
                 'price': p['price'] or 0,
                 'unit': f"{(p['currency'] or 'CHF').encode('ascii', 'ignore').decode()}/{(p['price_unit'] or 'mois').encode('ascii', 'ignore').decode()}",
                 'rooms': float(p['rooms']) if p['rooms'] else 0,
