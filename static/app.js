@@ -14,6 +14,23 @@
   // Accumulated chatbot criteria (persists across messages)
   var chatCriteria = {};
 
+  // hCaptcha site key (set via backend config endpoint, or use default)
+  var HCAPTCHA_SITEKEY = '';
+  // Load hCaptcha script once
+  var _hcaptchaLoaded = false;
+  function loadHCaptcha() {
+    if (_hcaptchaLoaded) return;
+    _hcaptchaLoaded = true;
+    var s = document.createElement('script');
+    s.src = 'https://js.hcaptcha.com/1/api.js?render=explicit';
+    s.async = true;
+    document.head.appendChild(s);
+  }
+  // Fetch captcha config from backend
+  fetch(API + '/api/config').then(function(r){ return r.json(); }).then(function(d){
+    if (d.hcaptcha_sitekey) { HCAPTCHA_SITEKEY = d.hcaptcha_sitekey; loadHCaptcha(); }
+  }).catch(function(){});
+
   // Stable anonymous session ID (persists in localStorage so chat history works)
   var ANON_SESSION = localStorage.getItem('lou_anon_session');
   if (!ANON_SESSION) {
@@ -70,6 +87,7 @@
       '<input id="lou-auth-email" type="email" placeholder="Email">',
       '<input id="lou-auth-pass" type="password" placeholder="Mot de passe">',
       '<input id="lou-auth-name" type="text" placeholder="Votre nom" style="display:none">',
+      '<div id="lou-hcaptcha" style="display:none;margin-bottom:12px"></div>',
       '<button class="auth-submit" id="lou-auth-btn">Se connecter</button>',
       '<div class="lou-auth-switch"><a id="lou-auth-toggle">Creer un compte</a></div>',
       '<div class="lou-auth-err" id="lou-auth-err"></div>',
@@ -83,12 +101,23 @@
     $('lou-auth-close').onclick = function () { overlay.remove(); };
 
     var mode = 'login';
+    var _hcaptchaWidgetId = null;
     $('lou-auth-toggle').onclick = function () {
       mode = mode === 'login' ? 'signup' : 'login';
       $('lou-auth-name').style.display = mode === 'signup' ? 'block' : 'none';
       $('lou-auth-btn').textContent = mode === 'signup' ? "S'inscrire" : 'Se connecter';
       this.textContent = mode === 'signup' ? 'Deja un compte ? Se connecter' : 'Creer un compte';
       $('lou-auth-err').style.display = 'none';
+      // Show/hide hCaptcha
+      var hcDiv = $('lou-hcaptcha');
+      if (mode === 'signup' && HCAPTCHA_SITEKEY) {
+        hcDiv.style.display = 'block';
+        if (_hcaptchaWidgetId === null && window.hcaptcha) {
+          _hcaptchaWidgetId = window.hcaptcha.render('lou-hcaptcha', { sitekey: HCAPTCHA_SITEKEY, size: 'normal' });
+        }
+      } else {
+        hcDiv.style.display = 'none';
+      }
     };
 
     $('lou-auth-btn').onclick = function () {
@@ -106,8 +135,21 @@
       btn.textContent = 'Chargement...';
       btn.disabled = true;
 
+      // Get hCaptcha token for signup
+      var captchaToken = '';
+      if (mode === 'signup' && HCAPTCHA_SITEKEY && window.hcaptcha) {
+        captchaToken = window.hcaptcha.getResponse(_hcaptchaWidgetId) || '';
+        if (!captchaToken) {
+          err.textContent = 'Veuillez completer le CAPTCHA';
+          err.style.display = 'block';
+          btn.textContent = "S'inscrire";
+          btn.disabled = false;
+          return;
+        }
+      }
+
       var body = mode === 'signup'
-        ? { email: email, password: pass, name: name, criteria: chatCriteria }
+        ? { email: email, password: pass, name: name, criteria: chatCriteria, captcha_token: captchaToken }
         : { email: email, password: pass };
 
       fetch(API + '/api/' + mode, {
@@ -135,6 +177,7 @@
             err.style.display = 'block';
             btn.textContent = mode === 'signup' ? "S'inscrire" : 'Se connecter';
             btn.disabled = false;
+            if (window.hcaptcha && _hcaptchaWidgetId !== null) window.hcaptcha.reset(_hcaptchaWidgetId);
           }
         })
         .catch(function () {
@@ -142,6 +185,7 @@
           err.style.display = 'block';
           btn.textContent = mode === 'signup' ? "S'inscrire" : 'Se connecter';
           btn.disabled = false;
+          if (window.hcaptcha && _hcaptchaWidgetId !== null) window.hcaptcha.reset(_hcaptchaWidgetId);
         });
     };
 
@@ -454,6 +498,47 @@
   // ============================================================
   // DASHBOARD
   // ============================================================
+  function showAdminPanel() {
+    var overlay = ce('div', 'lou-overlay');
+    overlay.innerHTML =
+      '<div class="admin-panel">' +
+        '<div class="admin-header">' +
+          '<h2>Administration</h2>' +
+          '<button class="close-btn" id="admin-close">&times;</button>' +
+        '</div>' +
+        '<div class="admin-body" id="admin-body"><p style="color:#64748b">Chargement...</p></div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', function(e){ if (e.target === overlay) overlay.remove(); });
+    document.getElementById('admin-close').onclick = function(){ overlay.remove(); };
+
+    fetch(API + '/api/admin/users', { headers: { 'Authorization': 'Bearer ' + TOKEN } })
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        if (data.error) { document.getElementById('admin-body').innerHTML = '<p style="color:#dc2626">' + escapeHtml(data.error) + '</p>'; return; }
+        var users = data.users || [];
+        var html = '<div class="admin-stats"><strong>' + users.length + '</strong> utilisateur' + (users.length > 1 ? 's' : '') + ' inscrits</div>';
+        html += '<table class="admin-table"><thead><tr><th>Nom</th><th>Email</th><th>Inscription</th><th>Derniere connexion</th><th>Plan</th><th>Profils</th><th>Favoris</th><th>Statut</th></tr></thead><tbody>';
+        users.forEach(function(u){
+          var created = u.created_at ? new Date(u.created_at).toLocaleDateString('fr-CH') : '-';
+          var lastLogin = u.last_login ? new Date(u.last_login).toLocaleDateString('fr-CH') : 'Jamais';
+          html += '<tr>' +
+            '<td>' + escapeHtml(u.name || '-') + '</td>' +
+            '<td>' + escapeHtml(u.email) + '</td>' +
+            '<td>' + created + '</td>' +
+            '<td>' + lastLogin + '</td>' +
+            '<td><span class="admin-plan">' + escapeHtml(u.plan) + '</span></td>' +
+            '<td>' + u.profiles_count + '</td>' +
+            '<td>' + u.favorites_count + '</td>' +
+            '<td>' + (u.is_active ? '<span style="color:#059669">Actif</span>' : '<span style="color:#dc2626">Inactif</span>') + '</td>' +
+          '</tr>';
+        });
+        html += '</tbody></table>';
+        document.getElementById('admin-body').innerHTML = html;
+      })
+      .catch(function(){ document.getElementById('admin-body').innerHTML = '<p style="color:#dc2626">Erreur de chargement</p>'; });
+  }
+
   function showDashboard() {
     if (!isJWT(TOKEN) || !USER) {
       window.location.reload();
@@ -473,10 +558,18 @@
     nav.innerHTML =
       '<a href="/" class="dash-nav-brand"><svg class="dash-logo-wolf" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" rx="12" fill="#0369a1"/><g transform="translate(8,6)"><path d="M4 34 L10 5 L16 16 L22 5 L28 34 L22 28 L16 32 L10 28 Z" fill="rgba(255,255,255,0.95)"/><circle cx="12.5" cy="21" r="2" fill="#0369a1"/><circle cx="19.5" cy="21" r="2" fill="#0369a1"/></g></svg>Lou Garou</a>' +
       '<div class="dash-nav-right">' +
+        '<button class="dash-admin-btn" id="admin-btn" style="display:none">Admin</button>' +
         '<span class="dash-user-email">' + escapeHtml(USER.email || '') + '</span>' +
         '<button class="dash-logout-btn" id="logout-btn">Deconnexion</button>' +
       '</div>';
     document.body.appendChild(nav);
+
+    // Check if user is admin and show button
+    fetch(API + '/api/admin/check', { headers: { 'Authorization': 'Bearer ' + TOKEN } })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.is_admin) $('admin-btn').style.display = 'inline-block';
+      }).catch(function(){});
 
     // MAIN WRAP
     var wrap = ce('div', 'dash-wrap');
@@ -523,6 +616,9 @@
       localStorage.removeItem('lou_user');
       window.location.reload();
     };
+
+    // Admin panel
+    $('admin-btn').onclick = function () { showAdminPanel(); };
 
     // Load data
     loadStats();
@@ -702,7 +798,7 @@
     var p = _currentProfile || {};
     _pfZones = (p.zones || []).filter(function (z) { return z && z.city; }).map(function (z) { return { city: z.city, canton: z.canton || '', radius_km: z.radius_km || 3 }; });
 
-    var types = ['appartement','maison','villa','studio','loft','attique','duplex','colocation'];
+    var types = ['appartement','maison','villa','immeuble','terrain','parking','commerce'];
     var pTypes = p.property_types || [];
     var typeChips = types.map(function (t) {
       return '<span class="pf-chip' + (pTypes.indexOf(t) > -1 ? ' on' : '') + '" data-v="' + t + '" onclick="_pfToggleChip(this)">' + t.charAt(0).toUpperCase() + t.slice(1) + '</span>';
@@ -1186,8 +1282,22 @@
       '.dash-logo-wolf{width:30px;height:30px;flex-shrink:0}',
       '.dash-nav-right{display:flex;align-items:center;gap:16px}',
       '.dash-user-email{color:#94a3b8;font-size:13px}',
+      '.dash-admin-btn{background:#0369a1;border:none;color:#fff;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;transition:all .2s}',
+      '.dash-admin-btn:hover{background:#0284c7}',
       '.dash-logout-btn{background:none;border:1px solid #475569;color:#94a3b8;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px;transition:all .2s}',
       '.dash-logout-btn:hover{border-color:#e2e8f0;color:#e2e8f0}',
+
+      // Admin panel
+      '.admin-panel{background:#fff;border-radius:16px;padding:28px;width:90vw;max-width:900px;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);position:relative;color:#0f172a}',
+      '.admin-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}',
+      '.admin-header h2{margin:0;font-family:"Playfair Display",Georgia,serif;font-size:22px}',
+      '.admin-header .close-btn{position:static;background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8}',
+      '.admin-stats{font-size:15px;color:#64748b;margin-bottom:16px}',
+      '.admin-table{width:100%;border-collapse:collapse;font-size:13px}',
+      '.admin-table th{text-align:left;padding:10px 8px;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600;font-size:12px;text-transform:uppercase}',
+      '.admin-table td{padding:10px 8px;border-bottom:1px solid #f1f5f9}',
+      '.admin-table tr:hover td{background:#f8fafc}',
+      '.admin-plan{background:#e0f2fe;color:#0369a1;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}',
 
       // Wrap
       '.dash-wrap{max-width:1200px;margin:0 auto;padding:28px 24px}',

@@ -23,6 +23,7 @@ import jwt
 import bcrypt
 import psycopg2
 import psycopg2.extras
+import requests as http_requests
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from anthropic import Anthropic
@@ -60,6 +61,10 @@ if not JWT_SECRET:
     JWT_SECRET = secrets.token_hex(32)
 ANTHROPIC_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 CRON_SECRET = os.environ.get('CRON_SECRET', '')
+HCAPTCHA_SECRET = os.environ.get('HCAPTCHA_SECRET', '')
+HCAPTCHA_SITEKEY = os.environ.get('HCAPTCHA_SITEKEY', '')
+RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
+ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', '')  # Email to receive signup notifications + admin access
 
 # Anthropic client singleton
 anthropic_client = Anthropic(api_key=ANTHROPIC_KEY) if ANTHROPIC_KEY else None
@@ -141,6 +146,57 @@ def init_db():
 
 
 # ============================================================
+# PUBLIC CONFIG (expose non-secret settings to frontend)
+# ============================================================
+
+@app.route('/api/config', methods=['GET'])
+def get_config():
+    return jsonify({
+        'hcaptcha_sitekey': HCAPTCHA_SITEKEY or ''
+    })
+
+
+# ============================================================
+def verify_hcaptcha(token):
+    """Verify hCaptcha token. Returns True if valid or if CAPTCHA is not configured."""
+    if not HCAPTCHA_SECRET:
+        return True  # Skip if not configured
+    try:
+        resp = http_requests.post('https://api.hcaptcha.com/siteverify', data={
+            'secret': HCAPTCHA_SECRET,
+            'response': token
+        }, timeout=5)
+        return resp.json().get('success', False)
+    except Exception as e:
+        log.error(f"hCaptcha verification error: {e}")
+        return True  # Fail open — don't block signups if hCaptcha is down
+
+
+def notify_new_signup(user_email, user_name):
+    """Send email notification to admin when a new user signs up."""
+    if not RESEND_API_KEY or not ADMIN_EMAIL:
+        return
+    try:
+        http_requests.post('https://api.resend.com/emails', json={
+            'from': 'Lou Garou <noreply@garou.ch>',
+            'to': [ADMIN_EMAIL],
+            'subject': f'Nouvelle inscription — {user_name or user_email}',
+            'html': f'''<div style="font-family:sans-serif;max-width:500px">
+                <h2 style="color:#0369a1">Nouvelle inscription sur Lou Garou</h2>
+                <p><strong>Nom :</strong> {user_name or "Non renseigne"}</p>
+                <p><strong>Email :</strong> {user_email}</p>
+                <p><strong>Date :</strong> {datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M UTC")}</p>
+                <hr style="border:none;border-top:1px solid #e2e8f0">
+                <p style="color:#64748b;font-size:13px">Lou Garou — garou.ch</p>
+            </div>'''
+        }, headers={
+            'Authorization': f'Bearer {RESEND_API_KEY}',
+            'Content-Type': 'application/json'
+        }, timeout=5)
+    except Exception as e:
+        log.error(f"Resend notification error: {e}")
+
+
 # AUTH ENDPOINTS
 # ============================================================
 
@@ -152,10 +208,14 @@ def signup():
     name = data.get('name', '')
     criteria = data.get('criteria', {})
 
+    captcha_token = data.get('captcha_token', '')
+
     if not email or not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
         return jsonify({"error": "Email invalide"}), 400
     if len(password) < 8:
         return jsonify({"error": "Mot de passe trop court (8 car. min)"}), 400
+    if HCAPTCHA_SECRET and not verify_hcaptcha(captcha_token):
+        return jsonify({"error": "Verification CAPTCHA echouee"}), 400
 
     pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
@@ -196,6 +256,10 @@ def signup():
 
         conn.commit()
         token = make_token(user['id'])
+
+        # Notify admin of new signup (async-ish, don't block response)
+        notify_new_signup(email, name)
+
         return jsonify({"ok": True, "token": token, "user": user})
 
     except psycopg2.errors.UniqueViolation:
@@ -440,6 +504,94 @@ def update_profile():
         conn.rollback()
         log.error(f"Profile update error: {e}")
         return jsonify({"error": "Erreur serveur lors de la mise a jour du profil"}), 500
+    finally:
+        cur.close()
+        return_db(conn)
+
+
+# ============================================================
+# ADMIN ENDPOINTS
+# ============================================================
+
+def admin_required(f):
+    """Admin access decorator — checks JWT user email against ADMIN_EMAIL."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        if not token:
+            return jsonify({"error": "Token manquant"}), 401
+        try:
+            data = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
+            request.user_id = data['user_id']
+        except jwt.InvalidTokenError:
+            return jsonify({"error": "Token invalide"}), 401
+
+        if not ADMIN_EMAIL:
+            return jsonify({"error": "Admin non configure"}), 403
+
+        conn = get_db()
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT email FROM users WHERE id = %s", (request.user_id,))
+            user = cur.fetchone()
+            if not user or user['email'] != ADMIN_EMAIL.lower().strip():
+                return jsonify({"error": "Acces refuse"}), 403
+        finally:
+            cur.close()
+            return_db(conn)
+        return f(*args, **kwargs)
+    return decorated
+
+
+@app.route('/api/admin/users', methods=['GET'])
+@admin_required
+def admin_list_users():
+    """List all registered users with stats."""
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT u.id, u.email, u.name, u.created_at, u.last_login, u.is_active, u.plan,
+                   COUNT(DISTINCT sp.id) AS profiles_count,
+                   COUNT(DISTINCT f.property_id) AS favorites_count
+            FROM users u
+            LEFT JOIN search_profiles sp ON sp.user_id = u.id
+            LEFT JOIN favorites f ON f.user_id = u.id
+            GROUP BY u.id
+            ORDER BY u.created_at DESC
+        """)
+        users = []
+        for row in cur.fetchall():
+            users.append({
+                'id': row['id'],
+                'email': row['email'],
+                'name': row['name'] or '',
+                'created_at': row['created_at'].isoformat() if row['created_at'] else None,
+                'last_login': row['last_login'].isoformat() if row['last_login'] else None,
+                'is_active': row['is_active'],
+                'plan': row['plan'] or 'free',
+                'profiles_count': row['profiles_count'],
+                'favorites_count': row['favorites_count'],
+            })
+        return jsonify({"users": users, "total": len(users)})
+    finally:
+        cur.close()
+        return_db(conn)
+
+
+@app.route('/api/admin/check', methods=['GET'])
+@token_required
+def admin_check():
+    """Check if current user is admin."""
+    if not ADMIN_EMAIL:
+        return jsonify({"is_admin": False})
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT email FROM users WHERE id = %s", (request.user_id,))
+        user = cur.fetchone()
+        is_admin = user and user['email'] == ADMIN_EMAIL.lower().strip()
+        return jsonify({"is_admin": is_admin})
     finally:
         cur.close()
         return_db(conn)
