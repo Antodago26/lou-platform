@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Lou Garou — Script de scraping LOCAL
+Bon Home — Script de scraping LOCAL
 Tourne sur ton Mac (IP résidentielle = pas de blocage Cloudflare).
 Envoie les annonces au backend via /api/import.
 
@@ -885,14 +885,14 @@ def login():
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Lou Garou - Local Scraper')
+    parser = argparse.ArgumentParser(description='Bon Home - Local Scraper')
     parser.add_argument('--city', default='Lausanne', help='Ville à scraper (default: Lausanne)')
     parser.add_argument('--transaction', default='location', choices=['location', 'achat'],
                         help='Type de transaction (default: location)')
     parser.add_argument('--debug', action='store_true', help='Sauvegarde le HTML pour debug')
     args = parser.parse_args()
 
-    print(f"\n🐺 Lou Garou — Scraping local")
+    print(f"\n🔍 Bon Home — Scraping local")
     print(f"   Ville: {args.city}")
     print(f"   Transaction: {args.transaction}")
     print(f"   Backend: {BACKEND_URL}")

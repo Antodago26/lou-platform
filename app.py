@@ -1,5 +1,5 @@
 """
-Lou Garou — Backend V2
+Bon Home — Backend V2
 Flask API avec PostgreSQL, Claude AI chatbot, scoring engine
 
 Environment variables needed on Render:
@@ -50,7 +50,7 @@ def add_security_headers(response):
 
 
 # CORS: restrict to known domains (add your domains here)
-ALLOWED_ORIGINS = os.environ.get('ALLOWED_ORIGINS', 'https://garou.ch,https://www.garou.ch,https://lou-platform.onrender.com,http://localhost:5000').split(',')
+ALLOWED_ORIGINS = os.environ.get('ALLOWED_ORIGINS', 'https://bonhome.ch,https://www.bonhome.ch,https://garou.ch,https://www.garou.ch,https://lou-platform.onrender.com,http://localhost:5000').split(',')
 CORS(app, resources={r"/api/*": {"origins": ALLOWED_ORIGINS}})
 
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
@@ -178,16 +178,16 @@ def notify_new_signup(user_email, user_name):
         return
     try:
         http_requests.post('https://api.resend.com/emails', json={
-            'from': 'Lou Garou <noreply@garou.ch>',
+            'from': 'Bon Home <noreply@bonhome.ch>',
             'to': [ADMIN_EMAIL],
             'subject': f'Nouvelle inscription — {user_name or user_email}',
             'html': f'''<div style="font-family:sans-serif;max-width:500px">
-                <h2 style="color:#0369a1">Nouvelle inscription sur Lou Garou</h2>
+                <h2 style="color:#0369a1">Nouvelle inscription sur Bon Home</h2>
                 <p><strong>Nom :</strong> {user_name or "Non renseigne"}</p>
                 <p><strong>Email :</strong> {user_email}</p>
                 <p><strong>Date :</strong> {datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M UTC")}</p>
                 <hr style="border:none;border-top:1px solid #e2e8f0">
-                <p style="color:#64748b;font-size:13px">Lou Garou — garou.ch</p>
+                <p style="color:#64748b;font-size:13px">Bon Home — bonhome.ch</p>
             </div>'''
         }, headers={
             'Authorization': f'Bearer {RESEND_API_KEY}',

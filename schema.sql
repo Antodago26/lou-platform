@@ -1,5 +1,5 @@
 -- ============================================
--- Lou Garou — Database Setup (PostgreSQL)
+-- Bon Home — Database Setup (PostgreSQL)
 -- Run this on Render PostgreSQL to create all tables
 -- ============================================
 
@@ -158,5 +158,5 @@ CREATE INDEX IF NOT EXISTS idx_conv_user ON conversations(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_conv_session ON conversations(session_id, created_at);
 
 -- ============================================
--- Done! Tables created for Lou Garou platform
+-- Done! Tables created for Bon Home platform
 -- ============================================

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Lou Garou — Mon Profil</title>
+<title>Bon Home — Mon Profil</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -95,7 +95,7 @@ h1{font-size:24px;font-weight:700;margin-bottom:4px}
 <body>
 
 <nav class="nav">
-  <div class="nav-brand">🐺 Lou Garou</div>
+  <div class="nav-brand"><svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" style="width:28px;height:28px"><rect width="48" height="48" rx="12" fill="#0369a1"/><circle cx="21" cy="20" r="11" fill="none" stroke="#fff" stroke-width="2.8"/><line x1="29" y1="28" x2="39" y2="38" stroke="#fff" stroke-width="2.8" stroke-linecap="round"/><path d="M21 13 L14 19 L15.5 19 L15.5 26 L26.5 26 L26.5 19 L28 19 Z" fill="#fff" opacity="0.95"/><rect x="19.5" y="22" width="3" height="4" rx="0.5" fill="#0369a1"/></svg> Bon Home</div>
   <div class="nav-links">
     <a href="/" id="linkHome">Dashboard</a>
     <a href="#" class="on">Mon profil</a>
@@ -252,7 +252,7 @@ h1{font-size:24px;font-weight:700;margin-bottom:4px}
 
     <div class="btn-row">
       <button class="btn btn-o" onclick="window.location.href=homeUrl">Annuler</button>
-      <button class="btn btn-p" id="saveBtn" onclick="saveProfile()">Sauvegarder & relancer Lou 🐺</button>
+      <button class="btn btn-p" id="saveBtn" onclick="saveProfile()">Sauvegarder & relancer Lou 🔍</button>
     </div>
   </div>
 </div>
@@ -264,7 +264,7 @@ if (new URLSearchParams(window.location.search).get('token')) {
   localStorage.setItem('lou_token', TOKEN);
   window.history.replaceState({}, '', window.location.pathname);
 }
-var homeUrl = 'https://www.lougarou.ch';
+var homeUrl = 'https://www.bonhome.ch';
 var zones = [];
 
 document.getElementById('linkHome').href = homeUrl;
@@ -465,16 +465,16 @@ function saveProfile() {
   })
   .then(function(r) { return r.json(); })
   .then(function(d) {
-    btn.textContent = 'Sauvegarder & relancer Lou 🐺';
+    btn.textContent = 'Sauvegarder & relancer Lou 🔍';
     btn.disabled = false;
     if (d.ok) {
-      showMsg('Criteres sauvegardes ! Lou relance la recherche 🐺', true);
+      showMsg('Criteres sauvegardes ! Lou relance la recherche 🔍', true);
     } else {
       showMsg(d.error || 'Erreur', false);
     }
   })
   .catch(function() {
-    btn.textContent = 'Sauvegarder & relancer Lou 🐺';
+    btn.textContent = 'Sauvegarder & relancer Lou 🔍';
     btn.disabled = false;
     showMsg('Erreur reseau', false);
   });

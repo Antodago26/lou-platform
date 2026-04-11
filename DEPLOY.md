@@ -1,4 +1,4 @@
-# Lou Garou — Guide de Déploiement Render
+# Bon Home — Guide de Déploiement Render
 
 ## Prérequis
 
@@ -20,7 +20,7 @@
 cd backend-v2
 git init
 git add .
-git commit -m "Lou Garou Backend V2 - initial"
+git commit -m "Bon Home Backend V2 - initial"
 git branch -M main
 git remote add origin https://github.com/TON_USERNAME/lou-garou-backend.git
 git push -u origin main
@@ -77,7 +77,7 @@ python -c "from app import init_db; init_db()"
 
 1. Ouvre `https://lou-platform.onrender.com/api/stats/0` → doit retourner du JSON
 2. Ouvre `https://lou-platform.onrender.com/static/profil.html` → page profil
-3. Teste le signup via le chatbot sur lougarou.ch
+3. Teste le signup via le chatbot sur bonhome.ch
 4. Après le signup, le lien "Critères" apparaît dans le dashboard
 
 ---
@@ -97,7 +97,7 @@ python cron_job.py
 ## Architecture déployée
 
 ```
-lougarou.ch (Webflow)
+bonhome.ch
   ├── Chatbot IA → POST /api/chat
   ├── Signup    → POST /api/signup
   ├── Login     → POST /api/login

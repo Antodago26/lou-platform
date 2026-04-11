@@ -1,5 +1,5 @@
 """
-Lou Garou — Cron Job
+Bon Home — Cron Job
 Scrape → Save → Score → Alert
 
 Run every 2 hours via Render Cron Job:
@@ -55,7 +55,7 @@ def run():
         sys.exit(1)
 
     log.info("=" * 50)
-    log.info("Lou Garou Cron Job Start")
+    log.info("Bon Home Cron Job Start")
     log.info("=" * 50)
 
     db = get_db()

@@ -1,5 +1,5 @@
 """
-Lou Garou — Scoring Engine
+Bon Home — Scoring Engine
 Score chaque annonce par rapport aux critères de recherche d'un utilisateur.
 
 Usage:

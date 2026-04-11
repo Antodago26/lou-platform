@@ -1,11 +1,11 @@
 /**
- * Lou Garou — Frontend App
+ * Bon Home — Frontend App
  * Landing page auth + Full Dashboard with real properties
  */
 (function () {
   'use strict';
 
-  // Dynamic API URL — works on any host (garou.ch, onrender, localhost)
+  // Dynamic API URL — works on any host (bonhome.ch, onrender, localhost)
   var API = window.location.origin;
   var TOKEN = localStorage.getItem('lou_token');
   var USER = null;
@@ -82,7 +82,7 @@
     overlay.innerHTML = [
       '<div class="lou-auth-box">',
       '<button class="close-btn" id="lou-auth-close">&times;</button>',
-      '<h2><svg style="width:28px;height:28px;vertical-align:middle;margin-right:8px" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" rx="12" fill="#0369a1"/><g transform="translate(8,6)"><path d="M4 34 L10 5 L16 16 L22 5 L28 34 L22 28 L16 32 L10 28 Z" fill="rgba(255,255,255,0.95)"/><circle cx="12.5" cy="21" r="2" fill="#0369a1"/><circle cx="19.5" cy="21" r="2" fill="#0369a1"/></g></svg>Lou Garou</h2>',
+      '<h2><svg style="width:28px;height:28px;vertical-align:middle;margin-right:8px" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" rx="12" fill="#0369a1"/><circle cx="21" cy="20" r="11" fill="none" stroke="#fff" stroke-width="2.8"/><line x1="29" y1="28" x2="39" y2="38" stroke="#fff" stroke-width="2.8" stroke-linecap="round"/><path d="M21 13 L14 19 L15.5 19 L15.5 26 L26.5 26 L26.5 19 L28 19 Z" fill="#fff" opacity="0.95"/><rect x="19.5" y="22" width="3" height="4" rx="0.5" fill="#0369a1"/></svg>Bon Home</h2>',
       '<div class="sub">Votre chasseur immobilier IA en Suisse</div>',
       '<input id="lou-auth-email" type="email" placeholder="Email">',
       '<input id="lou-auth-pass" type="password" placeholder="Mot de passe">',
@@ -253,7 +253,7 @@
   // LANDING PAGE — Full render (for Webflow / external hosts)
   // ============================================================
   function showLanding() {
-    document.title = 'Lou Garou — Chasseur Immobilier IA en Suisse';
+    document.title = 'Bon Home — Le bon home, au bon moment';
 
     // Inject fonts
     if (!document.querySelector('link[href*="Playfair+Display"]')) {
@@ -275,8 +275,8 @@
     var nav = ce('nav', 'nav');
     nav.innerHTML =
       '<a href="/" class="nav-logo">' +
-        '<svg class="logo-wolf" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" rx="12" fill="#0369a1"/><g transform="translate(8,6)"><path d="M4 34 L10 5 L16 16 L22 5 L28 34 L22 28 L16 32 L10 28 Z" fill="rgba(255,255,255,0.95)"/><circle cx="12.5" cy="21" r="2" fill="#0369a1"/><circle cx="19.5" cy="21" r="2" fill="#0369a1"/></g></svg>' +
-        '<span class="logo-text">Lou Garou</span>' +
+        '<svg class="logo-wolf" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" rx="12" fill="#0369a1"/><circle cx="21" cy="20" r="11" fill="none" stroke="#fff" stroke-width="2.8"/><line x1="29" y1="28" x2="39" y2="38" stroke="#fff" stroke-width="2.8" stroke-linecap="round"/><path d="M21 13 L14 19 L15.5 19 L15.5 26 L26.5 26 L26.5 19 L28 19 Z" fill="#fff" opacity="0.95"/><rect x="19.5" y="22" width="3" height="4" rx="0.5" fill="#0369a1"/></svg>' +
+        '<span class="logo-text">Bon Home</span>' +
       '</a>' +
       '<div class="nav-links">' +
         '<a href="#features">Fonctions</a>' +
@@ -289,18 +289,18 @@
     var hero = ce('section', 'hero');
     hero.innerHTML =
       '<div class="hero-text">' +
-        '<h1>Votre <em>chasseur immobilier</em> intelligent en Suisse</h1>' +
-        '<p>Lou Garou scrute en continu les meilleures annonces de Suisse romande, les analyse avec l\'IA et vous presente uniquement les biens qui correspondent a vos criteres.</p>' +
+        '<h1>Le bon <em>home</em>,<br>au bon moment.</h1>' +
+        '<p>Bon Home scrute 10+ portails immobiliers suisses en continu. Lou, notre IA, deniche les biens qui vous correspondent et vous les presente — scores, analyses, tout est pret.</p>' +
         '<div class="hero-ctas">' +
-          '<a href="#" class="btn btn-primary" id="hero-cta-1">Commencer ma recherche</a>' +
+          '<a href="#" class="btn btn-primary" id="hero-cta-1">Parler a Lou</a>' +
           '<a href="#how" class="btn btn-outline">En savoir plus</a>' +
         '</div>' +
       '</div>' +
       '<div class="hero-visual">' +
-        '<svg class="hero-wolf-icon" width="180" height="180" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg"><g transform="translate(14,10)"><path d="M6 56 L16 8 L26 26 L36 8 L46 56 L36 46 L26 52 L16 46 Z" fill="rgba(255,255,255,0.95)"/><circle cx="20" cy="34" r="3" fill="rgba(255,255,255,0.3)"/><circle cx="32" cy="34" r="3" fill="rgba(255,255,255,0.3)"/></g></svg>' +
+        '<svg class="hero-wolf-icon" width="180" height="180" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg"><circle cx="35" cy="33" r="18" fill="none" stroke="rgba(255,255,255,0.95)" stroke-width="4.5"/><line x1="48" y1="46" x2="65" y2="63" stroke="rgba(255,255,255,0.95)" stroke-width="4.5" stroke-linecap="round"/><path d="M35 21 L24 30 L27 30 L27 41 L43 41 L43 30 L46 30 Z" fill="rgba(255,255,255,0.95)"/><rect x="33" y="35" width="5" height="6" rx="1" fill="rgba(3,105,161,0.6)"/></svg>' +
         '<div class="hero-badge">' +
           '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:.8;flex-shrink:0"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>' +
-          '<div>8+ portails suisses<small>Homegate, ImmoScout24, Flatfox...</small></div>' +
+          '<div>10+ portails suisses<small>Homegate, ImmoScout24, Comparis...</small></div>' +
         '</div>' +
       '</div>';
     document.body.appendChild(hero);
@@ -309,7 +309,7 @@
     var statsBar = ce('div', 'stats-bar');
     statsBar.innerHTML =
       '<div class="stats-bar-inner">' +
-        '<div><strong>8+</strong><span>Portails suisses</span></div>' +
+        '<div><strong>10+</strong><span>Portails suisses</span></div>' +
         '<div><strong>500+</strong><span>Annonces analysees</span></div>' +
         '<div><strong>6</strong><span>Criteres de scoring</span></div>' +
         '<div><strong>24/7</strong><span>Veille automatique</span></div>' +
@@ -320,9 +320,9 @@
     var features = ce('section', 'features');
     features.id = 'features';
     features.innerHTML =
-      '<div class="features-header"><h2>Pourquoi Lou Garou ?</h2><p>Un assistant immobilier complet, de la recherche a la prise de contact.</p></div>' +
+      '<div class="features-header"><h2>Pourquoi Bon Home ?</h2><p>Un assistant immobilier complet, de la recherche a la prise de contact.</p></div>' +
       '<div class="features-grid">' +
-        featureCard('<circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>', 'Scraping multi-portails', 'Lou scrute automatiquement Homegate, ImmoScout24, Flatfox, Immobilier.ch, Properstar et bien d\'autres pour ne rien manquer.') +
+        featureCard('<circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>', 'Scraping multi-portails', 'Bon Home scrute automatiquement Homegate, ImmoScout24, Flatfox, Immobilier.ch, Comparis et bien d\'autres pour ne rien manquer.') +
         featureCard('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>', 'Scoring intelligent', 'Chaque annonce est notee de A a D selon vos criteres : zone, budget, type, surface, equipements, fraicheur.') +
         featureCard('<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>', 'Chatbot IA', 'Discutez avec Lou pour definir vos criteres de recherche de maniere naturelle. Il comprend vos besoins et affine votre profil.') +
         featureCard('<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>', 'Recherche par zone', 'Definissez une ou plusieurs zones geographiques avec un rayon en km. Lou calcule la distance GPS pour chaque bien.') +
@@ -339,7 +339,7 @@
         '<h2>Comment ca marche ?</h2>' +
         '<div class="steps">' +
           '<div class="step"><div class="step-num">1</div><h3>Parlez a Lou</h3><p>Dites-lui ce que vous cherchez : region, budget, type de bien, nombre de pieces...</p></div>' +
-          '<div class="step"><div class="step-num">2</div><h3>Lou chasse pour vous</h3><p>Notre moteur scrute 8+ portails immobiliers suisses en continu et collecte les nouvelles annonces.</p></div>' +
+          '<div class="step"><div class="step-num">2</div><h3>Lou chasse pour vous</h3><p>Notre moteur scrute 10+ portails immobiliers suisses en continu et collecte les nouvelles annonces.</p></div>' +
           '<div class="step"><div class="step-num">3</div><h3>Scoring & analyse</h3><p>Chaque bien est note selon 6 criteres ponderes. Seuls les meilleurs vous sont presentes.</p></div>' +
           '<div class="step"><div class="step-num">4</div><h3>Contactez & visitez</h3><p>Retrouvez les coordonnees du proprietaire, l\'annonce originale et tous les details en un clic.</p></div>' +
         '</div>' +
@@ -349,16 +349,16 @@
     // CTA
     var ctaSection = ce('section', 'cta');
     ctaSection.innerHTML =
-      '<h2>Pret a trouver votre bien ?</h2>' +
-      '<p>Rejoignez Lou Garou et laissez l\'IA faire le travail de recherche pour vous.</p>' +
-      '<a href="#" class="btn btn-primary" id="cta-bottom">Commencer gratuitement</a>';
+      '<h2>Pret a trouver le bon home ?</h2>' +
+      '<p>Rejoignez Bon Home et laissez Lou faire le travail de recherche pour vous.</p>' +
+      '<a href="#" class="btn btn-primary" id="cta-bottom">Parler a Lou</a>';
     document.body.appendChild(ctaSection);
 
     // FOOTER
     var footer = ce('footer', 'footer');
     footer.innerHTML =
       '<div class="footer-inner">' +
-        '<p>&copy; 2026 Lou Garou. Chasseur immobilier IA en Suisse.</p>' +
+        '<p>&copy; 2026 Bon Home — Le bon home, au bon moment.</p>' +
         '<div class="footer-links"><a href="#">Confidentialite</a><a href="#">Conditions</a><a href="#">Contact</a></div>' +
       '</div>';
     document.body.appendChild(footer);
@@ -545,7 +545,7 @@
       return;
     }
 
-    document.title = 'Dashboard — Lou Garou';
+    document.title = 'Dashboard — Bon Home';
 
     // Inject CSS
     var style = ce('style', '', getDashCSS());
@@ -556,7 +556,7 @@
     // NAV
     var nav = ce('div', 'dash-nav');
     nav.innerHTML =
-      '<a href="/" class="dash-nav-brand"><svg class="dash-logo-wolf" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" rx="12" fill="#0369a1"/><g transform="translate(8,6)"><path d="M4 34 L10 5 L16 16 L22 5 L28 34 L22 28 L16 32 L10 28 Z" fill="rgba(255,255,255,0.95)"/><circle cx="12.5" cy="21" r="2" fill="#0369a1"/><circle cx="19.5" cy="21" r="2" fill="#0369a1"/></g></svg>Lou Garou</a>' +
+      '<a href="/" class="dash-nav-brand"><svg class="dash-logo-wolf" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" rx="12" fill="#0369a1"/><circle cx="21" cy="20" r="11" fill="none" stroke="#fff" stroke-width="2.8"/><line x1="29" y1="28" x2="39" y2="38" stroke="#fff" stroke-width="2.8" stroke-linecap="round"/><path d="M21 13 L14 19 L15.5 19 L15.5 26 L26.5 26 L26.5 19 L28 19 Z" fill="#fff" opacity="0.95"/><rect x="19.5" y="22" width="3" height="4" rx="0.5" fill="#0369a1"/></svg>Bon Home</a>' +
       '<div class="dash-nav-right">' +
         '<button class="dash-admin-btn" id="admin-btn" style="display:none">Admin</button>' +
         '<span class="dash-user-email">' + escapeHtml(USER.email || '') + '</span>' +
@@ -864,7 +864,7 @@
         '</div>' +
         // Actions
         '<div class="pf-actions">' +
-          '<button id="pf-save" class="pf-save-btn">Sauvegarder & relancer Lou 🐺</button>' +
+          '<button id="pf-save" class="pf-save-btn">Sauvegarder & relancer Lou 🔍</button>' +
           '<button id="pf-cancel" class="pf-cancel-btn">Annuler</button>' +
         '</div>' +
       '</div>';

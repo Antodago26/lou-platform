@@ -1,5 +1,5 @@
 """
-Lou Garou — Scrapers immobiliers suisses (v3 — ScrapingBee)
+Bon Home — Scrapers immobiliers suisses (v3 — ScrapingBee)
 Utilise ScrapingBee pour contourner Cloudflare et scraper tous les portails.
 
 Portails couverts:
