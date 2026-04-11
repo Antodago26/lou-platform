@@ -811,9 +811,11 @@
     if (dots[cur]) dots[cur].classList.add('active');
   };
 
-  window.showScoreDetail = function(el, scores) {
+  window.showScoreDetail = function(el) {
     var existing = document.querySelector('.score-tooltip');
     if (existing) existing.remove();
+    var scores;
+    try { scores = JSON.parse(el.getAttribute('data-scores')); } catch(e) { return; }
     var tip = document.createElement('div');
     tip.className = 'score-tooltip';
     tip.innerHTML = '<div class="st-row"><span>Zone</span><strong>' + (scores.zone||0) + '/100</strong></div>' +
@@ -821,11 +823,141 @@
         '<div class="st-row"><span>Type</span><strong>' + (scores.type||0) + '/100</strong></div>' +
         '<div class="st-row"><span>Surface</span><strong>' + (scores.surface||0) + '/100</strong></div>' +
         '<div class="st-row"><span>Equip.</span><strong>' + (scores.equipment||0) + '/100</strong></div>' +
-        '<button onclick="this.parentNode.remove()" style="margin-top:8px;background:none;border:1px solid #cbd5e1;border-radius:6px;padding:4px 12px;cursor:pointer;font-size:12px">Fermer</button>';
+        '<div class="st-row"><span>Fraicheur</span><strong>' + (scores.freshness||0) + '/100</strong></div>' +
+        '<button onclick="event.stopPropagation();this.parentNode.remove()" style="margin-top:8px;background:none;border:1px solid #cbd5e1;border-radius:6px;padding:4px 12px;cursor:pointer;font-size:12px">Fermer</button>';
     el.style.position = 'relative';
     el.appendChild(tip);
     event.stopPropagation();
   };
+
+  // ============================================================
+  // PROPERTY DETAIL VIEW
+  // ============================================================
+  window.openPropertyDetail = function(id) {
+    // Don't open if clicking on score tooltip, fav button, or source link
+    if (event && (event.target.closest('.fav-btn') || event.target.closest('.prop-source-link') || event.target.closest('.prop-score') || event.target.closest('.carousel-btn') || event.target.closest('.score-tooltip'))) return;
+
+    var p = (window._propData || {})[id];
+    if (!p) return;
+
+    var existing = document.querySelector('.detail-overlay');
+    if (existing) existing.remove();
+
+    var gradeColors = { A: '#059669', B: '#0369a1', C: '#d97706', D: '#dc2626' };
+    var gc = gradeColors[p.grade] || '#94a3b8';
+
+    // Images gallery
+    var galleryHtml = '';
+    if (p.images && p.images.length > 0) {
+      var gid = 'detail-gallery';
+      galleryHtml = '<div class="detail-gallery" id="' + gid + '">';
+      for (var i = 0; i < p.images.length; i++) {
+        galleryHtml += '<img src="' + escapeHtml(p.images[i]) + '" class="detail-img' + (i === 0 ? ' active' : '') + '" data-idx="' + i + '" onerror="this.style.display=\'none\'">';
+      }
+      if (p.images.length > 1) {
+        galleryHtml += '<button class="carousel-btn prev" onclick="event.stopPropagation();carouselNav(\'' + gid + '\',-1)">&#8249;</button>';
+        galleryHtml += '<button class="carousel-btn next" onclick="event.stopPropagation();carouselNav(\'' + gid + '\',1)">&#8250;</button>';
+        galleryHtml += '<span class="detail-counter">1 / ' + p.images.length + '</span>';
+      }
+      galleryHtml += '</div>';
+    } else {
+      galleryHtml = '<div class="detail-gallery-empty">Pas d\'image disponible</div>';
+    }
+
+    // Price
+    var priceHtml = p.price ? formatPrice(p.price) + ' CHF' : 'Prix sur demande';
+    if (p.price_drop) {
+      priceHtml = '<span class="price-drop-badge" style="font-size:14px">↓ ' + Math.round(p.price_drop.change_pct) + '%</span> ' + priceHtml + ' <del class="old-price">' + formatPrice(p.price_drop.old_price) + ' CHF</del>';
+    }
+
+    // Details table
+    var rows = [];
+    if (p.rooms) rows.push(['Pieces', p.rooms + ' pcs']);
+    if (p.surface) rows.push(['Surface', p.surface + ' m²']);
+    if (p.floor !== null && p.floor !== undefined) rows.push(['Etage', p.floor + 'e']);
+    if (p.distance_km !== null && p.distance_km !== undefined) rows.push(['Distance', p.distance_km + ' km']);
+    if (p.days_online !== null && p.days_online !== undefined) rows.push(['En ligne depuis', p.days_online <= 1 ? 'Aujourd\'hui' : p.days_online + ' jours']);
+    if (p.published_at) rows.push(['Publie le', new Date(p.published_at).toLocaleDateString('fr-CH')]);
+
+    var tableHtml = rows.map(function(r) {
+      return '<div class="detail-row"><span>' + r[0] + '</span><strong>' + r[1] + '</strong></div>';
+    }).join('');
+
+    // Score detail
+    var sd = p.score_detail || {};
+    var scoreHtml = '<div class="detail-score-wrap">' +
+      '<div class="detail-score-badge" style="background:' + gc + '"><span class="dsb-num">' + (p.score||0) + '</span><span class="dsb-grade">' + (p.grade||'') + '</span></div>' +
+      '<div class="detail-score-bars">' +
+        _detailBar('Zone', sd.zone) + _detailBar('Budget', sd.budget) + _detailBar('Type', sd.type) +
+        _detailBar('Surface', sd.surface) + _detailBar('Equip.', sd.equipment) + _detailBar('Fraicheur', sd.freshness) +
+      '</div></div>';
+
+    // Sources
+    var sources = p.all_sources || [{ source: p.source || '', url: p.source_url || '' }];
+    var sourcesHtml = sources.map(function(s) {
+      var name = (s.source || '').replace('www.', '').split('.')[0] || 'Source';
+      if (s.url) {
+        return '<a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener" class="detail-source-link" onclick="event.stopPropagation()">' + escapeHtml(name) + ' ↗</a>';
+      }
+      return '<span class="detail-source-text">' + escapeHtml(name) + '</span>';
+    }).join('');
+
+    // Contact
+    var contactHtml = '';
+    if (p.contact_name || p.contact_phone || p.contact_email) {
+      contactHtml = '<div class="detail-section"><h3>Contact</h3><div class="detail-contact">';
+      if (p.contact_name) contactHtml += '<div>👤 ' + escapeHtml(p.contact_name) + '</div>';
+      if (p.contact_phone) contactHtml += '<div><a href="tel:' + escapeHtml(p.contact_phone) + '">📞 ' + escapeHtml(p.contact_phone) + '</a></div>';
+      if (p.contact_email) contactHtml += '<div><a href="mailto:' + escapeHtml(p.contact_email) + '">✉️ ' + escapeHtml(p.contact_email) + '</a></div>';
+      contactHtml += '</div></div>';
+    }
+
+    // Features
+    var featHtml = '';
+    if (p.features && p.features.length > 0) {
+      featHtml = '<div class="detail-section"><h3>Equipements</h3><div class="detail-features">' +
+        p.features.map(function(f) { return '<span class="detail-feat">✓ ' + escapeHtml(f) + '</span>'; }).join('') +
+      '</div></div>';
+    }
+
+    // Build overlay
+    var overlay = document.createElement('div');
+    overlay.className = 'detail-overlay';
+    overlay.innerHTML =
+      '<div class="detail-panel">' +
+        '<button class="detail-close" onclick="event.stopPropagation();this.closest(\'.detail-overlay\').remove()">✕</button>' +
+        galleryHtml +
+        '<div class="detail-body">' +
+          '<div class="detail-price">' + priceHtml + '</div>' +
+          '<h2 class="detail-title">' + escapeHtml(p.title || 'Bien immobilier') + '</h2>' +
+          '<div class="detail-address">📍 ' + escapeHtml(p.address || '') + '</div>' +
+          '<div class="detail-section"><h3>Caracteristiques</h3><div class="detail-table">' + tableHtml + '</div></div>' +
+          scoreHtml +
+          featHtml +
+          contactHtml +
+          '<div class="detail-section"><h3>Voir sur le portail</h3><div class="detail-sources">' + sourcesHtml + '</div></div>' +
+        '</div>' +
+      '</div>';
+
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) overlay.remove();
+    });
+
+    document.body.appendChild(overlay);
+    document.body.style.overflow = 'hidden';
+    overlay.querySelector('.detail-close').addEventListener('click', function() {
+      document.body.style.overflow = '';
+    });
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) { overlay.remove(); document.body.style.overflow = ''; }
+    });
+  };
+
+  function _detailBar(label, val) {
+    val = val || 0;
+    var color = val >= 80 ? '#059669' : val >= 60 ? '#0369a1' : val >= 40 ? '#d97706' : '#dc2626';
+    return '<div class="dsb-row"><span>' + label + '</span><div class="dsb-track"><div class="dsb-fill" style="width:' + val + '%;background:' + color + '"></div></div><strong>' + val + '</strong></div>';
+  }
 
   function toggleProfileForm() {
     var formWrap = $('profile-edit-form');
@@ -999,6 +1131,10 @@
           return;
         }
 
+        // Store property data for detail view
+        window._propData = window._propData || {};
+        data.properties.forEach(function (p) { window._propData[p.id] = p; });
+
         var html = '<div class="prop-grid">';
         data.properties.forEach(function (p) {
           html += renderPropertyCard(p);
@@ -1058,7 +1194,7 @@
       }
     }
     if (p.price_drop) {
-      priceText = '<span class="price-drop-badge">↓ ' + p.price_drop.change_pct + '%</span> ' + priceText + '<del class="old-price">' + formatPrice(p.price_drop.old_price) + '</del>';
+      priceText = '<span class="price-drop-badge">↓ ' + Math.round(p.price_drop.change_pct) + '%</span> ' + priceText + '<del class="old-price">' + formatPrice(p.price_drop.old_price) + ' CHF</del>';
     }
 
     var details = [];
@@ -1071,10 +1207,10 @@
 
     var scoreDetailAttr = '';
     if (p.score_detail) {
-      scoreDetailAttr = ' onclick="showScoreDetail(this,' + escapeHtml(JSON.stringify({zone: p.score_detail.zone, budget: p.score_detail.budget, type: p.score_detail.type, surface: p.score_detail.surface, equipment: p.score_detail.equipment})) + ')" title="Cliquez pour le detail"';
+      scoreDetailAttr = ' data-scores=\'' + JSON.stringify({zone: p.score_detail.zone||0, budget: p.score_detail.budget||0, type: p.score_detail.type||0, surface: p.score_detail.surface||0, equipment: p.score_detail.equipment||0, freshness: p.score_detail.freshness||0}) + '\' onclick="showScoreDetail(this)" title="Cliquez pour le detail"';
     }
 
-    return '<div class="prop-card">' +
+    return '<div class="prop-card" onclick="openPropertyDetail(' + p.id + ')" style="cursor:pointer">' +
       '<div class="prop-card-top">' +
         (imgHtml || '<div class="prop-img-placeholder"></div>') +
         '<div class="prop-score" style="background:' + gc + '"' + scoreDetailAttr + '>' +
@@ -1495,6 +1631,49 @@
       '.chat-suggestions{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}',
       '.chat-sug{padding:6px 12px;background:#e0f2fe;border:none;border-radius:20px;font-size:12px;color:#0369a1;cursor:pointer;transition:background .2s}',
       '.chat-sug:hover{background:#bae6fd}',
+
+      // Property detail overlay
+      '.detail-overlay{position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:2000;display:flex;justify-content:center;overflow-y:auto;padding:24px;backdrop-filter:blur(4px)}',
+      '.detail-panel{background:#fff;border-radius:16px;width:100%;max-width:720px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.2);margin:auto;position:relative;animation:detailIn .25s ease}',
+      '@keyframes detailIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}',
+      '.detail-close{position:absolute;top:16px;right:16px;width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.5);color:#fff;border:none;font-size:18px;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center;transition:background .2s}',
+      '.detail-close:hover{background:rgba(0,0,0,.7)}',
+      '.detail-gallery{position:relative;width:100%;height:360px;background:#e2e8f0;overflow:hidden}',
+      '.detail-img{width:100%;height:100%;object-fit:cover;display:none}',
+      '.detail-img.active{display:block}',
+      '.detail-gallery .carousel-btn{width:40px;height:40px;font-size:28px}',
+      '.detail-counter{position:absolute;bottom:12px;right:16px;background:rgba(0,0,0,.55);color:#fff;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600}',
+      '.detail-gallery-empty{width:100%;height:200px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:15px}',
+      '.detail-body{padding:28px}',
+      '.detail-price{font-size:28px;font-weight:800;color:#0f172a;margin-bottom:6px;font-family:"Playfair Display",Georgia,serif}',
+      '.detail-title{font-size:18px;font-weight:600;color:#334155;margin-bottom:4px}',
+      '.detail-address{font-size:14px;color:#64748b;margin-bottom:24px}',
+      '.detail-section{margin-bottom:24px}',
+      '.detail-section h3{font-size:15px;font-weight:700;color:#0f172a;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #f1f5f9}',
+      '.detail-table{display:grid;grid-template-columns:1fr 1fr;gap:0}',
+      '.detail-row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f8fafc;font-size:14px}',
+      '.detail-row span{color:#64748b}',
+      '.detail-row strong{color:#0f172a}',
+      '.detail-score-wrap{display:flex;gap:20px;align-items:flex-start;margin-bottom:24px;padding:20px;background:#f8fafc;border-radius:12px}',
+      '.detail-score-badge{width:64px;height:64px;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0}',
+      '.dsb-num{font-size:22px;font-weight:800;color:#fff;line-height:1}',
+      '.dsb-grade{font-size:13px;font-weight:700;color:rgba(255,255,255,.8)}',
+      '.detail-score-bars{flex:1;display:flex;flex-direction:column;gap:6px}',
+      '.dsb-row{display:flex;align-items:center;gap:10px;font-size:13px}',
+      '.dsb-row span{min-width:70px;color:#64748b}',
+      '.dsb-track{flex:1;height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden}',
+      '.dsb-fill{height:100%;border-radius:3px;transition:width .3s}',
+      '.dsb-row strong{min-width:24px;text-align:right;font-size:13px;color:#334155}',
+      '.detail-contact{display:flex;flex-direction:column;gap:8px;font-size:14px}',
+      '.detail-contact a{color:#0369a1;text-decoration:none}',
+      '.detail-contact a:hover{text-decoration:underline}',
+      '.detail-features{display:flex;flex-wrap:wrap;gap:8px}',
+      '.detail-feat{padding:6px 14px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:20px;font-size:13px;color:#0369a1}',
+      '.detail-sources{display:flex;flex-wrap:wrap;gap:10px}',
+      '.detail-source-link{padding:10px 20px;background:#0369a1;color:#fff;border-radius:10px;font-size:14px;font-weight:600;text-decoration:none;text-transform:capitalize;transition:background .2s}',
+      '.detail-source-link:hover{background:#0284c7}',
+      '.detail-source-text{padding:10px 20px;background:#f1f5f9;border-radius:10px;font-size:14px;color:#64748b;text-transform:capitalize}',
+      '@media(max-width:768px){.detail-overlay{padding:0}.detail-panel{border-radius:0;max-width:100%;min-height:100vh}.detail-gallery{height:260px}.detail-body{padding:20px}.detail-price{font-size:22px}.detail-table{grid-template-columns:1fr}.detail-score-wrap{flex-direction:column}}',
 
       // Auth overlay (for landing page)
       '.lou-overlay{position:fixed;inset:0;background:rgba(15,23,42,.7);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(4px)}',
