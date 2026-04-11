@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS properties (
     contact_email   VARCHAR(200),
     published_at    TIMESTAMP,
     scraped_at      TIMESTAMP DEFAULT NOW(),
+    first_seen_at   TIMESTAMP DEFAULT NOW(),
     is_active       BOOLEAN DEFAULT TRUE,
     UNIQUE(external_id, source)
 );
@@ -156,6 +157,17 @@ CREATE TABLE IF NOT EXISTS conversations (
 );
 CREATE INDEX IF NOT EXISTS idx_conv_user ON conversations(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_conv_session ON conversations(session_id, created_at);
+
+-- Price history (track price changes for drop alerts)
+CREATE TABLE IF NOT EXISTS price_history (
+    id              SERIAL PRIMARY KEY,
+    property_id     INTEGER REFERENCES properties(id) ON DELETE CASCADE,
+    old_price       INTEGER,
+    new_price       INTEGER,
+    change_pct      DECIMAL(5,2),
+    detected_at     TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_price_hist_prop ON price_history(property_id, detected_at DESC);
 
 -- ============================================
 -- Done! Tables created for Bon Home platform

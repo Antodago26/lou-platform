@@ -811,6 +811,22 @@
     if (dots[cur]) dots[cur].classList.add('active');
   };
 
+  window.showScoreDetail = function(el, scores) {
+    var existing = document.querySelector('.score-tooltip');
+    if (existing) existing.remove();
+    var tip = document.createElement('div');
+    tip.className = 'score-tooltip';
+    tip.innerHTML = '<div class="st-row"><span>Zone</span><strong>' + (scores.zone||0) + '/100</strong></div>' +
+        '<div class="st-row"><span>Budget</span><strong>' + (scores.budget||0) + '/100</strong></div>' +
+        '<div class="st-row"><span>Type</span><strong>' + (scores.type||0) + '/100</strong></div>' +
+        '<div class="st-row"><span>Surface</span><strong>' + (scores.surface||0) + '/100</strong></div>' +
+        '<div class="st-row"><span>Equip.</span><strong>' + (scores.equipment||0) + '/100</strong></div>' +
+        '<button onclick="this.parentNode.remove()" style="margin-top:8px;background:none;border:1px solid #cbd5e1;border-radius:6px;padding:4px 12px;cursor:pointer;font-size:12px">Fermer</button>';
+    el.style.position = 'relative';
+    el.appendChild(tip);
+    event.stopPropagation();
+  };
+
   function toggleProfileForm() {
     var formWrap = $('profile-edit-form');
     if (!formWrap) return;
@@ -1029,6 +1045,10 @@
       imgHtml = '<img src="' + escapeHtml(p.images[0]) + '" alt="" class="prop-img active" onerror="this.style.display=\'none\';_checkAllImgsFailed(this.parentNode)">';
     }
 
+    var daysOnline = p.days_online || 0;
+    var daysText = daysOnline <= 1 ? 'Nouveau' : daysOnline + 'j';
+    var daysColor = daysOnline <= 3 ? '#059669' : daysOnline <= 14 ? '#0369a1' : daysOnline <= 30 ? '#d97706' : '#94a3b8';
+
     var priceText = p.price ? formatPrice(p.price) + ' CHF' : 'Prix sur demande';
     if (p.unit && p.price) {
       var unitPart = (p.unit.split('/')[1] || '').toLowerCase();
@@ -1036,6 +1056,9 @@
       if (unitPart && unitPart !== 'total' && unitPart !== 'one-time') {
         priceText += '<small>/' + escapeHtml(unitPart) + '</small>';
       }
+    }
+    if (p.price_drop) {
+      priceText = '<span class="price-drop-badge">↓ ' + p.price_drop.change_pct + '%</span> ' + priceText + '<del class="old-price">' + formatPrice(p.price_drop.old_price) + '</del>';
     }
 
     var details = [];
@@ -1046,13 +1069,19 @@
 
     var sourceLabel = (p.source || '').replace('www.', '').split('.')[0] || 'Source';
 
+    var scoreDetailAttr = '';
+    if (p.score_detail) {
+      scoreDetailAttr = ' onclick="showScoreDetail(this,' + escapeHtml(JSON.stringify({zone: p.score_detail.zone, budget: p.score_detail.budget, type: p.score_detail.type, surface: p.score_detail.surface, equipment: p.score_detail.equipment})) + ')" title="Cliquez pour le detail"';
+    }
+
     return '<div class="prop-card">' +
       '<div class="prop-card-top">' +
         (imgHtml || '<div class="prop-img-placeholder"></div>') +
-        '<div class="prop-score" style="background:' + gc + '">' +
+        '<div class="prop-score" style="background:' + gc + '"' + scoreDetailAttr + '>' +
           '<span class="prop-score-num">' + p.score + '</span>' +
           '<span class="prop-score-grade">' + p.grade + '</span>' +
         '</div>' +
+        '<div class="prop-days" style="background:' + daysColor + '">' + daysText + '</div>' +
         '<button class="fav-btn' + (p.is_favorite ? ' active' : '') + '" data-id="' + p.id + '" title="Favori">' +
           (p.is_favorite ? '&#9829;' : '&#9825;') +
         '</button>' +
@@ -1398,11 +1427,17 @@
       '.carousel-dot.active{background:#fff}',
       '.prop-img-placeholder{width:100%;height:100%;background:linear-gradient(135deg,#e2e8f0,#cbd5e1);display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:13px}',
       '.prop-img-placeholder::after{content:"Pas d\'image";opacity:.6}',
-      '.prop-score{position:absolute;top:12px;left:12px;display:flex;align-items:center;gap:4px;padding:6px 12px;border-radius:8px;color:#fff;font-weight:700}',
+      '.prop-score{position:absolute;top:12px;left:12px;display:flex;align-items:center;gap:4px;padding:6px 12px;border-radius:8px;color:#fff;font-weight:700;cursor:pointer}',
       '.prop-score-num{font-size:18px}',
       '.prop-score-grade{font-size:12px;opacity:.9}',
       '.fav-btn{position:absolute;top:12px;right:12px;background:rgba(255,255,255,.9);border:none;width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;color:#94a3b8;display:flex;align-items:center;justify-content:center;transition:all .2s}',
       '.fav-btn:hover,.fav-btn.active{color:#dc2626;background:#fff}',
+      '.prop-days{position:absolute;top:12px;right:52px;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:700;color:#fff;z-index:2}',
+      '.price-drop-badge{background:#059669;color:#fff;font-size:12px;font-weight:700;padding:2px 8px;border-radius:6px;margin-right:6px}',
+      '.old-price{color:#94a3b8;font-size:14px;font-weight:400;margin-left:8px}',
+      '.score-tooltip{position:absolute;top:100%;left:0;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:50;min-width:160px;font-size:13px}',
+      '.st-row{display:flex;justify-content:space-between;padding:3px 0;color:#334155}',
+      '.st-row strong{color:#0369a1}',
 
       // Card body
       '.prop-card-body{padding:16px}',

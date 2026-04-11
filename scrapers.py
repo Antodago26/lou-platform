@@ -1010,8 +1010,26 @@ def save_to_db(db, listings):
     """Save scraped listings to the properties table."""
     cur = db.cursor()
     saved = 0
+    price_changes = 0
     for p in listings:
         try:
+            # Check if property exists with different price (for price history tracking)
+            cur.execute("""
+                SELECT id, price FROM properties
+                WHERE external_id = %s AND source = %s
+            """, (p['external_id'], p['source']))
+            existing = cur.fetchone()
+
+            if existing and existing[1] and p['price'] and existing[1] != p['price']:
+                old_price = existing[1]
+                new_price = p['price']
+                change_pct = round(((new_price - old_price) / old_price) * 100, 2) if old_price > 0 else 0
+                cur.execute("""
+                    INSERT INTO price_history (property_id, old_price, new_price, change_pct)
+                    VALUES (%s, %s, %s, %s)
+                """, (existing[0], old_price, new_price, change_pct))
+                price_changes += 1
+
             cur.execute("""
                 INSERT INTO properties (
                     external_id, source, source_url, title, description,
@@ -1019,11 +1037,11 @@ def save_to_db(db, listings):
                     rooms, surface, floor, address, city, canton, postal_code,
                     latitude, longitude, features, images,
                     contact_name, contact_phone, contact_email,
-                    published_at, scraped_at
+                    published_at, scraped_at, first_seen_at
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, NOW()
+                    %s, %s, %s, %s, NOW(), NOW()
                 )
                 ON CONFLICT (external_id, source) DO UPDATE SET
                     price = EXCLUDED.price,
@@ -1056,5 +1074,4 @@ def save_to_db(db, listings):
 
     db.commit()
     cur.close()
-    log.info(f"Saved {saved}/{len(listings)} to database")
-    return saved
+    log.info(f"Saved {saved}/{len(listings)} to database ({price_changes} price changes detected)")

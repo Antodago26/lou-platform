@@ -88,6 +88,39 @@ def return_db(conn):
         pass
 
 
+def _run_migrations():
+    """Run schema migrations on startup (idempotent)."""
+    try:
+        db = get_db()
+        cur = db.cursor()
+        # Add first_seen_at to properties if missing
+        cur.execute("""
+            ALTER TABLE properties ADD COLUMN IF NOT EXISTS first_seen_at TIMESTAMP DEFAULT NOW()
+        """)
+        # Create price_history table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS price_history (
+                id              SERIAL PRIMARY KEY,
+                property_id     INTEGER REFERENCES properties(id) ON DELETE CASCADE,
+                old_price       INTEGER,
+                new_price       INTEGER,
+                change_pct      DECIMAL(5,2),
+                detected_at     TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_price_hist_prop ON price_history(property_id, detected_at DESC)")
+        # Backfill first_seen_at from scraped_at for existing rows
+        cur.execute("UPDATE properties SET first_seen_at = scraped_at WHERE first_seen_at IS NULL")
+        db.commit()
+        cur.close()
+        return_db(db)
+        log.info("Migrations OK")
+    except Exception as e:
+        log.error(f"Migration error: {e}")
+
+_run_migrations()
+
+
 def token_required(f):
     """JWT authentication decorator."""
     @wraps(f)
@@ -601,6 +634,18 @@ def admin_check():
 # PROPERTIES ENDPOINTS
 # ============================================================
 
+def _days_since(dt):
+    """Calculate days since a datetime, handling timezone-naive datetimes."""
+    if not dt:
+        return None
+    try:
+        now = datetime.now(timezone.utc)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return max(0, (now - dt).days)
+    except Exception:
+        return None
+
 @app.route('/api/properties', methods=['GET'])
 @token_required
 def get_properties():
@@ -650,7 +695,9 @@ def get_properties():
             SELECT p.*, sp.total_score, sp.grade, sp.distance_km,
                    sp.score_zone, sp.score_budget, sp.score_type,
                    sp.score_surface, sp.score_equipment, sp.score_freshness,
-                   EXISTS(SELECT 1 FROM favorites f WHERE f.user_id = %s AND f.property_id = p.id) as is_favorite
+                   EXISTS(SELECT 1 FROM favorites f WHERE f.user_id = %s AND f.property_id = p.id) as is_favorite,
+                   p.first_seen_at,
+                   (SELECT json_agg(json_build_object('old_price', ph.old_price, 'new_price', ph.new_price, 'change_pct', ph.change_pct, 'detected_at', ph.detected_at) ORDER BY ph.detected_at DESC) FROM price_history ph WHERE ph.property_id = p.id) as price_changes
             FROM scored_properties sp
             JOIN properties p ON p.id = sp.property_id
             WHERE sp.user_id = %s AND sp.total_score >= %s AND p.is_active = TRUE{tx_filter}
@@ -765,8 +812,23 @@ def get_properties():
                     'freshness': p['score_freshness']
                 },
                 'published_at': p['published_at'].isoformat() if p['published_at'] else None,
-                'is_favorite': p['is_favorite']
+                'is_favorite': p['is_favorite'],
+                'first_seen_at': p['first_seen_at'].isoformat() if p.get('first_seen_at') else p['scraped_at'].isoformat() if p.get('scraped_at') else None,
+                'days_online': _days_since(p.get('first_seen_at') or p.get('scraped_at')),
+                'price_drop': None,
             })
+
+            # Extract latest price drop
+            price_changes = p.get('price_changes')
+            if price_changes and isinstance(price_changes, list) and len(price_changes) > 0:
+                latest = price_changes[0]  # Most recent change
+                if latest.get('change_pct') and latest['change_pct'] < 0:
+                    results[-1]['price_drop'] = {
+                        'old_price': latest['old_price'],
+                        'new_price': latest['new_price'],
+                        'change_pct': float(latest['change_pct']),
+                        'detected_at': latest['detected_at'].isoformat() if hasattr(latest['detected_at'], 'isoformat') else str(latest['detected_at'])
+                    }
 
         return jsonify({"properties": results, "total": total, "page": page, "per_page": per_page})
     finally:
