@@ -93,11 +93,21 @@ def _make_property(external_id, source, source_url, title, description,
     # Portals like Properstar sometimes display "965" meaning 965'000
     if transaction == 'achat' and price and price < 10000:
         price = price * 1000
+    # Clean title: remove if it's just a price string or garbage
+    clean_title = re.sub(r'[^\x00-\x7F]', '', title or '').strip()
+    # If title is just a price like "CHF 688,270." or "701'380", clear it
+    if clean_title and re.match(r'^(?:CHF\s*)?[\d\s\'\',.]+\.?$', clean_title):
+        clean_title = ''
+    # If title starts with "CHF" followed by numbers, strip that prefix
+    clean_title = re.sub(r'^CHF\s*[\d\s\'\',.]+\.?\s*', '', clean_title).strip()
+    # Remove postal codes at start of title (e.g., "2016 Cortaillod ...")
+    clean_title = re.sub(r'^\d{4}\s+', '', clean_title).strip()
+
     return {
         'external_id': str(external_id),
         'source': source,
         'source_url': source_url or '',
-        'title': re.sub(r'[^\x00-\x7F]', '', title or '').strip(),
+        'title': clean_title,
         'description': re.sub(r'[^\x00-\x7F]', '', (description or '')[:500]).strip(),
         'property_type': property_type or 'appartement',
         'transaction': transaction,
@@ -267,15 +277,23 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=2):
                 if addr_match:
                     address = addr_match.group(1).strip()
 
-                # Title: first meaningful text
+                # Title: first meaningful text (skip if it's just a price)
                 title = ''
                 for el in card.select('h2, h3, [class*="title"], [class*="Title"]'):
                     t = el.get_text(strip=True)
-                    if t and len(t) > 3:
+                    if t and len(t) > 3 and not re.match(r'^(?:CHF\s*)?[\d\s\'\',.]+\.?$', t):
                         title = t
                         break
                 if not title:
-                    title = f"{rooms or '?'} pièces" + (f", {surface} m²" if surface else '')
+                    # Build a descriptive fallback title
+                    parts = []
+                    if rooms:
+                        parts.append(f"{rooms} pcs")
+                    if surface:
+                        parts.append(f"{surface} m\u00B2")
+                    if address:
+                        parts.append(address)
+                    title = ', '.join(parts) if parts else ''
 
                 # Images: look for img tags in the card
                 images = []
@@ -921,14 +939,47 @@ def scrape_properstar(city="Lausanne", transaction="location", max_pages=1):
 
         for card in cards:
             try:
-                title_el = card.select_one('h3, h2, [class*="title"]')
-                title = title_el.get_text(strip=True) if title_el else ''
-                price_el = card.select_one('[class*="price"]')
-                price = _clean_price(price_el.get_text(strip=True)) if price_el else None
-                link_el = card.select_one('a[href]')
+                # Link: find the main property link (avoid nav/header links)
+                link_el = card.select_one('a[href*="/listing/"], a[href*="/property/"], a[href*="/suisse/"]')
+                if not link_el:
+                    link_el = card.select_one('a[href]')
                 href = link_el.get('href', '') if link_el else ''
                 if href.startswith('/'):
                     href = 'https://www.properstar.ch' + href
+                if not href or href == 'https://www.properstar.ch':
+                    continue
+
+                # Price: look for price element, avoid grabbing title text
+                price_el = card.select_one('[class*="price"], [class*="Price"]')
+                price_text = price_el.get_text(strip=True) if price_el else ''
+                price = _clean_price(price_text) if price_text else None
+
+                # Title: find title, but exclude price elements
+                title = ''
+                for el in card.select('h3, h2, h4, [class*="title"], [class*="Title"]'):
+                    # Skip if this element IS the price element
+                    if price_el and el == price_el:
+                        continue
+                    t = el.get_text(strip=True)
+                    # Skip if text is just a price
+                    if t and not re.match(r'^(?:CHF\s*)?[\d\s\'\',.]+\.?$', t) and len(t) > 3:
+                        title = t
+                        break
+
+                # Extract address/location from card text
+                card_text = card.get_text(' ', strip=True)
+                address = city
+                postal = None
+                addr_match = re.search(r'(\d{4})\s+([\w\s-]+?)(?:\s*(?:CHF|Fr|pièce|m²|\d+\s*pcs))', card_text)
+                if addr_match:
+                    postal = addr_match.group(1)
+                    address = f"{addr_match.group(1)} {addr_match.group(2).strip()}"
+
+                # Rooms from card text (not just title)
+                rooms = _clean_rooms(card_text)
+
+                # Surface from card text
+                surface = _clean_surface(card_text)
 
                 # Extract images
                 images = []
@@ -936,7 +987,6 @@ def scrape_properstar(city="Lausanne", transaction="location", max_pages=1):
                     src = img_el.get('src', '') or img_el.get('data-src', '')
                     if src and src.startswith('http') and 'logo' not in src.lower() and 'icon' not in src.lower() and 'pixel' not in src.lower():
                         images.append(src)
-                # Also check background-image in style
                 for styled in card.select('[style*="background"]'):
                     style = styled.get('style', '')
                     bg_match = re.search(r'url\(["\']?(https?://[^"\')\s]+)', style)
@@ -944,17 +994,17 @@ def scrape_properstar(city="Lausanne", transaction="location", max_pages=1):
                         images.append(bg_match.group(1))
                 images = list(dict.fromkeys(images))[:5]
 
-                if title or price:
+                if price or title:
                     results.append(_make_property(
-                        external_id=f"ps-{hashlib.sha256((title+href).encode()).hexdigest()[:12]}",
+                        external_id=f"ps-{hashlib.sha256((str(price)+href).encode()).hexdigest()[:12]}",
                         source='Properstar', source_url=href,
                         title=title, description='',
-                        property_type=_guess_type(title), transaction=transaction,
-                        price=price, rooms=_clean_rooms(title),
-                        surface=None, floor=None,
-                        address=city, city=city,
+                        property_type=_guess_type(card_text), transaction=transaction,
+                        price=price, rooms=rooms,
+                        surface=surface, floor=None,
+                        address=address, city=city,
                         canton=CITY_CANTONS.get(city.lower(), ''),
-                        postal_code=None,
+                        postal_code=postal,
                         latitude=None, longitude=None,
                         features=[], images=images, published_at=None,
                     ))

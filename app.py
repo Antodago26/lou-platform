@@ -804,7 +804,10 @@ def get_properties():
             best_images = p.pop('_best_images', [])
             results.append({
                 'id': p['id'],
-                'title': re.sub(r'[^\x00-\x7F]', '', p['title'] or '').strip() or 'Bien immobilier',
+                'title': re.sub(r'[^\x00-\x7F]', '', p['title'] or '').strip() or (
+                    f"{float(p['rooms'])} pcs, {p['surface']} m2" if p.get('rooms') and p.get('surface')
+                    else f"{p.get('city') or 'Bien immobilier'}"
+                ),
                 'address': re.sub(r'[^\x00-\x7F]', '', p['address'] or '').strip(),
                 'price': p['price'] or 0,
                 'unit': f"{(p['currency'] or 'CHF').encode('ascii', 'ignore').decode()}/{(p['price_unit'] or 'mois').encode('ascii', 'ignore').decode()}",
