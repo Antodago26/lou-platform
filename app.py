@@ -686,6 +686,7 @@ def get_properties():
     user_id = request.user_id
     sort = request.args.get('sort', 'score')
     min_score = int(request.args.get('min_score', 0))
+    new_only = request.args.get('new_only', '').lower() in ('true', '1', 'yes')
     page = int(request.args.get('page', 1))
     per_page = min(int(request.args.get('per_page', 20)), 50)  # Cap at 50
     offset = (page - 1) * per_page
@@ -723,6 +724,8 @@ def get_properties():
         if user_transaction:
             tx_filter += " AND p.transaction = %s"
             tx_params.append(user_transaction)
+        if new_only:
+            tx_filter += " AND p.first_seen_at > NOW() - INTERVAL '24 hours'"
 
         # Get ALL scored properties (no LIMIT) for cross-portal merging
         cur.execute(f"""

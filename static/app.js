@@ -614,7 +614,7 @@
       // Stats row
       '<div class="dash-stats" id="dash-stats">' +
         '<div class="dash-stat"><div class="dash-stat-num" id="stat-total">-</div><div class="dash-stat-lbl">Biens analyses</div></div>' +
-        '<div class="dash-stat"><div class="dash-stat-num" id="stat-new">-</div><div class="dash-stat-lbl">Nouveaux (24h)</div></div>' +
+        '<div class="dash-stat clickable" id="stat-new-card" style="cursor:pointer"><div class="dash-stat-num" id="stat-new">-</div><div class="dash-stat-lbl">Nouveaux (24h)</div></div>' +
         '<div class="dash-stat clickable" id="stat-fav-card" style="cursor:pointer"><div class="dash-stat-num" id="stat-favs">-</div><div class="dash-stat-lbl">Favoris</div></div>' +
         '<div class="dash-stat"><div class="dash-stat-num" id="stat-grade-a">-</div><div class="dash-stat-lbl">Classe A</div></div>' +
       '</div>' +
@@ -705,17 +705,26 @@
 
     // Sort/filter change
     $('sort-select').onchange = function () {
-      loadProperties(1, this.value, parseInt($('grade-filter').value));
+      currentNewOnly = false;
+      document.querySelectorAll('.dash-stat').forEach(function(s) { s.classList.remove('stat-active'); });
+      loadProperties(1, this.value, parseInt($('grade-filter').value), false);
     };
     $('grade-filter').onchange = function () {
-      loadProperties(1, $('sort-select').value, parseInt(this.value));
+      currentNewOnly = false;
+      document.querySelectorAll('.dash-stat').forEach(function(s) { s.classList.remove('stat-active'); });
+      loadProperties(1, $('sort-select').value, parseInt(this.value), false);
     };
 
     // View tabs
     var currentView = 'properties';
     document.querySelectorAll('.dash-tab').forEach(function (tab) {
       tab.onclick = function () {
+        currentNewOnly = false;
+        document.querySelectorAll('.dash-stat').forEach(function(s) { s.classList.remove('stat-active'); });
         switchView(this.dataset.view);
+        if (this.dataset.view === 'properties') {
+          loadProperties(1, 'score', 0, false);
+        }
       };
     });
 
@@ -727,8 +736,28 @@
       this.innerHTML = open ? '&#9432; Comment fonctionne le score ?' : '&#9432; Masquer l\'explication';
     };
 
+    // Click on Nouveaux stat card — show only new listings (last 24h)
+    $('stat-new-card').onclick = function () {
+      var isActive = this.classList.contains('stat-active');
+      // Remove active from all stat cards
+      document.querySelectorAll('.dash-stat').forEach(function(s) { s.classList.remove('stat-active'); });
+      if (isActive) {
+        // Deactivate: show all properties again
+        currentNewOnly = false;
+        switchView('properties');
+        loadProperties(1, 'score', 0, false);
+      } else {
+        this.classList.add('stat-active');
+        currentNewOnly = true;
+        switchView('properties');
+        loadProperties(1, 'newest', 0, true);
+      }
+    };
+
     // Click on Favoris stat card
     $('stat-fav-card').onclick = function () {
+      document.querySelectorAll('.dash-stat').forEach(function(s) { s.classList.remove('stat-active'); });
+      currentNewOnly = false;
       switchView('favorites');
     };
 
@@ -1618,11 +1647,13 @@
   var currentPage = 1;
   var currentSort = 'score';
   var currentMinScore = 0;
+  var currentNewOnly = false;
 
-  function loadProperties(page, sort, minScore) {
+  function loadProperties(page, sort, minScore, newOnly) {
     currentPage = page;
     currentSort = sort || currentSort;
     currentMinScore = minScore !== undefined ? minScore : currentMinScore;
+    currentNewOnly = newOnly !== undefined ? newOnly : currentNewOnly;
 
     var list = $('properties-list');
     list.innerHTML = '<div class="dash-loading">Chargement...</div>';
@@ -1631,17 +1662,26 @@
       '?page=' + page +
       '&per_page=12' +
       '&sort=' + currentSort +
-      '&min_score=' + currentMinScore;
+      '&min_score=' + currentMinScore +
+      (currentNewOnly ? '&new_only=true' : '');
 
     apiFetch(url)
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (!data.properties || data.properties.length === 0) {
-          list.innerHTML = '<div class="dash-empty">' +
-            '<h3 style="margin-bottom:8px;font-family:Playfair Display,serif">Pas encore de résultats</h3>' +
-            '<p>Lou est en train de chasser pour vous ! Les premiers biens apparaîtront après le prochain cycle de recherche (toutes les 2 heures).</p>' +
-            '<p style="margin-top:12px">En attendant, <a href="#" class="open-chat-link" style="color:#0369a1;cursor:pointer">parlez à Lou</a> pour affiner vos critères.</p>' +
-          '</div>';
+          if (currentNewOnly) {
+            list.innerHTML = '<div class="dash-empty">' +
+              '<h3 style="margin-bottom:8px;font-family:Playfair Display,serif">Aucun nouveau bien</h3>' +
+              '<p>Aucun nouveau bien n\'a été détecté dans les dernières 24 heures.</p>' +
+              '<p style="margin-top:12px">Les résultats se mettent à jour automatiquement toutes les 2 heures.</p>' +
+            '</div>';
+          } else {
+            list.innerHTML = '<div class="dash-empty">' +
+              '<h3 style="margin-bottom:8px;font-family:Playfair Display,serif">Pas encore de résultats</h3>' +
+              '<p>Lou est en train de chasser pour vous ! Les premiers biens apparaîtront après le prochain cycle de recherche (toutes les 2 heures).</p>' +
+              '<p style="margin-top:12px">En attendant, <a href="#" class="open-chat-link" style="color:#0369a1;cursor:pointer">parlez à Lou</a> pour affiner vos critères.</p>' +
+            '</div>';
+          }
           var chatLink = list.querySelector('.open-chat-link');
           if (chatLink) chatLink.onclick = function(e) { e.preventDefault(); document.querySelector('.chat-toggle').click(); };
           $('pagination').innerHTML = '';
@@ -1652,12 +1692,29 @@
         window._propData = window._propData || {};
         data.properties.forEach(function (p) { window._propData[p.id] = p; });
 
-        var html = '<div class="prop-grid">';
+        var html = '';
+        if (currentNewOnly) {
+          html += '<div class="new-filter-banner">' +
+            '<span>Nouveaux biens des dernières 24h</span>' +
+            '<button class="new-filter-clear" id="clear-new-filter">✕ Voir tous les biens</button>' +
+          '</div>';
+        }
+        html += '<div class="prop-grid">';
         data.properties.forEach(function (p) {
           html += renderPropertyCard(p);
         });
         html += '</div>';
         list.innerHTML = html;
+
+        // Hook clear new filter button
+        var clearBtn = $('clear-new-filter');
+        if (clearBtn) {
+          clearBtn.onclick = function () {
+            currentNewOnly = false;
+            document.querySelectorAll('.dash-stat').forEach(function(s) { s.classList.remove('stat-active'); });
+            loadProperties(1, 'score', 0, false);
+          };
+        }
 
         // Pagination
         renderPagination(data.total, data.page, data.per_page);
@@ -2321,6 +2378,13 @@
       '.dash-stat:hover{box-shadow:0 4px 16px rgba(0,0,0,.06)}',
       '.dash-stat-num{font-size:32px;font-weight:700;font-family:"Playfair Display",Georgia,serif;color:#0f172a}',
       '.dash-stat-lbl{font-size:13px;color:#64748b;margin-top:4px}',
+      '.dash-stat.clickable:hover{border-color:#0369a1;box-shadow:0 4px 16px rgba(3,105,161,.12)}',
+      '.dash-stat.stat-active{border-color:#0369a1;background:#f0f9ff;box-shadow:0 4px 16px rgba(3,105,161,.15)}',
+      '.dash-stat.stat-active .dash-stat-num{color:#0369a1}',
+      '.dash-stat.stat-active .dash-stat-lbl{color:#0369a1;font-weight:600}',
+      '.new-filter-banner{display:flex;align-items:center;justify-content:space-between;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:14px;color:#0369a1;font-weight:600}',
+      '.new-filter-clear{background:none;border:1px solid #0369a1;color:#0369a1;border-radius:6px;padding:4px 12px;cursor:pointer;font-size:13px;font-weight:500;transition:all .2s}',
+      '.new-filter-clear:hover{background:#0369a1;color:#fff}',
 
       // Profile bar
       '.dash-profile-bar{margin-bottom:24px}',
