@@ -22,8 +22,17 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 from urllib.parse import quote
 
+import unicodedata
+
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger('lou-scrapers')
+
+
+def _normalize_city(name):
+    """Remove accents and lowercase for city comparison.
+    'Neuchâtel' → 'neuchatel', 'La Tène' → 'la tene'"""
+    s = unicodedata.normalize('NFD', (name or '').lower().strip())
+    return ''.join(c for c in s if unicodedata.category(c) != 'Mn')
 
 SCRAPINGBEE_KEY = os.environ.get('SCRAPINGBEE_API_KEY', '')
 SCRAPINGBEE_URL = 'https://app.scrapingbee.com/api/v1'
@@ -872,10 +881,12 @@ def scrape_anibis(city="Lausanne", transaction="location", max_pages=2):
                 pass
 
         # Then try HTML cards — Anibis is a React SPA with hashed MUI classes
-        # The <a> tags linking to listings ARE the cards; also look for any container divs
+        # Detail links have a numeric ID: /fr/vi/{canton}/immobilier/{category}/{slug}/{id}
         cards = soup.select('a[href*="/fr/vi/"][href*="/immobilier/"]')
         if not cards:
-            cards = soup.select('a[href*="/immobilier/"]')
+            # Broader: any link with /immobilier/ AND a numeric segment (filters out nav links)
+            all_immo_links = soup.select('a[href*="/immobilier/"]')
+            cards = [a for a in all_immo_links if re.search(r'/\d{5,}', a.get('href', ''))]
         if not cards:
             cards = soup.select('.listing-card, .ItemCard, article, [class*="listing"], [class*="Listing"]')
         # Deduplicate: skip cards for already-found URLs
@@ -896,7 +907,11 @@ def scrape_anibis(city="Lausanne", transaction="location", max_pages=2):
 
                 # Get ALL text from the card — MUI hashes classes so we parse text directly
                 card_text = card.get_text(' ', strip=True)
-                if not card_text or len(card_text) < 5:
+                if not card_text or len(card_text) < 20:
+                    continue  # Skip nav links like "Immobilier" or "Menu"
+
+                # Skip if href doesn't look like a detail page (need numeric ID)
+                if href and '/immobilier/' in href and not re.search(r'/\d{4,}', href):
                     continue
 
                 # Log first card text for debugging
@@ -1062,8 +1077,8 @@ def scrape_acheter_louer(city="Lausanne", transaction="location", max_pages=2):
                     continue
 
                 card_text = card.get_text(' ', strip=True)
-                if not card_text or len(card_text) < 5:
-                    continue
+                if not card_text or len(card_text) < 30:
+                    continue  # Skip generic elements like "objet(s)", "Menu", etc.
 
                 # Log first card for debugging
                 if len(results) == 0 and len(existing_urls) == 0:
@@ -1133,7 +1148,7 @@ def scrape_flatfox(city="Lausanne", transaction="location", limit=50):
     log.info(f"[Flatfox] Searching {city} ({transaction})")
     results = []
     offer_type = 'RENT' if transaction == 'location' else 'SELL'
-    city_lower = city.lower().strip()
+    city_norm = _normalize_city(city)
 
     # Public API — no auth needed, returns all listings, we filter client-side by city
     api_url = "https://flatfox.ch/api/v1/public-listing/"
@@ -1168,9 +1183,9 @@ def scrape_flatfox(city="Lausanne", transaction="location", limit=50):
             log.info(f"[Flatfox] Page {page_idx}: {len(items)} items (total={total_count})")
 
             for item in items:
-                # Filter by city (case-insensitive)
-                item_city = (item.get('city') or '').lower().strip()
-                if item_city != city_lower:
+                # Filter by city (accent-insensitive)
+                item_city = _normalize_city(item.get('city') or '')
+                if item_city != city_norm:
                     continue
                 # Filter by offer type
                 if item.get('offer_type') != offer_type:
@@ -1209,7 +1224,7 @@ def scrape_flatfox(city="Lausanne", transaction="location", limit=50):
                     floor=item.get('floor'),
                     address=item.get('public_address') or ((item.get('street') or '') + ', ' + (item.get('city') or city)),
                     city=item.get('city') or city,
-                    canton=item.get('state') or CITY_CANTONS.get(city_lower, ''),
+                    canton=item.get('state') or CITY_CANTONS.get(city.lower(), ''),
                     postal_code=str(item.get('zipcode') or '') or None,
                     latitude=item.get('latitude'), longitude=item.get('longitude'),
                     features=features,
@@ -1354,7 +1369,7 @@ def scrape_properstar(city="Lausanne", transaction="location", max_pages=1):
     log.info(f"[Properstar] Searching {city} ({transaction})")
     results = []
     tx = "rent" if transaction == "location" else "buy"
-    slug = city.lower().replace(' ', '-')
+    slug = _normalize_city(city).replace(' ', '-')
 
     tx_fr = "louer" if transaction == "location" else "acheter"
     url = f"https://www.properstar.ch/suisse/{slug}/{tx_fr}/appartement"

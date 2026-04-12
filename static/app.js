@@ -1377,9 +1377,9 @@
     var sourcesHtml = sources.map(function(s) {
       var name = (s.source || '').replace('www.', '').split('.')[0] || 'Source';
       if (s.url) {
-        return '<a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener" class="detail-source-link" onclick="event.stopPropagation()">' + escapeHtml(name) + ' ↗</a>';
+        return '<a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener" class="detail-source-link prop-source-link" data-src="' + escapeHtml(s.source || '') + '" onclick="event.stopPropagation()">' + escapeHtml(name) + ' ↗</a>';
       }
-      return '<span class="detail-source-text">' + escapeHtml(name) + '</span>';
+      return '<span class="detail-source-text prop-source-link" data-src="' + escapeHtml(s.source || '') + '">' + escapeHtml(name) + '</span>';
     }).join('');
 
     // Contact
@@ -1725,9 +1725,9 @@
             sources.forEach(function(s) {
               var name = (s.source || '').replace('www.', '').split('.')[0] || 'Source';
               if (s.url) {
-                html += '<a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener" class="prop-source-link">' + escapeHtml(name) + '</a> ';
+                html += '<a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener" class="prop-source-link" data-src="' + escapeHtml(s.source || '') + '">' + escapeHtml(name) + '</a> ';
               } else {
-                html += '<span class="prop-source">' + escapeHtml(name) + '</span> ';
+                html += '<span class="prop-source-link" data-src="' + escapeHtml(s.source || '') + '">' + escapeHtml(name) + '</span> ';
               }
             });
             html += '</div>';
@@ -2376,8 +2376,16 @@
       '.prop-footer{display:flex;justify-content:space-between;align-items:center;padding-top:12px;border-top:1px solid #f1f5f9}',
       '.prop-source{font-size:12px;color:#94a3b8;text-transform:capitalize}',
       '.prop-sources{display:flex;flex-wrap:wrap;gap:6px;align-items:center}',
-      '.prop-source-link{font-size:12px;color:#0369a1;text-decoration:none;font-weight:500;padding:2px 8px;border:1px solid #cbd5e1;border-radius:12px;text-transform:capitalize}',
-      '.prop-source-link:hover{background:#f0f9ff;border-color:#0369a1}',
+      '.prop-source-link{font-size:11px;color:#fff;text-decoration:none;font-weight:600;padding:3px 8px;border-radius:12px;text-transform:capitalize;white-space:nowrap}',
+      '.prop-source-link:hover{opacity:0.85;filter:brightness(1.1)}',
+      '.prop-source-link[data-src="Homegate"]{background:#e74c3c}',
+      '.prop-source-link[data-src="ImmoScout24"]{background:#1a73e8}',
+      '.prop-source-link[data-src="Immobilier.ch"]{background:#2ecc71}',
+      '.prop-source-link[data-src="Comparis"]{background:#f39c12}',
+      '.prop-source-link[data-src="Flatfox"]{background:#9b59b6}',
+      '.prop-source-link[data-src="Anibis"]{background:#e67e22}',
+      '.prop-source-link[data-src="Acheter-Louer"]{background:#1abc9c}',
+      '.prop-source-link[data-src="Properstar"]{background:#34495e}',
       '.prop-link{font-size:13px;color:#0369a1;text-decoration:none;font-weight:500}',
       '.prop-link:hover{text-decoration:underline}',
 
