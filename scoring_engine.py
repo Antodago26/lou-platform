@@ -96,15 +96,21 @@ def score_zone(prop, zones):
     # If we have GPS data
     if min_distance != float('inf'):
         if min_distance <= target_radius:
-            score = 100
+            # Progressive scoring within radius: closer = higher score
+            # At 0 km → 100, at target_radius → 80
+            score = int(100 - (min_distance / target_radius) * 20)
         elif min_distance <= target_radius * 1.5:
-            score = 70
-        elif min_distance <= target_radius * 2:
-            score = 40
+            # Just outside radius: 60-70
+            over = (min_distance - target_radius) / (target_radius * 0.5)
+            score = int(70 - over * 10)
+        elif min_distance <= target_radius * 3:
+            # Further out: 20-60
+            over = (min_distance - target_radius * 1.5) / (target_radius * 1.5)
+            score = int(60 - over * 40)
         else:
-            score = max(0, int(20 - min_distance))
+            score = max(0, int(15 - min_distance))
     elif city_match:
-        score = 85  # Same city but no GPS data
+        score = 90  # Same city but no GPS data
         min_distance = 0
     else:
         # Check canton match
@@ -116,9 +122,9 @@ def score_zone(prop, zones):
             score = 10
         min_distance = None
 
-    # Bonus for exact city match
+    # Bonus for exact city match (stacks with GPS proximity)
     if city_match and score < 100:
-        score = min(100, score + 15)
+        score = min(100, score + 10)
 
     dist = round(min_distance, 1) if min_distance and min_distance != float('inf') else None
     return score, dist

@@ -691,7 +691,7 @@ def get_properties():
     offset = (page - 1) * per_page
 
     order_map = {
-        'score': 'sp.total_score DESC',
+        'score': 'sp.total_score DESC, sp.distance_km ASC NULLS LAST',
         'price_asc': 'p.price ASC',
         'price_desc': 'p.price DESC',
         'newest': 'p.published_at DESC NULLS LAST',
