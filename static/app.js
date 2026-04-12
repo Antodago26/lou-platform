@@ -1266,7 +1266,7 @@
   window.carouselNav = function (cid, dir) {
     var el = document.getElementById(cid);
     if (!el) return;
-    var imgs = el.querySelectorAll('.prop-img');
+    var imgs = el.querySelectorAll('.prop-img, .detail-img');
     var dots = el.querySelectorAll('.carousel-dot');
     var cur = 0;
     imgs.forEach(function (im, i) { if (im.classList.contains('active')) cur = i; });
@@ -1280,6 +1280,9 @@
     } while (imgs[cur].style.display === 'none' && attempts > 0);
     imgs[cur].classList.add('active');
     if (dots[cur]) dots[cur].classList.add('active');
+    // Update counter if present (detail gallery)
+    var counter = el.querySelector('.detail-counter');
+    if (counter) counter.textContent = (cur + 1) + ' / ' + imgs.length;
   };
 
   window.showScoreDetail = function(el, e) {
@@ -1440,7 +1443,7 @@
         galleryHtml +
         '<div class="detail-body">' +
           '<div class="detail-price">' + priceHtml + '</div>' +
-          '<h2 class="detail-title">' + escapeHtml(cleanTitle(p.title) || 'Bien immobilier') + '</h2>' +
+          '<h2 class="detail-title">' + escapeHtml(cleanTitle(p.title) || p.address || p.city || 'Bien immobilier') + '</h2>' +
           '<div class="detail-address">📍 ' + escapeHtml(p.address || '') + '</div>' +
           '<div class="detail-section"><h3>Caractéristiques</h3><div class="detail-table">' + tableHtml + '</div></div>' +
           (p.description ? '<div class="detail-section"><h3>Description</h3><p class="detail-description">' + escapeHtml(p.description) + '</p></div>' : '') +
@@ -1738,7 +1741,7 @@
       '</div>' +
       '<div class="prop-card-body">' +
         '<div class="prop-price">' + priceText + '</div>' +
-        '<div class="prop-title">' + escapeHtml(cleanTitle(p.title) || 'Bien immobilier') + '</div>' +
+        '<div class="prop-title">' + escapeHtml(cleanTitle(p.title) || p.address || p.city || 'Bien immobilier') + '</div>' +
         '<div class="prop-address">' + escapeHtml(p.address || '') + '</div>' +
         '<div class="prop-details">' + details.join(' &middot; ') + '</div>' +
         '<div class="prop-scores-mini">' +
@@ -1950,7 +1953,7 @@
       '</div>' +
       '<div class="prop-card-body">' +
         '<div class="prop-price">' + priceText + '</div>' +
-        '<div class="prop-title">' + escapeHtml(cleanTitle(p.title) || 'Bien immobilier') + '</div>' +
+        '<div class="prop-title">' + escapeHtml(cleanTitle(p.title) || p.address || p.city || 'Bien immobilier') + '</div>' +
         '<div class="prop-address">' + escapeHtml(p.address || '') + '</div>' +
         '<div class="prop-details">' + details.join(' &middot; ') + '</div>' +
         noteSnippet +
