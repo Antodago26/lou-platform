@@ -606,6 +606,28 @@
         '<div class="dash-stat clickable" id="stat-fav-card" style="cursor:pointer"><div class="dash-stat-num" id="stat-favs">-</div><div class="dash-stat-lbl">Favoris</div></div>' +
         '<div class="dash-stat"><div class="dash-stat-num" id="stat-grade-a">-</div><div class="dash-stat-lbl">Classe A</div></div>' +
       '</div>' +
+      // Score legend
+      '<div class="score-legend" id="score-legend">' +
+        '<button class="score-legend-toggle" id="score-legend-btn">&#9432; Comment fonctionne le score ?</button>' +
+        '<div class="score-legend-body" id="score-legend-body" style="display:none">' +
+          '<p class="score-legend-intro">Chaque bien est note de 0 a 100 selon vos criteres :</p>' +
+          '<div class="score-legend-grades">' +
+            '<span class="score-legend-badge" style="background:#059669">A <small>85-100</small></span>' +
+            '<span class="score-legend-badge" style="background:#0369a1">B <small>70-84</small></span>' +
+            '<span class="score-legend-badge" style="background:#d97706">C <small>55-69</small></span>' +
+            '<span class="score-legend-badge" style="background:#dc2626">D <small>0-54</small></span>' +
+          '</div>' +
+          '<div class="score-legend-criteria">' +
+            '<div class="score-legend-item"><strong>Zone</strong> — Proximite de vos villes cibles</div>' +
+            '<div class="score-legend-item"><strong>Budget</strong> — Adequation avec votre fourchette de prix</div>' +
+            '<div class="score-legend-item"><strong>Type</strong> — Correspondance au type de bien souhaite</div>' +
+            '<div class="score-legend-item"><strong>Surface</strong> — Surface et nombre de pieces</div>' +
+            '<div class="score-legend-item"><strong>Equipements</strong> — Balcon, parking, ascenseur, etc.</div>' +
+            '<div class="score-legend-item"><strong>Fraicheur</strong> — Annonce publiee recemment</div>' +
+          '</div>' +
+          '<p class="score-legend-tip">Cliquez sur le badge de score d\'une annonce pour voir le detail.</p>' +
+        '</div>' +
+      '</div>' +
       // View tabs
       '<div class="dash-tabs" id="dash-tabs">' +
         '<button class="dash-tab active" data-view="properties">Tous les biens</button>' +
@@ -685,6 +707,14 @@
       };
     });
 
+    // Score legend toggle
+    $('score-legend-btn').onclick = function () {
+      var body = $('score-legend-body');
+      var open = body.style.display !== 'none';
+      body.style.display = open ? 'none' : 'block';
+      this.innerHTML = open ? '&#9432; Comment fonctionne le score ?' : '&#9432; Masquer l\'explication';
+    };
+
     // Click on Favoris stat card
     $('stat-fav-card').onclick = function () {
       switchView('favorites');
@@ -758,7 +788,40 @@
       'prilly': [46.5369, 6.5972],
       'monthey': [46.2547, 6.9553],
       'aigle': [46.3180, 6.9706],
-      'payerne': [46.8216, 6.9393]
+      'payerne': [46.8216, 6.9393],
+      'cortaillod': [46.9445, 6.8451],
+      'boudry': [46.9517, 6.8383],
+      'colombier': [46.9607, 6.8575],
+      'peseux': [46.9780, 6.8920],
+      'corcelles-cormondrèche': [47.0010, 6.8840],
+      'corcelles': [47.0010, 6.8840],
+      'hauterive': [46.9900, 6.9600],
+      'saint-blaise': [47.0140, 6.9880],
+      'bevaix': [46.9292, 6.8161],
+      'gorgier': [46.9125, 6.7853],
+      'le landeron': [47.0533, 7.0711],
+      'marin-epagnier': [47.0083, 7.0017],
+      'val-de-ruz': [47.0300, 6.8900],
+      'cernier': [47.0556, 6.8972],
+      'fontainemelon': [47.0450, 6.8989],
+      'le locle': [47.0594, 6.7489],
+      'fleurier': [46.9014, 6.5817],
+      'couvet': [46.9217, 6.6317],
+      'travers': [46.9400, 6.6833],
+      'cressier': [47.0503, 7.0372],
+      'moutier': [47.2789, 7.3722],
+      'bettlach': [47.2067, 7.4317],
+      'grenchen': [47.1917, 7.3953],
+      'solothurn': [47.2089, 7.5372],
+      'olten': [47.3528, 7.9069],
+      'langenthal': [47.2139, 7.7897],
+      'brig': [46.3147, 7.9878],
+      'visp': [46.2933, 7.8825],
+      'fully': [46.1317, 7.1142],
+      'saxon': [46.1483, 7.1811],
+      'savigny': [46.5342, 6.7312],
+      'lutry': [46.5039, 6.6855],
+      'cully': [46.4885, 6.7297]
     };
 
     function geocodeCity(city) {
@@ -804,37 +867,97 @@
       document.head.appendChild(script);
     }
 
+    var _mapHighlightedCard = null;
+
     function loadMapView() {
       var container = $('map-view');
       if (!container) return;
       container.style.display = '';
 
       if (_mapInstance) {
-        // Refresh markers with current data
         _refreshMapMarkers();
+        _refreshMapSidebar();
         _mapInstance.invalidateSize();
         return;
       }
 
-      container.innerHTML = '<div style="text-align:center;padding:48px;color:#64748b">Chargement de la carte...</div>';
+      container.innerHTML =
+        '<div class="map-split">' +
+          '<div class="map-sidebar" id="map-sidebar"><div style="padding:20px;color:#64748b;text-align:center">Chargement...</div></div>' +
+          '<div class="map-canvas" id="map-canvas"></div>' +
+        '</div>';
 
       loadLeaflet(function () {
-        container.innerHTML = '';
-        var mapDiv = ce('div', '', '');
-        mapDiv.style.width = '100%';
-        mapDiv.style.height = '100%';
-        container.appendChild(mapDiv);
-
-        _mapInstance = L.map(mapDiv).setView([46.8, 8.2], 8);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '&copy; OpenStreetMap contributors',
+        var mapDiv = $('map-canvas');
+        _mapInstance = L.map(mapDiv, { zoomControl: false }).setView([46.8, 8.2], 8);
+        L.control.zoom({ position: 'topright' }).addTo(_mapInstance);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
           maxZoom: 19
         }).addTo(_mapInstance);
 
         _refreshMapMarkers();
-
-        // Fix tile rendering after container becomes visible
+        _refreshMapSidebar();
         setTimeout(function () { _mapInstance.invalidateSize(); }, 200);
+      });
+    }
+
+    function _refreshMapSidebar() {
+      var sidebar = $('map-sidebar');
+      if (!sidebar) return;
+      var data = window._propData || {};
+      var props = Object.keys(data).map(function(id) { return data[id]; });
+      // Sort by score descending
+      props.sort(function(a, b) { return (b.score || 0) - (a.score || 0); });
+
+      if (props.length === 0) {
+        sidebar.innerHTML = '<div style="padding:20px;color:#64748b;text-align:center">Aucun bien a afficher</div>';
+        return;
+      }
+
+      var html = '<div class="map-sidebar-header"><span>' + props.length + ' biens</span></div>';
+      html += '<div class="map-sidebar-list" id="map-sidebar-list">';
+      props.forEach(function(p) {
+        var gradeColors = { A: '#059669', B: '#0369a1', C: '#d97706', D: '#dc2626' };
+        var gc = gradeColors[p.grade] || '#94a3b8';
+        var priceStr = p.price ? formatPrice(p.price) + ' CHF' : 'Prix sur demande';
+        var img = (p.images && p.images.length > 0) ? p.images[0] : '';
+        var details = [];
+        if (p.rooms && p.rooms > 0) details.push(p.rooms + ' pcs');
+        if (p.surface && p.surface > 0) details.push(p.surface + ' m2');
+
+        html += '<div class="map-card" data-id="' + p.id + '" onclick="openPropertyDetail(' + p.id + ')">' +
+          (img ? '<img class="map-card-img" src="' + escapeHtml(img) + '" onerror="this.style.display=\'none\'">' : '<div class="map-card-img-ph"></div>') +
+          '<div class="map-card-info">' +
+            '<div class="map-card-price">' + priceStr + '</div>' +
+            '<div class="map-card-title">' + escapeHtml(p.title || p.city || 'Bien') + '</div>' +
+            '<div class="map-card-details">' + details.join(' · ') + '</div>' +
+            '<div class="map-card-addr">' + escapeHtml(p.address || p.city || '') + '</div>' +
+          '</div>' +
+          '<div class="map-card-score" style="background:' + gc + '">' + (p.score || 0) + '</div>' +
+        '</div>';
+      });
+      html += '</div>';
+      sidebar.innerHTML = html;
+
+      // Hover card -> highlight marker
+      sidebar.querySelectorAll('.map-card').forEach(function(card) {
+        card.addEventListener('mouseenter', function() {
+          var id = parseInt(this.dataset.id);
+          _highlightMapMarker(id);
+        });
+      });
+    }
+
+    function _highlightMapMarker(propId) {
+      // Open popup of the matching marker
+      if (!_mapMarkers) return;
+      _mapMarkers.eachLayer(function(layer) {
+        if (layer._propId === propId) {
+          _mapMarkers.zoomToShowLayer(layer, function() {
+            layer.openPopup();
+          });
+        }
       });
     }
 
@@ -844,7 +967,7 @@
       if (_mapMarkers) {
         _mapInstance.removeLayer(_mapMarkers);
       }
-      _mapMarkers = L.markerClusterGroup();
+      _mapMarkers = L.markerClusterGroup({ maxClusterRadius: 40 });
 
       var gradeColors = { A: '#059669', B: '#0369a1', C: '#d97706', D: '#dc2626' };
       var data = window._propData || {};
@@ -857,50 +980,59 @@
 
         if (!lat || !lng) {
           var cityCoords = geocodeCity(p.city || '');
-          if (!cityCoords) {
-            // Try to extract city from address
-            cityCoords = geocodeCity(p.address || '');
-          }
+          if (!cityCoords) cityCoords = geocodeCity(p.address || '');
           if (cityCoords) {
-            // Add small random offset to avoid stacking markers at same city center
-            lat = cityCoords[0] + (Math.random() - 0.5) * 0.008;
-            lng = cityCoords[1] + (Math.random() - 0.5) * 0.008;
+            lat = cityCoords[0] + (Math.random() - 0.5) * 0.006;
+            lng = cityCoords[1] + (Math.random() - 0.5) * 0.006;
           }
         }
-
         if (!lat || !lng) return;
 
         var color = gradeColors[p.grade] || '#94a3b8';
+        var priceStr = p.price ? formatPrice(p.price) : '?';
+
+        // Price label marker instead of grade circle
         var icon = L.divIcon({
           className: 'map-marker-custom',
-          html: '<div style="background:' + color + ';width:28px;height:28px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700">' + (p.grade || '?') + '</div>',
-          iconSize: [28, 28],
-          iconAnchor: [14, 14],
+          html: '<div class="map-price-marker" style="background:' + color + '">' + priceStr + '</div>',
+          iconSize: [80, 28],
+          iconAnchor: [40, 14],
           popupAnchor: [0, -16]
         });
 
-        var priceStr = p.price ? formatPrice(p.price) : '?';
-        var scoreStr = p.score ? p.score + '/100' : '-';
-        var gradeStr = p.grade || '-';
-        var titleStr = escapeHtml(p.title || 'Bien immobilier');
-
-        var popup = '<div style="min-width:200px;font-family:Inter,sans-serif">' +
-          '<div style="font-weight:700;font-size:14px;margin-bottom:4px">' + titleStr + '</div>' +
-          '<div style="font-size:16px;font-weight:800;color:#0f172a;margin-bottom:4px">' + priceStr + ' <span style="font-size:12px;color:#64748b;font-weight:400">' + escapeHtml(p.unit || '') + '</span></div>' +
-          '<div style="font-size:13px;color:#64748b;margin-bottom:8px">' + escapeHtml(p.address || '') + '</div>' +
-          '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">' +
-            '<span style="background:' + color + ';color:#fff;padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700">' + gradeStr + ' - ' + scoreStr + '</span>' +
+        var popup = '<div style="min-width:220px;font-family:Inter,sans-serif">' +
+          (p.images && p.images[0] ? '<img src="' + escapeHtml(p.images[0]) + '" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px" onerror="this.style.display=\'none\'">' : '') +
+          '<div style="font-weight:700;font-size:14px;margin-bottom:4px">' + escapeHtml(p.title || 'Bien') + '</div>' +
+          '<div style="font-size:16px;font-weight:800;color:#0f172a;margin-bottom:4px">' + priceStr + ' CHF</div>' +
+          '<div style="font-size:13px;color:#64748b;margin-bottom:6px">' + escapeHtml(p.address || '') + '</div>' +
+          '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">' +
+            '<span style="background:' + color + ';color:#fff;padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700">' + (p.grade || '?') + ' ' + (p.score || 0) + '/100</span>' +
+            (p.rooms ? '<span style="font-size:12px;color:#64748b">' + p.rooms + ' pcs</span>' : '') +
+            (p.surface ? '<span style="font-size:12px;color:#64748b">' + p.surface + ' m2</span>' : '') +
           '</div>' +
-          '<a href="#" onclick="openPropertyDetail(' + p.id + ');return false;" style="color:#0369a1;font-size:13px;font-weight:600;text-decoration:none">Voir le detail &rarr;</a>' +
+          '<a href="#" onclick="openPropertyDetail(' + p.id + ');return false;" style="color:#0369a1;font-size:13px;font-weight:600;text-decoration:none">Voir le detail →</a>' +
         '</div>';
 
-        var marker = L.marker([lat, lng], { icon: icon }).bindPopup(popup);
+        var marker = L.marker([lat, lng], { icon: icon }).bindPopup(popup, { maxWidth: 280 });
+        marker._propId = p.id;
+
+        // Click marker -> scroll sidebar card into view
+        marker.on('click', function() {
+          var card = document.querySelector('.map-card[data-id="' + p.id + '"]');
+          if (card) {
+            // Remove previous highlight
+            if (_mapHighlightedCard) _mapHighlightedCard.classList.remove('map-card-active');
+            card.classList.add('map-card-active');
+            _mapHighlightedCard = card;
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        });
+
         _mapMarkers.addLayer(marker);
         bounds.push([lat, lng]);
       });
 
       _mapInstance.addLayer(_mapMarkers);
-
       if (bounds.length > 0) {
         _mapInstance.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
       }
@@ -1095,23 +1227,63 @@
     if (dots[cur]) dots[cur].classList.add('active');
   };
 
-  window.showScoreDetail = function(el) {
+  window.showScoreDetail = function(el, e) {
+    if (e) { e.stopPropagation(); e.preventDefault(); }
+    // Toggle: if tooltip already visible for this element, just close it
     var existing = document.querySelector('.score-tooltip');
-    if (existing) existing.remove();
+    if (existing) {
+      var wasOnSame = existing._sourceEl === el;
+      existing.remove();
+      if (wasOnSame) return;
+    }
     var scores;
-    try { scores = JSON.parse(el.getAttribute('data-scores')); } catch(e) { return; }
+    try { scores = JSON.parse(el.getAttribute('data-scores')); } catch(err) { return; }
+
+    function scoreColor(v) { return v >= 80 ? '#059669' : v >= 60 ? '#0369a1' : v >= 40 ? '#d97706' : '#dc2626'; }
+    function scoreRow(label, val) {
+      val = val || 0;
+      return '<div class="st-row"><span>' + label + '</span>' +
+        '<div style="flex:1;margin:0 8px;height:6px;background:#e2e8f0;border-radius:3px"><div style="width:' + val + '%;height:100%;background:' + scoreColor(val) + ';border-radius:3px"></div></div>' +
+        '<strong>' + val + '</strong></div>';
+    }
+
     var tip = document.createElement('div');
     tip.className = 'score-tooltip';
-    tip.innerHTML = '<div class="st-row"><span>Zone</span><strong>' + (scores.zone||0) + '/100</strong></div>' +
-        '<div class="st-row"><span>Budget</span><strong>' + (scores.budget||0) + '/100</strong></div>' +
-        '<div class="st-row"><span>Type</span><strong>' + (scores.type||0) + '/100</strong></div>' +
-        '<div class="st-row"><span>Surface</span><strong>' + (scores.surface||0) + '/100</strong></div>' +
-        '<div class="st-row"><span>Equip.</span><strong>' + (scores.equipment||0) + '/100</strong></div>' +
-        '<div class="st-row"><span>Fraicheur</span><strong>' + (scores.freshness||0) + '/100</strong></div>' +
-        '<button onclick="event.stopPropagation();this.parentNode.remove()" style="margin-top:8px;background:none;border:1px solid #cbd5e1;border-radius:6px;padding:4px 12px;cursor:pointer;font-size:12px">Fermer</button>';
-    el.style.position = 'relative';
-    el.appendChild(tip);
-    event.stopPropagation();
+    tip._sourceEl = el;
+    tip.innerHTML = '<div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#0f172a">Detail du score</div>' +
+        scoreRow('Zone', scores.zone) +
+        scoreRow('Budget', scores.budget) +
+        scoreRow('Type', scores.type) +
+        scoreRow('Surface', scores.surface) +
+        scoreRow('Equip.', scores.equipment) +
+        scoreRow('Fraicheur', scores.freshness) +
+        '<button onclick="event.stopPropagation();this.parentNode.remove()" style="margin-top:10px;width:100%;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:12px;color:#475569">Fermer</button>';
+
+    // Position tooltip on body to avoid overflow:hidden clipping
+    var rect = el.getBoundingClientRect();
+    tip.style.position = 'fixed';
+    tip.style.top = (rect.bottom + 6) + 'px';
+    tip.style.left = Math.max(8, rect.left) + 'px';
+    tip.style.zIndex = '9999';
+    document.body.appendChild(tip);
+
+    // Ensure tooltip doesn't overflow right edge
+    setTimeout(function() {
+      var tipRect = tip.getBoundingClientRect();
+      if (tipRect.right > window.innerWidth - 8) {
+        tip.style.left = Math.max(8, window.innerWidth - tipRect.width - 8) + 'px';
+      }
+    }, 0);
+
+    // Close on outside click
+    setTimeout(function() {
+      document.addEventListener('click', function closeTip(ev) {
+        if (!tip.contains(ev.target) && ev.target !== el && !el.contains(ev.target)) {
+          tip.remove();
+          document.removeEventListener('click', closeTip);
+        }
+      });
+    }, 10);
   };
 
   // ============================================================
@@ -1216,6 +1388,7 @@
           '<h2 class="detail-title">' + escapeHtml(p.title || 'Bien immobilier') + '</h2>' +
           '<div class="detail-address">📍 ' + escapeHtml(p.address || '') + '</div>' +
           '<div class="detail-section"><h3>Caracteristiques</h3><div class="detail-table">' + tableHtml + '</div></div>' +
+          (p.description ? '<div class="detail-section"><h3>Description</h3><p class="detail-description">' + escapeHtml(p.description) + '</p></div>' : '') +
           scoreHtml +
           featHtml +
           contactHtml +
@@ -1453,8 +1626,8 @@
       for (var ii = 0; ii < p.images.length; ii++) {
         imgHtml += '<img src="' + escapeHtml(p.images[ii]) + '" alt="" class="prop-img' + (ii === 0 ? ' active' : '') + '" data-idx="' + ii + '" onerror="this.style.display=\'none\';_checkAllImgsFailed(this.parentNode)">';
       }
-      imgHtml += '<button class="carousel-btn prev" onclick="carouselNav(\'' + cid + '\',-1)">&#8249;</button>';
-      imgHtml += '<button class="carousel-btn next" onclick="carouselNav(\'' + cid + '\',1)">&#8250;</button>';
+      imgHtml += '<button class="carousel-btn prev" onclick="event.stopPropagation();carouselNav(\'' + cid + '\',-1)">&#8249;</button>';
+      imgHtml += '<button class="carousel-btn next" onclick="event.stopPropagation();carouselNav(\'' + cid + '\',1)">&#8250;</button>';
       imgHtml += '<span class="carousel-dots">';
       for (var di = 0; di < p.images.length; di++) {
         imgHtml += '<span class="carousel-dot' + (di === 0 ? ' active' : '') + '"></span>';
@@ -1491,7 +1664,7 @@
 
     var scoreDetailAttr = '';
     if (p.score_detail) {
-      scoreDetailAttr = ' data-scores=\'' + JSON.stringify({zone: p.score_detail.zone||0, budget: p.score_detail.budget||0, type: p.score_detail.type||0, surface: p.score_detail.surface||0, equipment: p.score_detail.equipment||0, freshness: p.score_detail.freshness||0}) + '\' onclick="showScoreDetail(this)" title="Cliquez pour le detail"';
+      scoreDetailAttr = ' data-scores=\'' + JSON.stringify({zone: p.score_detail.zone||0, budget: p.score_detail.budget||0, type: p.score_detail.type||0, surface: p.score_detail.surface||0, equipment: p.score_detail.equipment||0, freshness: p.score_detail.freshness||0}) + '\' onclick="showScoreDetail(this, event)" title="Cliquez pour le detail"';
     }
 
     return '<div class="prop-card" onclick="openPropertyDetail(' + p.id + ')" style="cursor:pointer">' +
@@ -2153,9 +2326,10 @@
       '.prop-days{position:absolute;top:12px;right:52px;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:700;color:#fff;z-index:2}',
       '.price-drop-badge{background:#059669;color:#fff;font-size:12px;font-weight:700;padding:2px 8px;border-radius:6px;margin-right:6px}',
       '.old-price{color:#94a3b8;font-size:14px;font-weight:400;margin-left:8px}',
-      '.score-tooltip{position:absolute;top:100%;left:0;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:50;min-width:160px;font-size:13px}',
-      '.st-row{display:flex;justify-content:space-between;padding:3px 0;color:#334155}',
-      '.st-row strong{color:#0369a1}',
+      '.score-tooltip{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;box-shadow:0 8px 32px rgba(0,0,0,.18);min-width:200px;max-width:260px;font-size:13px}',
+      '.st-row{display:flex;align-items:center;padding:4px 0;color:#334155}',
+      '.st-row span{min-width:65px;font-size:12px}',
+      '.st-row strong{color:#0369a1;font-size:13px;min-width:24px;text-align:right}',
 
       // Card body
       '.prop-card-body{padding:16px}',
@@ -2250,12 +2424,27 @@
       '.detail-contact a{color:#0369a1;text-decoration:none}',
       '.detail-contact a:hover{text-decoration:underline}',
       '.detail-features{display:flex;flex-wrap:wrap;gap:8px}',
+      '.detail-description{font-size:14px;color:#475569;line-height:1.6;margin:0;white-space:pre-line}',
       '.detail-feat{padding:6px 14px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:20px;font-size:13px;color:#0369a1}',
       '.detail-sources{display:flex;flex-wrap:wrap;gap:10px}',
       '.detail-source-link{padding:10px 20px;background:#0369a1;color:#fff;border-radius:10px;font-size:14px;font-weight:600;text-decoration:none;text-transform:capitalize;transition:background .2s}',
       '.detail-source-link:hover{background:#0284c7}',
       '.detail-source-text{padding:10px 20px;background:#f1f5f9;border-radius:10px;font-size:14px;color:#64748b;text-transform:capitalize}',
       '@media(max-width:768px){.detail-overlay{padding:0}.detail-panel{border-radius:0;max-width:100%;min-height:100vh}.detail-gallery{height:260px}.detail-body{padding:20px}.detail-price{font-size:22px}.detail-table{grid-template-columns:1fr}.detail-score-wrap{flex-direction:column}}',
+
+      // Score legend
+      '.score-legend{margin-bottom:16px}',
+      '.score-legend-toggle{background:none;border:none;color:#0369a1;font-size:13px;font-weight:600;cursor:pointer;padding:6px 0;display:flex;align-items:center;gap:4px}',
+      '.score-legend-toggle:hover{color:#0284c7;text-decoration:underline}',
+      '.score-legend-body{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px 20px;margin-top:8px}',
+      '.score-legend-intro{font-size:13px;color:#475569;margin:0 0 12px}',
+      '.score-legend-grades{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}',
+      '.score-legend-badge{color:#fff;font-weight:700;font-size:14px;padding:4px 14px;border-radius:8px;display:inline-flex;align-items:center;gap:6px}',
+      '.score-legend-badge small{font-weight:400;opacity:.85;font-size:11px}',
+      '.score-legend-criteria{display:grid;grid-template-columns:1fr 1fr;gap:6px 20px}',
+      '.score-legend-item{font-size:12px;color:#334155;line-height:1.5}',
+      '.score-legend-item strong{color:#0f172a}',
+      '.score-legend-tip{font-size:12px;color:#64748b;margin:12px 0 0;font-style:italic}',
 
       // View tabs
       '.dash-tabs{display:flex;gap:0;margin-bottom:20px;border-bottom:2px solid #e2e8f0}',
@@ -2325,7 +2514,24 @@
       '.lou-auth-err{color:#dc2626;font-size:13px;margin-top:8px;display:none;text-align:center}',
 
       // Map view
-      '.map-view{height:calc(100vh - 280px);min-height:400px;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0}',
+      '.map-view{height:calc(100vh - 280px);min-height:500px;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0}',
+      '.map-split{display:flex;height:100%;width:100%}',
+      '.map-sidebar{width:380px;min-width:320px;height:100%;overflow-y:auto;background:#f8fafc;border-right:1px solid #e2e8f0}',
+      '.map-sidebar-header{padding:12px 16px;border-bottom:1px solid #e2e8f0;font-size:13px;font-weight:600;color:#64748b;background:#fff;position:sticky;top:0;z-index:1}',
+      '.map-sidebar-list{padding:8px}',
+      '.map-card{display:flex;gap:10px;padding:10px;margin-bottom:6px;background:#fff;border-radius:10px;border:1px solid #e2e8f0;cursor:pointer;transition:all .15s;position:relative}',
+      '.map-card:hover{border-color:#0369a1;box-shadow:0 2px 8px rgba(3,105,161,.1)}',
+      '.map-card-active{border-color:#0369a1;box-shadow:0 0 0 2px rgba(3,105,161,.2)}',
+      '.map-card-img{width:80px;height:70px;object-fit:cover;border-radius:8px;flex-shrink:0}',
+      '.map-card-img-ph{width:80px;height:70px;background:#e2e8f0;border-radius:8px;flex-shrink:0}',
+      '.map-card-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}',
+      '.map-card-price{font-size:15px;font-weight:700;color:#0f172a}',
+      '.map-card-title{font-size:12px;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.map-card-details{font-size:11px;color:#64748b}',
+      '.map-card-addr{font-size:11px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.map-card-score{position:absolute;top:8px;right:8px;color:#fff;font-size:11px;font-weight:700;padding:2px 6px;border-radius:6px}',
+      '.map-canvas{flex:1;min-width:0;height:100%}',
+      '.map-price-marker{color:#fff;font-size:12px;font-weight:700;padding:4px 10px;border-radius:20px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.25);border:2px solid #fff}',
       '.map-marker-custom{background:transparent;border:none}',
 
       // Responsive tablet
@@ -2351,6 +2557,7 @@
         '.note-modal{width:95vw}',
         '.dash-tabs{overflow-x:auto}',
         '.map-view{height:calc(100vh - 200px)}',
+        '.map-sidebar{width:280px;min-width:220px}',
       '}',
 
       // Responsive iPhone (375px)
@@ -2371,6 +2578,10 @@
         '.dash-stat{padding:12px 8px}',
         '.dash-stat-num{font-size:22px}',
         '.dash-stat-lbl{font-size:11px}',
+        // Score legend mobile
+        '.score-legend-criteria{grid-template-columns:1fr}',
+        '.score-legend-body{padding:12px 14px}',
+        '.score-legend-badge{font-size:12px;padding:3px 10px}',
         // Tabs
         '.dash-tabs{gap:0;margin-bottom:12px}',
         '.dash-tab{padding:8px 12px;font-size:12px}',
@@ -2419,6 +2630,11 @@
         '.fav-action-btn{font-size:12px;padding:6px 10px}',
         // Map
         '.map-view{height:calc(100vh - 180px);min-height:300px}',
+        '.map-split{flex-direction:column}',
+        '.map-sidebar{width:100%;height:180px;min-width:unset;border-right:none;border-bottom:1px solid #e2e8f0}',
+        '.map-sidebar-list{display:flex;overflow-x:auto;gap:8px;padding:8px;flex-wrap:nowrap}',
+        '.map-card{min-width:240px;flex-shrink:0;margin-bottom:0}',
+        '.map-canvas{flex:1;min-height:250px}',
         // Detail overlay
         '.detail-gallery{height:200px}',
         '.detail-body{padding:16px}',

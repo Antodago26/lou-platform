@@ -741,62 +741,92 @@ def get_properties():
         properties = [dict(r) for r in cur.fetchall()]
 
         # Format for frontend with cross-portal merging
-        def _merge_key(p):
-            """Generate a key to detect same property across portals.
-            Primary: postal_code + price±5000 + rooms + surface±10m2 (robust across portals).
-            Secondary: city + price±5000 + rooms + surface±10m2.
-            Fallback: city + price±5000 + normalized title (when data is incomplete).
+        def _merge_keys(p):
+            """Generate all possible merge keys for a property.
+            Returns a list of keys — a property matches if ANY key overlaps with another property's keys.
+            This handles portals that have postal_code vs those that don't.
             """
+            keys = []
             postal = (p.get('postal_code') or '').strip()
-            price = p.get('price') or 0
-            price_bucket = round(price / 5000) * 5000 if price else 0
+            price = int(p.get('price') or 0)  # Exact price match
             rooms = p.get('rooms')
+            rooms_norm = str(round(float(rooms) * 2) / 2) if rooms else ''
             surface = p.get('surface') or 0
-            surface_bucket = round(surface / 10) * 10 if surface else 0
+            surface_bucket = round(surface / 15) * 15 if surface else 0
 
             city = (p.get('city') or '').lower().strip()
 
-            # Primary key: postal + price + rooms + surface (title-independent)
-            if postal and price and rooms:
-                return f"{postal}:{price_bucket}:{rooms}:{surface_bucket}"
+            # Always generate city-based key (main merge key)
+            if city and price and rooms_norm:
+                keys.append(f"city:{city}:{price}:{rooms_norm}:{surface_bucket}")
+            # Also generate postal-based key
+            if postal and price and rooms_norm:
+                keys.append(f"npa:{postal}:{price}:{rooms_norm}:{surface_bucket}")
 
-            # Secondary: city + price + rooms + surface (no postal needed)
-            if city and price and rooms:
-                return f"{city}:{price_bucket}:{rooms}:{surface_bucket}"
+            # Last resort: city + price + title prefix (when rooms missing)
+            if not keys:
+                title_norm = re.sub(r'[^a-z0-9]', '', (p.get('title') or '').lower())[:30]
+                keys.append(f"title:{city}:{price}:{title_norm}")
 
-            # Last resort: city + price + title prefix
-            title_norm = re.sub(r'[^a-z0-9]', '', (p.get('title') or '').lower())[:30]
-            return f"{city}:{price_bucket}:{title_norm}"
+            return keys
 
-        # Group properties by merge key
+        # Group properties by merge key — multi-key approach
+        # key_to_group maps each key to a group ID, so properties sharing any key merge together
         merged = {}
+        key_to_group = {}  # merge_key -> group_id (first property's id)
+        merge_debug = {}
         for p in properties:
-            key = _merge_key(p)
-            if key not in merged:
-                merged[key] = p
-                merged[key]['_all_sources'] = [{'source': p['source'] or '', 'url': p['source_url'] or ''}]
-                # Keep best images
-                merged[key]['_best_images'] = p['images'] or []
+            keys = _merge_keys(p)
+            src = p.get('source') or 'unknown'
+
+            # Find if any of this property's keys already belong to a group
+            group_id = None
+            for k in keys:
+                if k in key_to_group:
+                    group_id = key_to_group[k]
+                    break
+
+            if group_id is None:
+                # New group
+                group_id = p['id']
+                merged[group_id] = p
+                merged[group_id]['_all_sources'] = [{'source': p['source'] or '', 'url': p['source_url'] or ''}]
+                merged[group_id]['_best_images'] = p['images'] or []
+                for k in keys:
+                    key_to_group[k] = group_id
+                merge_debug[group_id] = [f"{src}(id={p['id']},price={p.get('price')},rooms={p.get('rooms')},postal={p.get('postal_code')},city={p.get('city')})"]
             else:
+                # Merge into existing group — register all keys
+                for k in keys:
+                    key_to_group[k] = group_id
+                merge_debug[group_id].append(f"{src}(id={p['id']},price={p.get('price')},rooms={p.get('rooms')},postal={p.get('postal_code')},city={p.get('city')})")
                 # Merge: add source link (skip if same portal already listed)
                 new_src = p['source'] or ''
-                existing_sources = {s['source'] for s in merged[key]['_all_sources']}
+                existing_sources = {s['source'] for s in merged[group_id]['_all_sources']}
                 if new_src not in existing_sources:
-                    merged[key]['_all_sources'].append({'source': new_src, 'url': p['source_url'] or ''})
+                    merged[group_id]['_all_sources'].append({'source': new_src, 'url': p['source_url'] or ''})
                 # Combine images from all sources (deduplicated)
                 if p['images']:
-                    existing_imgs = set(merged[key]['_best_images'])
+                    existing_imgs = set(merged[group_id]['_best_images'])
                     for img in p['images']:
                         if img and img not in existing_imgs:
-                            merged[key]['_best_images'].append(img)
+                            merged[group_id]['_best_images'].append(img)
                             existing_imgs.add(img)
                 # Keep higher score
-                if (p['total_score'] or 0) > (merged[key]['total_score'] or 0):
-                    old_sources = merged[key]['_all_sources']
-                    old_images = merged[key]['_best_images']
-                    merged[key] = p
-                    merged[key]['_all_sources'] = old_sources
-                    merged[key]['_best_images'] = old_images
+                if (p['total_score'] or 0) > (merged[group_id]['total_score'] or 0):
+                    old_sources = merged[group_id]['_all_sources']
+                    old_images = merged[group_id]['_best_images']
+                    merged[group_id] = p
+                    merged[group_id]['_all_sources'] = old_sources
+                    merged[group_id]['_best_images'] = old_images
+
+        # Log merge stats
+        multi_source = {k: v for k, v in merge_debug.items() if len(v) > 1}
+        if multi_source:
+            log.info(f"Merge: {len(multi_source)} groups merged from {sum(len(v) for v in multi_source.values())} properties")
+            for gid, sources in list(multi_source.items())[:5]:
+                log.info(f"  Merged group {gid}: {sources}")
+        log.info(f"Merge total: {len(properties)} properties -> {len(merged)} unique results")
 
         results = []
         for p in merged.values():
@@ -818,6 +848,7 @@ def get_properties():
                 'source': all_sources[0]['source'] if all_sources else '',
                 'source_url': all_sources[0]['url'] if all_sources else '',
                 'all_sources': all_sources,
+                'description': re.sub(r'[^\x00-\x7F]', '', p.get('description') or '').strip(),
                 'contact_name': p['contact_name'] or '',
                 'contact_phone': p['contact_phone'] or '',
                 'contact_email': p['contact_email'] or '',

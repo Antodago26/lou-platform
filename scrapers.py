@@ -103,12 +103,17 @@ def _make_property(external_id, source, source_url, title, description,
     # Remove postal codes at start of title (e.g., "2016 Cortaillod ...")
     clean_title = re.sub(r'^\d{4}\s+', '', clean_title).strip()
 
+    desc_clean = re.sub(r'[^\x00-\x7F]', '', (description or '')[:500]).strip()
+    # Language filter: skip clearly non-French listings
+    if not _is_french_or_neutral(clean_title) and not _is_french_or_neutral(desc_clean):
+        return None  # Will be filtered out by caller
+
     return {
         'external_id': str(external_id),
         'source': source,
         'source_url': source_url or '',
         'title': clean_title,
-        'description': re.sub(r'[^\x00-\x7F]', '', (description or '')[:500]).strip(),
+        'description': desc_clean,
         'property_type': property_type or 'appartement',
         'transaction': transaction,
         'price': price,
@@ -129,6 +134,25 @@ def _make_property(external_id, source, source_url, title, description,
         'published_at': published_at,
         'scraped_at': datetime.now().isoformat(),
     }
+
+
+def _is_french_or_neutral(text):
+    """Check if text is in French or language-neutral (numbers, addresses).
+    Returns False for clearly German/Italian listings."""
+    if not text or len(text) < 5:
+        return True  # Too short to determine, keep it
+    t = text.lower()
+    # German indicators
+    de_words = ['wohnung', 'zimmer', 'mieten', 'kaufen', 'haus', 'strasse', 'wohnfläche',
+                'verkauf', 'mietwohnung', 'eigentumswohnung', 'erdgeschoss', 'obergeschoss',
+                'stockwerk', 'sofort', 'bezugsbereit', 'neubau', 'renoviert', 'möbliert',
+                'balkon', 'terrasse', 'garten', 'stellplatz', 'tiefgarage', 'waschküche']
+    # Italian indicators
+    it_words = ['appartamento', 'affitto', 'vendita', 'camera', 'locale', 'monolocale',
+                'bilocale', 'trilocale', 'piano', 'disponibile', 'subito']
+    de_count = sum(1 for w in de_words if w in t)
+    it_count = sum(1 for w in it_words if w in t)
+    return (de_count + it_count) < 2  # Allow 1 common word (balkon, terrasse)
 
 
 def _guess_type(text):
@@ -515,13 +539,23 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
                             images.append(src)
                     images = list(dict.fromkeys(images))[:5]
 
+                    # Extract address from card
+                    addr_text = ''
+                    addr_el = card.select_one('[class*="address"], [class*="location"], [class*="Address"]')
+                    if addr_el:
+                        addr_text = addr_el.get_text(strip=True)
+                    if not addr_text:
+                        addr_match = re.search(r'(\d{4}\s+\w[\w\s-]+)', card_text)
+                        if addr_match:
+                            addr_text = addr_match.group(1).strip()
+
                     results.append(_make_property(
                         external_id=f"is24-{lid}", source='ImmoScout24',
                         source_url=href, title=title, description='',
                         property_type=_guess_type(card_text), transaction=transaction,
                         price=price, rooms=rooms, surface=surface, floor=None,
-                        address='', city=city, canton=canton,
-                        postal_code=None, latitude=None, longitude=None,
+                        address=addr_text, city=city, canton=canton,
+                        postal_code=_extract_postal(addr_text), latitude=None, longitude=None,
                         features=[], images=images, published_at=None,
                     ))
                 except Exception as e:
@@ -604,14 +638,22 @@ def scrape_immobilier_ch(city="Lausanne", transaction="location", max_pages=2):
                         images.append(bg_match.group(1))
                 images = list(dict.fromkeys(images))[:5]
 
+                # Extract surface and rooms from card text
+                card_text = card.get_text(' ', strip=True)
+                surface = None
+                surf_match = re.search(r'(\d+)\s*m[²2]', card_text)
+                if surf_match:
+                    surface = int(surf_match.group(1))
+                rooms = _clean_rooms(card_text) or _clean_rooms(title)
+
                 if title or price:
                     results.append(_make_property(
                         external_id=f"imch-{eid.group(1) if eid else hashlib.sha256((title+address).encode()).hexdigest()[:12]}",
                         source='Immobilier.ch', source_url=href,
                         title=title, description='',
                         property_type=_guess_type(title), transaction=transaction,
-                        price=price, rooms=_clean_rooms(title),
-                        surface=None, floor=None,
+                        price=price, rooms=rooms,
+                        surface=surface, floor=None,
                         address=address, city=city,
                         canton=CITY_CANTONS.get(city.lower(), ''),
                         postal_code=_extract_postal(address),
@@ -661,14 +703,22 @@ def scrape_anibis(city="Lausanne", transaction="location", max_pages=2):
                     href = 'https://www.anibis.ch' + href
                 eid = re.search(r'/(\d+)', href)
 
+                # Extract surface from card text
+                card_text = card.get_text(' ', strip=True)
+                surface = None
+                surf_match = re.search(r'(\d+)\s*m[²2]', card_text)
+                if surf_match:
+                    surface = int(surf_match.group(1))
+                rooms = _clean_rooms(card_text) or _clean_rooms(title)
+
                 if title or price:
                     results.append(_make_property(
                         external_id=f"anibis-{eid.group(1) if eid else hashlib.sha256(title.encode()).hexdigest()[:12]}",
                         source='Anibis', source_url=href,
                         title=title, description='',
                         property_type=_guess_type(title), transaction=transaction,
-                        price=price, rooms=_clean_rooms(title),
-                        surface=None, floor=None,
+                        price=price, rooms=rooms,
+                        surface=surface, floor=None,
                         address=address, city=city,
                         canton=CITY_CANTONS.get(city.lower(), ''),
                         postal_code=_extract_postal(address),
@@ -715,17 +765,28 @@ def scrape_acheter_louer(city="Lausanne", transaction="location", max_pages=2):
                 if href.startswith('/'):
                     href = 'https://www.acheter-louer.ch' + href
 
+                # Extract surface and rooms from card
+                card_text = card.get_text(' ', strip=True)
+                surface = None
+                surf_match = re.search(r'(\d+)\s*m[²2]', card_text)
+                if surf_match:
+                    surface = int(surf_match.group(1))
+                rooms = _clean_rooms(card_text) or _clean_rooms(title)
+                # Try to extract address
+                addr_el = card.select_one('[class*="location"], [class*="address"], .location')
+                address = addr_el.get_text(strip=True) if addr_el else city
+
                 if title or price:
                     results.append(_make_property(
                         external_id=f"al-{hashlib.sha256((title+href).encode()).hexdigest()[:12]}",
                         source='Acheter-Louer', source_url=href,
                         title=title, description='',
                         property_type=_guess_type(title), transaction=transaction,
-                        price=price, rooms=_clean_rooms(title),
-                        surface=None, floor=None,
-                        address=city, city=city,
+                        price=price, rooms=rooms,
+                        surface=surface, floor=None,
+                        address=address, city=city,
                         canton=CITY_CANTONS.get(city.lower(), ''),
-                        postal_code=None,
+                        postal_code=_extract_postal(address),
                         latitude=None, longitude=None,
                         features=[], images=[], published_at=None,
                     ))
@@ -1036,7 +1097,7 @@ def scrape_all(city="Lausanne", transaction="location"):
 
     for name, scraper in scrapers:
         try:
-            results = scraper(city=city, transaction=transaction)
+            results = [r for r in scraper(city=city, transaction=transaction) if r is not None]
             all_results.extend(results)
             log.info(f"[{name}] {len(results)} results")
         except Exception as e:
