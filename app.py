@@ -1621,7 +1621,7 @@ def api_scrape():
                     listings = scrape_all(city=c, transaction=tx)
                     if listings:
                         saved = save_to_db(bg_conn, listings)
-                        total_saved += saved
+                        total_saved += (saved or 0)
                         log.info(f"User scrape: saved {saved} for {c} ({tx})")
                 except Exception as e:
                     log.error(f"User scrape failed for {c}: {e}")
@@ -2093,7 +2093,7 @@ def api_cron_scrape():
                     listings = scrape_all(city=city, transaction=transaction)
                     if listings:
                         saved = save_to_db(bg_conn, listings)
-                        total_saved += saved
+                        total_saved += (saved or 0)
                         log.info(f"Cron: saved {saved} for {city} ({transaction})")
                 except Exception as e:
                     log.error(f"Cron: scrape failed for {city}: {e}")

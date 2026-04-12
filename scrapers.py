@@ -803,50 +803,97 @@ def scrape_anibis(city="Lausanne", transaction="location", max_pages=2):
             except Exception:
                 pass
 
-        # Then try HTML cards
-        cards = (soup.select('a[href*="/immobilier/"]') or
-                 soup.select('.listing-card, .ItemCard, article, [class*="listing"]'))
+        # Then try HTML cards — Anibis is a React SPA with hashed MUI classes
+        # The <a> tags linking to listings ARE the cards; also look for any container divs
+        cards = soup.select('a[href*="/fr/vi/"][href*="/immobilier/"]')
+        if not cards:
+            cards = soup.select('a[href*="/immobilier/"]')
+        if not cards:
+            cards = soup.select('.listing-card, .ItemCard, article, [class*="listing"], [class*="Listing"]')
         # Deduplicate: skip cards for already-found URLs
         existing_urls = {r['source_url'] for r in results}
-        log.info(f"[Anibis] Page {page}: {len(cards)} cards (+ {len(results)} JSON-LD)")
+        log.info(f"[Anibis] Page {page}: {len(cards)} HTML cards (+ {len(results)} JSON-LD)")
 
         for card in cards:
             try:
-                title_el = card.select_one('h3, h2, .title, [class*="title"]')
-                title = title_el.get_text(strip=True) if title_el else ''
-                price_el = card.select_one('[class*="price"], .price')
-                price = _clean_price(price_el.get_text(strip=True)) if price_el else None
-                addr_el = card.select_one('[class*="location"], .location')
-                address = addr_el.get_text(strip=True) if addr_el else city
-                link_el = card.select_one('a[href]')
-                href = link_el.get('href', '') if link_el else ''
+                # The card itself might be an <a> tag — get href directly
+                href = card.get('href', '')
+                if not href:
+                    link_el = card.select_one('a[href]')
+                    href = link_el.get('href', '') if link_el else ''
                 if href.startswith('/'):
                     href = 'https://www.anibis.ch' + href
-                eid = re.search(r'/(\d+)', href)
+                if href in existing_urls:
+                    continue
 
-                # Extract surface from card text
+                # Get ALL text from the card — MUI hashes classes so we parse text directly
                 card_text = card.get_text(' ', strip=True)
+                if not card_text or len(card_text) < 5:
+                    continue
+
+                # Log first card text for debugging
+                if len(results) == 0:
+                    log.info(f"[Anibis] Sample card text: {card_text[:200]}")
+
+                # Try selectors first, then fall back to text parsing
+                title_el = card.select_one('h3, h2, h1, [class*="title"], [class*="Title"]')
+                title = title_el.get_text(strip=True) if title_el else ''
+                if not title:
+                    # First meaningful line of text is often the title
+                    lines = [l.strip() for l in card.stripped_strings if len(l.strip()) > 3]
+                    title = lines[0] if lines else ''
+
+                # Price: look for CHF pattern or price element
+                price = None
+                price_el = card.select_one('[class*="price"], [class*="Price"], .price')
+                if price_el:
+                    price = _clean_price(price_el.get_text(strip=True))
+                if not price:
+                    price_match = re.search(r"(?:CHF|Fr\.?)\s*([\d',.]+)", card_text)
+                    if price_match:
+                        price = _clean_price(price_match.group(0))
+                    else:
+                        # Try bare number patterns (e.g. "1'200.–" or "580'000")
+                        price_match2 = re.search(r"(\d[\d']{2,}(?:\.\s*–|\.–|\.-)?)", card_text)
+                        if price_match2:
+                            price = _clean_price(price_match2.group(1))
+
+                # Surface
                 surface = None
                 surf_match = re.search(r'(\d+)\s*m[²2]', card_text)
                 if surf_match:
                     surface = int(surf_match.group(1))
+
                 rooms = _clean_rooms(card_text) or _clean_rooms(title)
 
+                # Address/location
+                addr_el = card.select_one('[class*="location"], [class*="Location"], [class*="address"]')
+                address = addr_el.get_text(strip=True) if addr_el else ''
+                if not address:
+                    # Look for NPA pattern in text
+                    npa_match = re.search(r'(\d{4})\s+(\w+)', card_text)
+                    if npa_match:
+                        address = npa_match.group(0)
+
+                eid = re.search(r'/(\d+)', href)
+
                 if title or price:
+                    existing_urls.add(href)
                     results.append(_make_property(
-                        external_id=f"anibis-{eid.group(1) if eid else hashlib.sha256(title.encode()).hexdigest()[:12]}",
+                        external_id=f"anibis-{eid.group(1) if eid else hashlib.sha256((title+card_text[:50]).encode()).hexdigest()[:12]}",
                         source='Anibis', source_url=href,
                         title=title, description='',
                         property_type=_guess_type(title), transaction=transaction,
                         price=price, rooms=rooms,
                         surface=surface, floor=None,
-                        address=address, city=city,
+                        address=address or city, city=city,
                         canton=CITY_CANTONS.get(city.lower(), ''),
-                        postal_code=_extract_postal(address),
+                        postal_code=_extract_postal(address or card_text),
                         latitude=None, longitude=None,
                         features=[], images=[], published_at=None,
                     ))
-            except Exception:
+            except Exception as e:
+                log.debug(f"[Anibis] Card parse error: {e}")
                 pass
 
         time.sleep(1)
@@ -891,32 +938,102 @@ def scrape_acheter_louer(city="Lausanne", transaction="location", max_pages=2):
             break
 
         soup = BeautifulSoup(html, 'html.parser')
-        cards = soup.select('.property-item, .listing-card, article, [class*="result"]')
-        log.info(f"[Acheter-Louer] Page {page}: {len(cards)} cards")
 
+        # Try JSON-LD first
+        for script in soup.select('script[type="application/ld+json"]'):
+            try:
+                ld = json.loads(script.string or '{}')
+                items = ld.get('itemListElement', [])
+                for item in items:
+                    obj = item.get('item', item)
+                    url_str = obj.get('url', '')
+                    if url_str and url_str.startswith('/'):
+                        url_str = 'https://www.acheter-louer.ch' + url_str
+                    results.append(_make_property(
+                        external_id=f"al-{hashlib.sha256(url_str.encode()).hexdigest()[:12]}",
+                        source='Acheter-Louer', source_url=url_str,
+                        title=obj.get('name', ''), description=obj.get('description', ''),
+                        property_type=_guess_type(obj.get('name', '')),
+                        transaction=transaction,
+                        price=_clean_price(obj.get('offers', {}).get('price') if isinstance(obj.get('offers'), dict) else None),
+                        rooms=_clean_rooms(obj.get('name', '')),
+                        surface=None, floor=None,
+                        address='', city=city,
+                        canton=CITY_CANTONS.get(city.lower(), ''),
+                        postal_code=None, latitude=None, longitude=None,
+                        features=[], images=[obj['image']] if obj.get('image') else [],
+                        published_at=None,
+                    ))
+            except Exception:
+                pass
+
+        # HTML cards — try multiple selectors
+        cards = soup.select('.property-item, .listing-card, article, [class*="result"], [class*="annonce"], [class*="listing"]')
+        if not cards:
+            # Try links to property detail pages
+            cards = soup.select('a[href*="/acheter/"], a[href*="/louer/"], a[href*="/annonce/"]')
+        log.info(f"[Acheter-Louer] Page {page}: {len(cards)} HTML cards (+ {len(results)} JSON-LD)")
+
+        # Log a snippet of the HTML for debugging if no cards found
+        if not cards and len(results) == 0:
+            body = soup.select_one('body')
+            if body:
+                log.info(f"[Acheter-Louer] Body snippet: {str(body)[:500]}")
+
+        existing_urls = {r['source_url'] for r in results}
         for card in cards:
             try:
-                title_el = card.select_one('h3, h2, .title, [class*="title"]')
-                title = title_el.get_text(strip=True) if title_el else ''
-                price_el = card.select_one('[class*="price"], .price')
-                price = _clean_price(price_el.get_text(strip=True)) if price_el else None
-                link_el = card.select_one('a[href]')
-                href = link_el.get('href', '') if link_el else ''
+                # Get link — card might be <a> itself
+                href = card.get('href', '')
+                if not href:
+                    link_el = card.select_one('a[href]')
+                    href = link_el.get('href', '') if link_el else ''
                 if href.startswith('/'):
                     href = 'https://www.acheter-louer.ch' + href
+                if href in existing_urls:
+                    continue
 
-                # Extract surface and rooms from card
                 card_text = card.get_text(' ', strip=True)
+                if not card_text or len(card_text) < 5:
+                    continue
+
+                # Log first card for debugging
+                if len(results) == 0 and len(existing_urls) == 0:
+                    log.info(f"[Acheter-Louer] Sample card text: {card_text[:200]}")
+
+                # Title
+                title_el = card.select_one('h3, h2, h1, [class*="title"], [class*="Title"]')
+                title = title_el.get_text(strip=True) if title_el else ''
+                if not title:
+                    lines = [l.strip() for l in card.stripped_strings if len(l.strip()) > 3]
+                    title = lines[0] if lines else ''
+
+                # Price
+                price = None
+                price_el = card.select_one('[class*="price"], [class*="Price"], .price')
+                if price_el:
+                    price = _clean_price(price_el.get_text(strip=True))
+                if not price:
+                    price_match = re.search(r"(?:CHF|Fr\.?)\s*([\d',.]+)", card_text)
+                    if price_match:
+                        price = _clean_price(price_match.group(0))
+                    else:
+                        price_match2 = re.search(r"(\d[\d']{2,}(?:\.\s*–|\.–|\.-)?)", card_text)
+                        if price_match2:
+                            price = _clean_price(price_match2.group(1))
+
+                # Surface & rooms
                 surface = None
                 surf_match = re.search(r'(\d+)\s*m[²2]', card_text)
                 if surf_match:
                     surface = int(surf_match.group(1))
                 rooms = _clean_rooms(card_text) or _clean_rooms(title)
-                # Try to extract address
-                addr_el = card.select_one('[class*="location"], [class*="address"], .location')
-                address = addr_el.get_text(strip=True) if addr_el else city
+
+                addr_el = card.select_one('[class*="location"], [class*="address"], [class*="Location"]')
+                address = addr_el.get_text(strip=True) if addr_el else ''
 
                 if title or price:
+                    existing_urls.add(href)
                     results.append(_make_property(
                         external_id=f"al-{hashlib.sha256((title+href).encode()).hexdigest()[:12]}",
                         source='Acheter-Louer', source_url=href,
@@ -924,13 +1041,14 @@ def scrape_acheter_louer(city="Lausanne", transaction="location", max_pages=2):
                         property_type=_guess_type(title), transaction=transaction,
                         price=price, rooms=rooms,
                         surface=surface, floor=None,
-                        address=address, city=city,
+                        address=address or city, city=city,
                         canton=CITY_CANTONS.get(city.lower(), ''),
-                        postal_code=_extract_postal(address),
+                        postal_code=_extract_postal(address or card_text),
                         latitude=None, longitude=None,
                         features=[], images=[], published_at=None,
                     ))
-            except Exception:
+            except Exception as e:
+                log.debug(f"[Acheter-Louer] Card parse error: {e}")
                 pass
 
         time.sleep(1)
@@ -943,110 +1061,112 @@ def scrape_acheter_louer(city="Lausanne", transaction="location", max_pages=2):
 # FLATFOX — Direct API (no ScrapingBee needed)
 # ============================================================
 
-def scrape_flatfox(city="Lausanne", transaction="location", limit=30):
+def scrape_flatfox(city="Lausanne", transaction="location", limit=50):
     log.info(f"[Flatfox] Searching {city} ({transaction})")
     results = []
-    offer_type = 'RENT' if transaction == 'location' else 'SALE'
+    offer_type = 'RENT' if transaction == 'location' else 'SELL'
+    city_lower = city.lower().strip()
 
-    # Try multiple API endpoints (Flatfox changed APIs after SMG acquisition)
-    endpoints = [
-        "https://flatfox.ch/api/v1/flat/",
-        "https://flatfox.ch/api/v1/public/listings/",
-        "https://api.flatfox.ch/v1/flat/",
-    ]
-
+    # Public API — no auth needed, returns all listings, we filter client-side by city
+    api_url = "https://flatfox.ch/api/v1/public-listing/"
     headers = {
         'Accept': 'application/json',
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        'Origin': 'https://flatfox.ch',
-        'Referer': 'https://flatfox.ch/',
     }
 
-    for api_url in endpoints:
+    # Paginate through listings, filter by city + offer_type client-side
+    # Cap at 20 pages (2000 listings) to avoid excessive requests
+    max_pages = 20
+    page_size = 100
+    found = 0
+
+    for page_idx in range(max_pages):
         try:
             r = requests.get(api_url, params={
-                'search': city, 'offer_type': offer_type,
-                'ordering': '-created', 'limit': limit,
+                'limit': page_size,
+                'offset': page_idx * page_size,
             }, headers=headers, timeout=20)
-            log.info(f"[Flatfox] {api_url} → HTTP {r.status_code}")
 
-            if r.status_code == 200 and 'application/json' in r.headers.get('content-type', ''):
-                data = r.json()
-                items = data.get('results', data) if isinstance(data, dict) else data
-                if not isinstance(items, list):
+            if r.status_code != 200:
+                log.warning(f"[Flatfox] API page {page_idx} → HTTP {r.status_code}")
+                break
+
+            data = r.json()
+            items = data.get('results', [])
+            if not items:
+                break
+
+            total_count = data.get('count', 0)
+            log.info(f"[Flatfox] Page {page_idx}: {len(items)} items (total={total_count})")
+
+            for item in items:
+                # Filter by city (case-insensitive)
+                item_city = (item.get('city') or '').lower().strip()
+                if item_city != city_lower:
+                    continue
+                # Filter by offer type
+                if item.get('offer_type') != offer_type:
                     continue
 
-                for item in items:
-                    pk = item.get('pk', item.get('id', ''))
-                    slug = item.get('slug', pk)
-                    if transaction == 'location':
-                        price = item.get('rent_gross') or item.get('rent_net') or item.get('price_display')
-                    else:
-                        price = item.get('price') or item.get('selling_price') or item.get('price_display')
+                pk = item.get('pk', '')
+                slug = item.get('slug', pk)
 
-                    results.append(_make_property(
-                        external_id=f"ff-{pk}", source='Flatfox',
-                        source_url=f"https://flatfox.ch/fr/flat/{slug}/",
-                        title=item.get('title', ''),
-                        description=item.get('description', ''),
-                        property_type=_guess_type(item.get('object_category', '') + ' ' + item.get('title', '')),
-                        transaction=transaction,
-                        price=_clean_price(price),
-                        rooms=item.get('number_of_rooms'),
-                        surface=item.get('surface_living'),
-                        floor=item.get('floor'),
-                        address=(item.get('street', '') + ' ' + str(item.get('street_number', ''))).strip()
-                                + ', ' + item.get('city', city),
-                        city=item.get('city', city),
-                        canton=CITY_CANTONS.get(city.lower(), ''),
-                        postal_code=str(item.get('zipcode', '')) or None,
-                        latitude=item.get('latitude'), longitude=item.get('longitude'),
-                        features=item.get('attributes', []) or [],
-                        images=[img.get('url', '') for img in (item.get('images', []) or [])[:5]],
-                        published_at=item.get('created'),
-                    ))
+                if transaction == 'location':
+                    price = item.get('rent_gross') or item.get('rent_net') or item.get('price_display')
+                else:
+                    price = item.get('price_display')
 
-                if results:
-                    break  # Found working endpoint
+                # Build image URLs
+                images = []
+                cover = item.get('cover_image')
+                if isinstance(cover, dict) and cover.get('url'):
+                    img_url = cover['url']
+                    if img_url.startswith('/'):
+                        img_url = 'https://flatfox.ch' + img_url
+                    images.append(img_url)
+
+                # Extract features from attributes
+                features = [a.get('name', '') for a in (item.get('attributes') or []) if a.get('name')]
+
+                prop = _make_property(
+                    external_id=f"ff-{pk}", source='Flatfox',
+                    source_url=f"https://flatfox.ch/fr/flat/{slug}/{pk}/",
+                    title=item.get('short_title') or item.get('public_title') or '',
+                    description=item.get('description') or '',
+                    property_type=_guess_type((item.get('object_type') or '') + ' ' + (item.get('object_category') or '')),
+                    transaction=transaction,
+                    price=_clean_price(price),
+                    rooms=item.get('number_of_rooms'),
+                    surface=item.get('surface_living') or item.get('surface_usable'),
+                    floor=item.get('floor'),
+                    address=item.get('public_address') or ((item.get('street') or '') + ', ' + (item.get('city') or city)),
+                    city=item.get('city') or city,
+                    canton=item.get('state') or CITY_CANTONS.get(city_lower, ''),
+                    postal_code=str(item.get('zipcode') or '') or None,
+                    latitude=item.get('latitude'), longitude=item.get('longitude'),
+                    features=features,
+                    images=images,
+                    published_at=item.get('published') or item.get('created'),
+                )
+                if prop:
+                    results.append(prop)
+                    found += 1
+
+            # Stop early if we've checked enough or found enough
+            if found >= limit:
+                break
+            # If we've gone through a lot and total is huge, stop to save time
+            if page_idx >= 5 and found == 0:
+                log.info(f"[Flatfox] No matches after {(page_idx+1)*page_size} listings, stopping")
+                break
+
         except Exception as e:
-            log.error(f"[Flatfox] {api_url} error: {e}")
+            log.error(f"[Flatfox] API page {page_idx} error: {e}")
+            break
 
-    # Fallback: scrape the search page via ScrapingBee
-    if not results and SCRAPINGBEE_KEY:
-        log.info(f"[Flatfox] API failed, trying HTML scrape")
-        slug = city.lower().replace(' ', '-')
-        offer_param = 'SALE' if transaction == 'achat' else 'RENT'
-        url = f"https://flatfox.ch/en/search/?query={slug}&offer_type={offer_param}"
-        status, html = _sb_get(url, render_js=True)
-        if status == 200:
-            soup = BeautifulSoup(html, 'html.parser')
-            # Try JSON-LD or card parsing
-            for script in soup.select('script[type="application/ld+json"]'):
-                try:
-                    ld = json.loads(script.string or '{}')
-                    items = ld.get('itemListElement', [])
-                    for item in items:
-                        obj = item.get('item', item)
-                        url = obj.get('url', '')
-                        if url and url.startswith('/'):
-                            url = 'https://flatfox.ch' + url
-                        results.append(_make_property(
-                            external_id=f"ff-{hashlib.sha256(url.encode()).hexdigest()[:12]}",
-                            source='Flatfox', source_url=url,
-                            title=obj.get('name', ''), description='',
-                            property_type=_guess_type(obj.get('name', '')),
-                            transaction=transaction,
-                            price=_clean_price(obj.get('offers', {}).get('price')),
-                            rooms=None, surface=None, floor=None,
-                            address='', city=city,
-                            canton=CITY_CANTONS.get(city.lower(), ''),
-                            postal_code=None, latitude=None, longitude=None,
-                            features=[], images=[], published_at=None,
-                        ))
-                except Exception:
-                    pass
+        time.sleep(0.5)
 
-    log.info(f"[Flatfox] Total: {len(results)} listings")
+    log.info(f"[Flatfox] Total: {len(results)} listings for {city}")
     return results
 
 
@@ -1365,3 +1485,4 @@ def save_to_db(db, listings):
     db.commit()
     cur.close()
     log.info(f"Saved {saved}/{len(listings)} to database ({price_changes} price changes detected)")
+    return saved
