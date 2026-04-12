@@ -1506,33 +1506,34 @@
 
     formWrap.innerHTML =
       '<div class="profile-form">' +
-        // Zones
-        '<div class="pf-section"><div class="pf-section-title">📍 Zones géographiques</div>' +
-          '<div id="pf-zone-list" class="pf-zone-list"></div>' +
-          '<div class="pf-zone-add">' +
-            '<input id="pf-new-city" type="text" placeholder="Ajouter une ville..." style="flex:1">' +
-            '<select id="pf-new-km"><option value="1">1 km</option><option value="2">2 km</option><option value="3" selected>3 km</option><option value="5">5 km</option><option value="10">10 km</option><option value="15">15 km</option><option value="20">20 km</option></select>' +
-            '<button class="pf-add-btn" onclick="_pfAddZone()">+</button>' +
+        // Row 1: Zones + Type side by side
+        '<div class="pf-row">' +
+          '<div class="pf-section pf-flex1"><div class="pf-section-title">📍 Zones géographiques</div>' +
+            '<div id="pf-zone-list" class="pf-zone-list"></div>' +
+            '<div class="pf-zone-add">' +
+              '<input id="pf-new-city" type="text" placeholder="Ajouter une ville..." style="flex:1">' +
+              '<select id="pf-new-km"><option value="1">1 km</option><option value="2">2 km</option><option value="3" selected>3 km</option><option value="5">5 km</option><option value="10">10 km</option><option value="15">15 km</option><option value="20">20 km</option></select>' +
+              '<button class="pf-add-btn" onclick="_pfAddZone()">+</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="pf-section pf-flex1"><div class="pf-section-title">🏠 Type de bien</div>' +
+            '<div class="pf-chips" id="pf-types">' + typeChips + '</div>' +
           '</div>' +
         '</div>' +
-        // Type de bien
-        '<div class="pf-section"><div class="pf-section-title">🏠 Type de bien</div>' +
-          '<div class="pf-chips" id="pf-types">' + typeChips + '</div>' +
-        '</div>' +
-        // Transaction & Budget
+        // Row 2: Transaction + Budget
         '<div class="pf-section"><div class="pf-section-title">💰 Transaction & Budget</div>' +
-          '<div class="pf-grid">' +
-            '<div class="pf-field"><label>Transaction</label><select id="pf-transaction" onchange="_pfSetTx()">' +
+          '<div class="pf-budget-row">' +
+            '<div class="pf-field pf-tx-field"><label>Transaction</label><select id="pf-transaction" onchange="_pfSetTx()">' +
               '<option value="location"' + (p.transaction !== 'achat' ? ' selected' : '') + '>Location</option>' +
               '<option value="achat"' + (p.transaction === 'achat' ? ' selected' : '') + '>Achat</option>' +
             '</select></div>' +
-            '<div class="pf-field"><label>Budget min</label>' +
+            '<div class="pf-field pf-flex1"><label>Budget min</label>' +
               '<div class="pf-range"><input type="range" id="pf-budget-min" min="0" max="' + bMinMax + '" step="' + bStep + '" value="' + bMinVal + '" oninput="_pfUpdateBudget(\'pf-budget-min\')"><span id="pf-budget-min-label">' + _pfFormatCHF(bMinVal) + '</span></div></div>' +
-            '<div class="pf-field"><label>Budget max</label>' +
+            '<div class="pf-field pf-flex1"><label>Budget max</label>' +
               '<div class="pf-range"><input type="range" id="pf-budget-max" min="0" max="' + bMinMax + '" step="' + bStep + '" value="' + bMaxVal + '" oninput="_pfUpdateBudget(\'pf-budget-max\')"><span id="pf-budget-max-label">' + _pfFormatCHF(bMaxVal) + '</span></div></div>' +
           '</div>' +
         '</div>' +
-        // Caracteristiques
+        // Row 3: Pièces + Surface
         '<div class="pf-section"><div class="pf-section-title">📐 Caractéristiques</div>' +
           '<div class="pf-grid">' +
             '<div class="pf-field"><label>Pièces min</label><div class="pf-range"><input type="range" id="pf-rooms-min" min="1" max="10" step="0.5" value="' + rMinVal + '" data-unit=" pcs" oninput="_pfUpdateRange(this)"><span>' + rMinVal + ' pcs</span></div></div>' +
@@ -1541,7 +1542,7 @@
             '<div class="pf-field"><label>Surface max (m²)</label><div class="pf-range"><input type="range" id="pf-surface-max" min="20" max="500" step="5" value="' + sMaxVal + '" data-unit=" m²" oninput="_pfUpdateRange(this)"><span>' + sMaxVal + ' m²</span></div></div>' +
           '</div>' +
         '</div>' +
-        // Priorites
+        // Row 4: Priorités
         '<div class="pf-section"><div class="pf-section-title">⭐ Priorités & Équipements</div>' +
           '<div class="pf-chips" id="pf-priorities">' + prioChips + '</div>' +
         '</div>' +
@@ -2329,9 +2330,13 @@
       '.dash-edit-btn{padding:8px 18px;background:#0369a1;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;white-space:nowrap;transition:background .2s}',
       '.dash-edit-btn:hover{background:#024e7a}',
       '.profile-form{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:24px;margin-top:12px}',
-      '.pf-section{margin-bottom:20px}',
-      '.pf-section-title{font-size:15px;font-weight:700;margin-bottom:12px;color:#0f172a}',
-      '.pf-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}',
+      '.pf-row{display:flex;gap:20px;margin-bottom:0}',
+      '.pf-flex1{flex:1;min-width:0}',
+      '.pf-section{margin-bottom:18px}',
+      '.pf-section-title{font-size:14px;font-weight:700;margin-bottom:10px;color:#0f172a}',
+      '.pf-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}',
+      '.pf-budget-row{display:flex;gap:14px;align-items:flex-end}',
+      '.pf-tx-field{width:160px;flex-shrink:0}',
       '.pf-field{display:flex;flex-direction:column;gap:6px}',
       '.pf-field label{font-size:12px;color:#64748b;font-weight:600}',
       '.pf-field input,.pf-field select{padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:inherit}',
@@ -2355,7 +2360,7 @@
       '.pf-save-btn{padding:11px 24px;background:#0369a1;color:#fff;border:none;border-radius:10px;font-size:14px;cursor:pointer;font-weight:600;transition:all .2s}',
       '.pf-save-btn:hover{background:#024e7a;transform:translateY(-1px);box-shadow:0 4px 12px rgba(3,105,161,.3)}',
       '.pf-cancel-btn{padding:11px 24px;background:#f1f5f9;color:#64748b;border:none;border-radius:10px;font-size:14px;cursor:pointer}',
-      '@media(max-width:768px){.pf-grid{grid-template-columns:1fr}.dash-profile-row{flex-direction:column;align-items:stretch}.pf-zone-add{flex-wrap:wrap}}',
+      '@media(max-width:768px){.pf-grid{grid-template-columns:1fr}.pf-row{flex-direction:column}.pf-budget-row{flex-direction:column}.pf-tx-field{width:100%}.dash-profile-row{flex-direction:column;align-items:stretch}.pf-zone-add{flex-wrap:wrap}}',
 
       // Properties grid
       '.prop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:20px}',
