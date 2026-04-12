@@ -71,17 +71,27 @@ def _sb_get(url, render_js=False):
         params['render_js'] = 'true'
         params['wait'] = 3000
 
-    try:
-        r = requests.get(SCRAPINGBEE_URL, params=params, timeout=180)
-        r.encoding = 'utf-8'  # Force UTF-8 to avoid Latin-1 misdetection
-        log.info(f"[ScrapingBee] {url[:60]}... → HTTP {r.status_code} ({len(r.text)} bytes)")
-        return r.status_code, r.text
-    except requests.exceptions.Timeout:
-        log.error(f"[ScrapingBee] TIMEOUT fetching {url}")
-        return 0, ''
-    except Exception as e:
-        log.error(f"[ScrapingBee] Error fetching {url}: {e}")
-        return 0, ''
+    # Retry up to 2 times on server errors (500, 502, 504)
+    for attempt in range(2):
+        try:
+            r = requests.get(SCRAPINGBEE_URL, params=params, timeout=180)
+            r.encoding = 'utf-8'  # Force UTF-8 to avoid Latin-1 misdetection
+            log.info(f"[ScrapingBee] {url[:60]}... → HTTP {r.status_code} ({len(r.text)} bytes)")
+            if r.status_code in (500, 502, 504) and attempt == 0:
+                log.warning(f"[ScrapingBee] Server error {r.status_code}, retrying in 3s...")
+                time.sleep(3)
+                continue
+            return r.status_code, r.text
+        except requests.exceptions.Timeout:
+            log.error(f"[ScrapingBee] TIMEOUT fetching {url} (attempt {attempt+1})")
+            if attempt == 0:
+                time.sleep(3)
+                continue
+            return 0, ''
+        except Exception as e:
+            log.error(f"[ScrapingBee] Error fetching {url}: {e}")
+            return 0, ''
+    return 0, ''
 
 
 def _make_property(external_id, source, source_url, title, description,
