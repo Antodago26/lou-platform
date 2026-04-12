@@ -114,15 +114,19 @@ def _make_property(external_id, source, source_url, title, description,
         price = price * 1000
     # Clean title: keep accents, remove only control chars
     clean_title = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', title or '').strip()
-    # If title is just a price like "CHF 688,270." or "701'380", clear it
-    if clean_title and re.match(r'^(?:CHF\s*)?[\d\s\'\',.]+\.?$', clean_title):
+    # If title is just a price like "CHF 688,270." or "701'380" or "1,630.–", clear it
+    if clean_title and re.match(r'^(?:CHF\s*)?[\d\s\'\',.]+[.\u2013\u2014\-]*$', clean_title):
         clean_title = ''
-    # If title starts with "CHF" followed by numbers (possibly with trailing text like ".Premium"), strip that
-    clean_title = re.sub(r'^CHF\s*[\d\s\'\',.]+(?:\.?\w*)?\s*', '', clean_title).strip()
-    # Remove "CHF X,XXX." or similar price prefix anywhere at start
-    clean_title = re.sub(r'^[\d\s\'\',.]+(?:CHF|Fr\.?)?\s*', '', clean_title).strip() if re.match(r'^[\d\',.]+', clean_title) else clean_title
+    # If title starts with "CHF" followed by numbers (possibly with trailing text like ".–Plus"), strip that
+    # Handles: "CHF 1,630.–", "CHF 2,200.–Plus", "CHF 840,000.Premium"
+    clean_title = re.sub(r'^CHF\s*[\d\s\'\',.]+[.\u2013\u2014\-]*\w*\s*', '', clean_title).strip()
+    # Remove bare price prefix at start: "1'630.–Plus ...", "701'380 ..."
+    clean_title = re.sub(r'^[\d\s\'\',.]+[.\u2013\u2014\-]*(?:CHF|Fr\.?)?\s*', '', clean_title).strip() if re.match(r'^[\d\',.]+', clean_title) else clean_title
     # Remove postal codes at start of title (e.g., "2016 Cortaillod ...")
     clean_title = re.sub(r'^\d{4}\s+', '', clean_title).strip()
+    # Final cleanup: if title is now just dashes/dots/whitespace, clear it
+    if clean_title and re.match(r'^[\s.\u2013\u2014\-]+$', clean_title):
+        clean_title = ''
 
     desc_clean = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', (description or '')[:500]).strip()
     # Language filter: skip clearly non-French listings

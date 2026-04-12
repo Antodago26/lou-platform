@@ -56,6 +56,18 @@
     return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
+  function cleanTitle(t) {
+    if (!t) return '';
+    // Remove price prefixes left in DB: "CHF 1,630.–", "CHF 2,200.–Plus", "1'590.–"
+    t = t.replace(/^CHF\s*[\d\s'',.\u2019]+[.\u2013\u2014\-]*\w*\s*/i, '').trim();
+    t = t.replace(/^[\d\s'',.\u2019]+[.\u2013\u2014\-]*(?:CHF|Fr\.?)?\s*/i, '').trim();
+    // Remove leading postal codes "2034 "
+    t = t.replace(/^\d{4}\s+/, '').trim();
+    // If result is empty or just punctuation, return empty
+    if (/^[\s.\u2013\u2014\-]*$/.test(t)) return '';
+    return t;
+  }
+
   // Wrapper for authenticated API calls — handles 401 (expired token)
   function apiFetch(url, opts) {
     opts = opts || {};
@@ -954,7 +966,7 @@
           (img ? '<img class="map-card-img" src="' + escapeHtml(img) + '" onerror="this.style.display=\'none\'">' : '<div class="map-card-img-ph"></div>') +
           '<div class="map-card-info">' +
             '<div class="map-card-price">' + priceStr + '</div>' +
-            '<div class="map-card-title">' + escapeHtml(p.title || p.city || 'Bien') + '</div>' +
+            '<div class="map-card-title">' + escapeHtml(cleanTitle(p.title) || p.city || 'Bien') + '</div>' +
             '<div class="map-card-details">' + details.join(' · ') + '</div>' +
             '<div class="map-card-addr">' + escapeHtml(p.address || p.city || '') + '</div>' +
             '<div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:2px">' + (function() { var ss = p.all_sources || [{source: p.source||'', url: p.source_url||''}]; return ss.map(function(s) { var n = (s.source||'').split('.')[0]||'Source'; return '<span class="prop-source-link" data-src="' + escapeHtml(s.source||'') + '" style="font-size:9px;padding:1px 5px">' + escapeHtml(n) + '</span>'; }).join(''); })() + '</div>' +
@@ -1027,7 +1039,7 @@
 
         var popup = '<div style="min-width:220px;font-family:Inter,sans-serif">' +
           (p.images && p.images[0] ? '<img src="' + escapeHtml(p.images[0]) + '" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px" onerror="this.style.display=\'none\'">' : '') +
-          '<div style="font-weight:700;font-size:14px;margin-bottom:4px">' + escapeHtml(p.title || 'Bien') + '</div>' +
+          '<div style="font-weight:700;font-size:14px;margin-bottom:4px">' + escapeHtml(cleanTitle(p.title) || p.city || 'Bien') + '</div>' +
           '<div style="font-size:16px;font-weight:800;color:#0f172a;margin-bottom:4px">' + priceStr + ' CHF</div>' +
           '<div style="font-size:13px;color:#64748b;margin-bottom:6px">' + escapeHtml(p.address || '') + '</div>' +
           '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">' +
@@ -1140,7 +1152,7 @@
         if (p.property_types && p.property_types.length) tags.push(p.property_types.join(', '));
         if (p.budget_max) tags.push('Max ' + formatPrice(p.budget_max) + ' CHF');
         if (p.rooms_min) tags.push(p.rooms_min + '+ pièces');
-        if (p.surface_min) tags.push(p.surface_min + '+ m2');
+        if (p.surface_min) tags.push(p.surface_min + '+ m²');
 
         var zones = (p.zones || []).filter(function (z) { return z && z.city; });
         zones.forEach(function (z) {
@@ -1371,7 +1383,7 @@
 
     // Details table
     var rows = [];
-    if (p.rooms) rows.push(['Pieces', p.rooms + ' pcs']);
+    if (p.rooms) rows.push(['Pièces', p.rooms + ' pcs']);
     if (p.surface) rows.push(['Surface', p.surface + ' m²']);
     if (p.floor !== null && p.floor !== undefined) rows.push(['Etage', p.floor + 'e']);
     if (p.distance_km !== null && p.distance_km !== undefined) rows.push(['Distance', p.distance_km + ' km']);
@@ -1428,7 +1440,7 @@
         galleryHtml +
         '<div class="detail-body">' +
           '<div class="detail-price">' + priceHtml + '</div>' +
-          '<h2 class="detail-title">' + escapeHtml(p.title || 'Bien immobilier') + '</h2>' +
+          '<h2 class="detail-title">' + escapeHtml(cleanTitle(p.title) || 'Bien immobilier') + '</h2>' +
           '<div class="detail-address">📍 ' + escapeHtml(p.address || '') + '</div>' +
           '<div class="detail-section"><h3>Caractéristiques</h3><div class="detail-table">' + tableHtml + '</div></div>' +
           (p.description ? '<div class="detail-section"><h3>Description</h3><p class="detail-description">' + escapeHtml(p.description) + '</p></div>' : '') +
@@ -1725,7 +1737,7 @@
       '</div>' +
       '<div class="prop-card-body">' +
         '<div class="prop-price">' + priceText + '</div>' +
-        '<div class="prop-title">' + escapeHtml(p.title || 'Bien immobilier') + '</div>' +
+        '<div class="prop-title">' + escapeHtml(cleanTitle(p.title) || 'Bien immobilier') + '</div>' +
         '<div class="prop-address">' + escapeHtml(p.address || '') + '</div>' +
         '<div class="prop-details">' + details.join(' &middot; ') + '</div>' +
         '<div class="prop-scores-mini">' +
@@ -1937,7 +1949,7 @@
       '</div>' +
       '<div class="prop-card-body">' +
         '<div class="prop-price">' + priceText + '</div>' +
-        '<div class="prop-title">' + escapeHtml(p.title || 'Bien immobilier') + '</div>' +
+        '<div class="prop-title">' + escapeHtml(cleanTitle(p.title) || 'Bien immobilier') + '</div>' +
         '<div class="prop-address">' + escapeHtml(p.address || '') + '</div>' +
         '<div class="prop-details">' + details.join(' &middot; ') + '</div>' +
         noteSnippet +
@@ -2040,7 +2052,7 @@
       var gc = gradeColors[p.grade] || '#94a3b8';
       html += '<th>' +
         '<div class="compare-th-score" style="background:' + gc + '">' + p.score + ' ' + p.grade + '</div>' +
-        '<div class="compare-th-title">' + escapeHtml((p.title || '').substring(0, 40)) + '</div>' +
+        '<div class="compare-th-title">' + escapeHtml((cleanTitle(p.title) || '').substring(0, 40)) + '</div>' +
       '</th>';
     });
     html += '</tr></thead><tbody>';
@@ -2048,7 +2060,7 @@
     // Rows
     var rows = [
       { label: 'Prix', key: 'price', fmt: function (v) { return v ? formatPrice(v) + ' CHF' : '-'; } },
-      { label: 'Pieces', key: 'rooms', fmt: function (v) { return v || '-'; } },
+      { label: 'Pièces', key: 'rooms', fmt: function (v) { return v || '-'; } },
       { label: 'Surface', key: 'surface', fmt: function (v) { return v ? v + ' m\u00B2' : '-'; } },
       { label: 'Ville', key: 'city', fmt: function (v) { return v || '-'; } },
       { label: 'Etage', key: 'floor', fmt: function (v) { return v !== null && v !== undefined ? v + 'e' : '-'; } },
