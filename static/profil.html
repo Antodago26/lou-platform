@@ -150,14 +150,14 @@ h1{font-size:24px;font-weight:700;margin-bottom:4px}
         <div class="fg">
           <label>Budget min</label>
           <div class="range-r">
-            <input type="range" id="fBmin" min="0" max="5000" step="100" value="0" oninput="updateBudgetLabel('fBmin')">
+            <input type="range" id="fBmin" min="0" max="5000" step="100" value="0" oninput="clampMin('fBmin','fBmax');updateBudgetLabel('fBmin')">
             <span class="range-v" id="fBminLabel">—</span>
           </div>
         </div>
         <div class="fg">
           <label>Budget max</label>
           <div class="range-r">
-            <input type="range" id="fBmax" min="0" max="5000" step="100" value="2500" oninput="updateBudgetLabel('fBmax')">
+            <input type="range" id="fBmax" min="0" max="5000" step="100" value="2500" oninput="clampMax('fBmin','fBmax');updateBudgetLabel('fBmax')">
             <span class="range-v" id="fBmaxLabel">CHF 2'500</span>
           </div>
         </div>
@@ -170,25 +170,25 @@ h1{font-size:24px;font-weight:700;margin-bottom:4px}
       <div class="grid">
         <div class="fg"><label>Pieces min</label>
           <div class="range-r">
-            <input type="range" id="fRmin" min="1" max="10" step="0.5" value="3" oninput="this.nextElementSibling.textContent=this.value+' pcs'">
+            <input type="range" id="fRmin" min="1" max="10" step="0.5" value="3" oninput="clampMin('fRmin','fRmax');this.nextElementSibling.textContent=this.value+' pcs'">
             <span class="range-v">3 pcs</span>
           </div>
         </div>
         <div class="fg"><label>Pieces max</label>
           <div class="range-r">
-            <input type="range" id="fRmax" min="1" max="10" step="0.5" value="6" oninput="this.nextElementSibling.textContent=this.value+' pcs'">
+            <input type="range" id="fRmax" min="1" max="10" step="0.5" value="6" oninput="clampMax('fRmin','fRmax');this.nextElementSibling.textContent=this.value+' pcs'">
             <span class="range-v">6 pcs</span>
           </div>
         </div>
         <div class="fg"><label>Surface min (m²)</label>
           <div class="range-r">
-            <input type="range" id="fSmin" min="20" max="300" step="5" value="60" oninput="this.nextElementSibling.textContent=this.value+' m²'">
+            <input type="range" id="fSmin" min="20" max="300" step="5" value="60" oninput="clampMin('fSmin','fSmax');this.nextElementSibling.textContent=this.value+' m²'">
             <span class="range-v">60 m²</span>
           </div>
         </div>
         <div class="fg"><label>Surface max (m²)</label>
           <div class="range-r">
-            <input type="range" id="fSmax" min="20" max="500" step="5" value="200" oninput="this.nextElementSibling.textContent=this.value+' m²'">
+            <input type="range" id="fSmax" min="20" max="500" step="5" value="200" oninput="clampMax('fSmin','fSmax');this.nextElementSibling.textContent=this.value+' m²'">
             <span class="range-v">200 m²</span>
           </div>
         </div>
@@ -298,6 +298,30 @@ document.getElementById('linkHome').href = homeUrl;
 document.getElementById('linkFav').href = homeUrl;
 
 function tc(el) { el.classList.toggle('on'); }
+
+// Clamp min/max sliders so min never exceeds max
+function clampMin(minId, maxId) {
+  var minEl = document.getElementById(minId);
+  var maxEl = document.getElementById(maxId);
+  if (parseFloat(minEl.value) > parseFloat(maxEl.value)) {
+    maxEl.value = minEl.value;
+    // Update label
+    var label = maxEl.nextElementSibling;
+    if (label && maxId.startsWith('fB')) { updateBudgetLabel(maxId); }
+    else if (label) { label.textContent = maxEl.value + (maxId.indexOf('R') > -1 ? ' pcs' : ' m\u00B2'); }
+  }
+}
+function clampMax(minId, maxId) {
+  var minEl = document.getElementById(minId);
+  var maxEl = document.getElementById(maxId);
+  if (parseFloat(maxEl.value) < parseFloat(minEl.value)) {
+    minEl.value = maxEl.value;
+    // Update label
+    var label = minEl.nextElementSibling;
+    if (label && minId.startsWith('fB')) { updateBudgetLabel(minId); }
+    else if (label) { label.textContent = minEl.value + (minId.indexOf('R') > -1 ? ' pcs' : ' m\u00B2'); }
+  }
+}
 
 function getChips(id) {
   return Array.from(document.querySelectorAll('#' + id + ' .chip.on')).map(function(c) { return c.dataset.v; });
