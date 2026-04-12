@@ -903,7 +903,7 @@ def get_stats():
         cur.execute(f"""
             SELECT
                 COUNT(*) as total,
-                COUNT(*) FILTER (WHERE sp.scored_at > NOW() - INTERVAL '24 hours') as new_count,
+                COUNT(*) FILTER (WHERE p.first_seen_at > NOW() - INTERVAL '24 hours') as new_count,
                 (SELECT COUNT(*) FROM favorites WHERE user_id = %s) as favorites
             FROM scored_properties sp
             JOIN properties p ON p.id = sp.property_id
