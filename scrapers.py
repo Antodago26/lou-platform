@@ -112,17 +112,19 @@ def _make_property(external_id, source, source_url, title, description,
     # Portals like Properstar sometimes display "965" meaning 965'000
     if transaction == 'achat' and price and price < 10000:
         price = price * 1000
-    # Clean title: remove if it's just a price string or garbage
-    clean_title = re.sub(r'[^\x00-\x7F]', '', title or '').strip()
+    # Clean title: keep accents, remove only control chars
+    clean_title = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', title or '').strip()
     # If title is just a price like "CHF 688,270." or "701'380", clear it
     if clean_title and re.match(r'^(?:CHF\s*)?[\d\s\'\',.]+\.?$', clean_title):
         clean_title = ''
-    # If title starts with "CHF" followed by numbers, strip that prefix
-    clean_title = re.sub(r'^CHF\s*[\d\s\'\',.]+\.?\s*', '', clean_title).strip()
+    # If title starts with "CHF" followed by numbers (possibly with trailing text like ".Premium"), strip that
+    clean_title = re.sub(r'^CHF\s*[\d\s\'\',.]+(?:\.?\w*)?\s*', '', clean_title).strip()
+    # Remove "CHF X,XXX." or similar price prefix anywhere at start
+    clean_title = re.sub(r'^[\d\s\'\',.]+(?:CHF|Fr\.?)?\s*', '', clean_title).strip() if re.match(r'^[\d\',.]+', clean_title) else clean_title
     # Remove postal codes at start of title (e.g., "2016 Cortaillod ...")
     clean_title = re.sub(r'^\d{4}\s+', '', clean_title).strip()
 
-    desc_clean = re.sub(r'[^\x00-\x7F]', '', (description or '')[:500]).strip()
+    desc_clean = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', (description or '')[:500]).strip()
     # Language filter: skip clearly non-French listings
     if not _is_french_or_neutral(clean_title) and not _is_french_or_neutral(desc_clean):
         return None  # Will be filtered out by caller

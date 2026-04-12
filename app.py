@@ -834,11 +834,11 @@ def get_properties():
             best_images = p.pop('_best_images', [])
             results.append({
                 'id': p['id'],
-                'title': re.sub(r'[^\x00-\x7F]', '', p['title'] or '').strip() or (
+                'title': (p['title'] or '').strip() or (
                     f"{float(p['rooms'])} pcs, {p['surface']} m2" if p.get('rooms') and p.get('surface')
                     else f"{p.get('city') or 'Bien immobilier'}"
                 ),
-                'address': re.sub(r'[^\x00-\x7F]', '', p['address'] or '').strip(),
+                'address': (p['address'] or '').strip(),
                 'price': p['price'] or 0,
                 'unit': f"{(p['currency'] or 'CHF').encode('ascii', 'ignore').decode()}/{(p['price_unit'] or 'mois').encode('ascii', 'ignore').decode()}",
                 'rooms': float(p['rooms']) if p['rooms'] else 0,
@@ -848,7 +848,7 @@ def get_properties():
                 'source': all_sources[0]['source'] if all_sources else '',
                 'source_url': all_sources[0]['url'] if all_sources else '',
                 'all_sources': all_sources,
-                'description': re.sub(r'[^\x00-\x7F]', '', p.get('description') or '').strip(),
+                'description': (p.get('description') or '').strip(),
                 'contact_name': p['contact_name'] or '',
                 'contact_phone': p['contact_phone'] or '',
                 'contact_email': p['contact_email'] or '',
@@ -1029,8 +1029,8 @@ def get_favorites():
                 except Exception:
                     images = [images] if images else []
 
-            title = re.sub(r'[^\x00-\x7F]', '', p.get('title') or '').strip()
-            address = re.sub(r'[^\x00-\x7F]', '', p.get('address') or '').strip()
+            title = (p.get('title') or '').strip()
+            address = (p.get('address') or '').strip()
 
             days_online = 0
             if p.get('first_seen_at'):
@@ -1116,7 +1116,7 @@ def export_favorites():
         writer.writerow(['Titre', 'Adresse', 'Ville', 'Prix', 'Unite', 'Pieces', 'Surface m2',
                          'Source', 'URL', 'Transaction', 'Score', 'Grade', 'Notes', 'Date favori'])
         for r in rows:
-            title = re.sub(r'[^\x00-\x7F]', '', r.get('title') or '').strip()
+            title = (r.get('title') or '').strip()
             writer.writerow([
                 title, r.get('address'), r.get('city'), r.get('price'), r.get('unit'),
                 r.get('rooms'), r.get('surface'), r.get('source'), r.get('source_url'),
