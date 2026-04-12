@@ -400,17 +400,38 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
         found_structured = False
 
         # Method 1: Try __INITIAL_STATE__ (Vue.js/Nuxt — NOT Next.js)
-        # Use greedy match up to ;</script> to capture full JSON
-        for pat in [
-            r'window\.__INITIAL_STATE__\s*=\s*({.+?});\s*</script>',
-            r'window\.__INITIAL_STATE__\s*=\s*({.+?})\s*;?\s*\n',
-        ]:
-            if found_structured:
-                break
-            match2 = re.search(pat, html, re.DOTALL)
-            if match2:
+        # Strategy: find the assignment, then extract JSON by brace-counting (regex is fragile)
+        is_match = re.search(r'window\.__INITIAL_STATE__\s*=\s*', html)
+        if is_match and not found_structured:
+            json_start = html.index('{', is_match.end() - 1) if '{' in html[is_match.end()-1:is_match.end()+5] else -1
+            raw = ''
+            if json_start >= 0:
+                # Brace-counting to find matching closing brace
+                depth = 0
+                in_str = False
+                escape = False
+                for i in range(json_start, min(json_start + 5_000_000, len(html))):
+                    c = html[i]
+                    if escape:
+                        escape = False
+                        continue
+                    if c == '\\' and in_str:
+                        escape = True
+                        continue
+                    if c == '"' and not escape:
+                        in_str = not in_str
+                        continue
+                    if not in_str:
+                        if c == '{':
+                            depth += 1
+                        elif c == '}':
+                            depth -= 1
+                            if depth == 0:
+                                raw = html[json_start:i+1]
+                                break
+            if raw:
                 try:
-                    raw = match2.group(1).replace('undefined', 'null')
+                    raw = raw.replace('undefined', 'null')
                     state = json.loads(raw)
                     # Log top-level keys for debugging structure changes
                     log.info(f"[ImmoScout24] __INITIAL_STATE__ keys: {list(state.keys())[:10]}")
@@ -439,7 +460,8 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
                             if depth > 5:
                                 return []
                             if isinstance(obj, list) and len(obj) > 2:
-                                if all(isinstance(i, dict) and ('id' in i or 'title' in i) for i in obj[:3]):
+                                # Require 'id' AND at least one of 'title'/'price' to avoid matching breadcrumbs/menus
+                                if all(isinstance(i, dict) and 'id' in i and ('title' in i or 'price' in i or 'prices' in i) for i in obj[:3]):
                                     return obj
                             if isinstance(obj, dict):
                                 for v in obj.values():
@@ -467,8 +489,10 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
                             chars = listing.get('characteristics', {}) or {}
                             prices = listing.get('prices', {}) or {}
                             if isinstance(prices, dict):
-                                price_val = (prices.get('rent', {}).get('gross') or
-                                            prices.get('buy', {}).get('price') or
+                                rent = prices.get('rent')
+                                buy = prices.get('buy')
+                                price_val = ((rent.get('gross') if isinstance(rent, dict) else rent) or
+                                            (buy.get('price') if isinstance(buy, dict) else buy) or
                                             prices.get('value'))
                             else:
                                 price_val = prices
@@ -491,7 +515,7 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
                             addr_str = ''
                             if isinstance(addr, dict):
                                 addr_str = f"{addr.get('street', '')} {addr.get('postalCode', '')} {addr.get('locality', '')}".strip()
-                                if not addr_str.strip():
+                                if not addr_str:
                                     addr_str = addr.get('formatted', '')
 
                             results.append(_make_property(
@@ -503,7 +527,7 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
                                 transaction=transaction,
                                 price=_clean_price(price_val),
                                 rooms=_clean_rooms(str(rooms_raw)) if rooms_raw else None,
-                                surface=int(surface_raw) if surface_raw and str(surface_raw).replace('.','').isdigit() else _clean_surface(str(surface_raw or '')),
+                                surface=int(float(surface_raw)) if surface_raw and isinstance(surface_raw, (int, float)) else _clean_surface(str(surface_raw or '')),
                                 floor=chars.get('floor') or listing.get('floor'),
                                 address=addr_str,
                                 city=(addr.get('locality') if isinstance(addr, dict) else None) or city,
@@ -520,7 +544,6 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
                     log.error(f"[ImmoScout24] __INITIAL_STATE__ JSON error: {e}")
                 except Exception as e:
                     log.error(f"[ImmoScout24] __INITIAL_STATE__ parse error: {e}")
-                break
 
         # Method 3: HTML card-based fallback with broad selectors
         if not found_structured:
@@ -546,7 +569,7 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
                         lid = eid.group(1)
                     else:
                         # Use slug or hash as ID for slug-based URLs
-                        slug_match = re.search(r'/d/(.+?)(?:\?|$)', href)
+                        slug_match = re.search(r'/d/([^/?]+)', href)
                         lid = slug_match.group(1) if slug_match else ''
                         if not lid:
                             # Fallback: hash the href
