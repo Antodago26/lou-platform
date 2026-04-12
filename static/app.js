@@ -869,43 +869,67 @@
 
     var _mapHighlightedCard = null;
 
+    var _mapAllProps = null; // All properties for map (loaded separately)
+
     function loadMapView() {
       var container = $('map-view');
       if (!container) return;
       container.style.display = '';
 
-      if (_mapInstance) {
-        _refreshMapMarkers();
-        _refreshMapSidebar();
-        _mapInstance.invalidateSize();
-        return;
-      }
+      // Load ALL properties for the map (not just 1 page)
+      _loadAllMapProperties(function() {
+        if (_mapInstance) {
+          _refreshMapMarkers();
+          _refreshMapSidebar();
+          _mapInstance.invalidateSize();
+          return;
+        }
 
-      container.innerHTML =
-        '<div class="map-split">' +
-          '<div class="map-sidebar" id="map-sidebar"><div style="padding:20px;color:#64748b;text-align:center">Chargement...</div></div>' +
-          '<div class="map-canvas" id="map-canvas"></div>' +
-        '</div>';
+        container.innerHTML =
+          '<div class="map-split">' +
+            '<div class="map-sidebar" id="map-sidebar"><div style="padding:20px;color:#64748b;text-align:center">Chargement...</div></div>' +
+            '<div class="map-canvas" id="map-canvas"></div>' +
+          '</div>';
 
-      loadLeaflet(function () {
-        var mapDiv = $('map-canvas');
-        _mapInstance = L.map(mapDiv, { zoomControl: false }).setView([46.8, 8.2], 8);
-        L.control.zoom({ position: 'topright' }).addTo(_mapInstance);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
-          maxZoom: 19
-        }).addTo(_mapInstance);
+        loadLeaflet(function () {
+          var mapDiv = $('map-canvas');
+          _mapInstance = L.map(mapDiv, { zoomControl: false }).setView([46.8, 8.2], 8);
+          L.control.zoom({ position: 'topright' }).addTo(_mapInstance);
+          L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+            maxZoom: 19
+          }).addTo(_mapInstance);
 
-        _refreshMapMarkers();
-        _refreshMapSidebar();
-        setTimeout(function () { _mapInstance.invalidateSize(); }, 200);
+          _refreshMapMarkers();
+          _refreshMapSidebar();
+          setTimeout(function () { _mapInstance.invalidateSize(); }, 200);
+        });
       });
+    }
+
+    function _loadAllMapProperties(cb) {
+      // Fetch all properties (up to 500) for the map view
+      if (_mapAllProps) { cb(); return; }
+      fetch(API + '/api/properties?page=1&per_page=500&sort=score&min_score=0', {
+        headers: { 'Authorization': 'Bearer ' + TOKEN }
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        _mapAllProps = {};
+        (data.properties || []).forEach(function(p) {
+          _mapAllProps[p.id] = p;
+          window._propData = window._propData || {};
+          window._propData[p.id] = p;
+        });
+        cb();
+      })
+      .catch(function() { _mapAllProps = {}; cb(); });
     }
 
     function _refreshMapSidebar() {
       var sidebar = $('map-sidebar');
       if (!sidebar) return;
-      var data = window._propData || {};
+      var data = _mapAllProps || window._propData || {};
       var props = Object.keys(data).map(function(id) { return data[id]; });
       // Sort by score descending
       props.sort(function(a, b) { return (b.score || 0) - (a.score || 0); });
@@ -970,7 +994,7 @@
       _mapMarkers = L.markerClusterGroup({ maxClusterRadius: 40 });
 
       var gradeColors = { A: '#059669', B: '#0369a1', C: '#d97706', D: '#dc2626' };
-      var data = window._propData || {};
+      var data = _mapAllProps || window._propData || {};
       var bounds = [];
 
       Object.keys(data).forEach(function (id) {
@@ -1537,6 +1561,7 @@
       if (data.ok) {
         $('profile-edit-form').style.display = 'none';
         loadProfileBar();
+        _mapAllProps = null; // Force map to reload all properties
         // Re-score and reload properties
         apiFetch(API + '/api/score', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
           .then(function () { loadProperties(1, 'score', 0); })
