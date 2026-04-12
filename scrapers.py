@@ -1555,9 +1555,37 @@ def scrape_properstar(city="Lausanne", transaction="location", max_pages=1):
 # MAIN
 # ============================================================
 
+# For small towns, also scrape the nearest large city to find listings
+# that portals list under the main city name (e.g., Peseux listings under "Neuchâtel")
+NEARBY_MAIN_CITY = {
+    'peseux': 'Neuchâtel', 'colombier': 'Neuchâtel', 'boudry': 'Neuchâtel',
+    'cortaillod': 'Neuchâtel', 'hauterive': 'Neuchâtel', 'saint-blaise': 'Neuchâtel',
+    'marin-epagnier': 'Neuchâtel', 'bevaix': 'Neuchâtel', 'corcelles-cormondrèche': 'Neuchâtel',
+    'la tène': 'Neuchâtel', 'le landeron': 'Neuchâtel', 'val-de-ruz': 'Neuchâtel',
+    'milvignes': 'Neuchâtel', 'le locle': 'La Chaux-de-Fonds',
+    'fleurier': 'La Chaux-de-Fonds', 'val-de-travers': 'La Chaux-de-Fonds',
+    'prilly': 'Lausanne', 'pully': 'Lausanne', 'renens': 'Lausanne',
+    'ecublens': 'Lausanne', 'lutry': 'Lausanne', 'savigny': 'Lausanne',
+    'carouge': 'Genève', 'meyrin': 'Genève', 'lancy': 'Genève',
+    'vernier': 'Genève', 'onex': 'Genève', 'thônex': 'Genève',
+    'vevey': 'Montreux', 'montreux': 'Vevey',
+    'sierre': 'Sion', 'martigny': 'Sion',
+    'bienne': 'Bienne', 'biel': 'Biel',
+}
+
+
 def scrape_all(city="Lausanne", transaction="location"):
-    """Scrape all portals for a given city and transaction type."""
+    """Scrape all portals for a given city and transaction type.
+    For small towns, also scrapes the nearest large city to catch listings
+    that portals list under the main city name."""
     all_results = []
+
+    # Determine cities to scrape
+    cities_to_scrape = [city]
+    nearby = NEARBY_MAIN_CITY.get(city.lower())
+    if nearby and nearby.lower() != city.lower():
+        cities_to_scrape.append(nearby)
+        log.info(f"[scrape_all] Also scraping nearby city: {nearby}")
 
     scrapers = [
         ('Flatfox', scrape_flatfox),
@@ -1570,14 +1598,16 @@ def scrape_all(city="Lausanne", transaction="location"):
         ('Properstar', scrape_properstar),
     ]
 
-    for name, scraper in scrapers:
-        try:
-            results = [r for r in scraper(city=city, transaction=transaction) if r is not None]
-            all_results.extend(results)
-            log.info(f"[{name}] {len(results)} results")
-        except Exception as e:
-            log.error(f"[{name}] FAILED: {e}")
-        time.sleep(1)
+    for scrape_city in cities_to_scrape:
+        log.info(f"[scrape_all] Scraping city: {scrape_city}")
+        for name, scraper in scrapers:
+            try:
+                results = [r for r in scraper(city=scrape_city, transaction=transaction) if r is not None]
+                all_results.extend(results)
+                log.info(f"[{name}][{scrape_city}] {len(results)} results")
+            except Exception as e:
+                log.error(f"[{name}][{scrape_city}] FAILED: {e}")
+            time.sleep(1)
 
     # Deduplicate
     seen = set()
