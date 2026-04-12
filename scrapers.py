@@ -378,7 +378,12 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
     log.info(f"[ImmoScout24] Searching {city} ({transaction})")
     results = []
     tx = "louer" if transaction == "location" else "acheter"
-    slug = city.lower().replace(' ', '-').replace('â', 'a').replace('é', 'e').replace('è', 'e')
+    slug = city.lower().replace(' ', '-')
+    # Normalize accents for URL slug
+    for a, b in [('â', 'a'), ('é', 'e'), ('è', 'e'), ('ê', 'e'), ('ë', 'e'),
+                 ('ô', 'o'), ('î', 'i'), ('ï', 'i'), ('ü', 'u'), ('ù', 'u'), ('û', 'u'),
+                 ('ä', 'a'), ('ö', 'o'), ('ç', 'c')]:
+        slug = slug.replace(a, b)
     canton = CITY_CANTONS.get(city.lower(), '')
     # Add canton suffix for disambiguation (e.g., colombier-ne)
     if canton and slug in ('colombier', 'hauterive', 'saint-blaise'):
@@ -394,98 +399,128 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
 
         found_structured = False
 
-        # Method 1: Try __NEXT_DATA__
-        match = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.DOTALL)
-        if match:
-            try:
-                data = json.loads(match.group(1))
-                page_props = data.get('props', {}).get('pageProps', {})
-                items = (page_props.get('listings', []) or
-                         page_props.get('resultList', {}).get('items', []) or
-                         page_props.get('searchResult', {}).get('listings', []) or [])
-                if items:
-                    found_structured = True
-                    log.info(f"[ImmoScout24] Page {page}: {len(items)} items via __NEXT_DATA__")
-                    for item in items:
-                        listing = item.get('listing', item)
-                        lid = listing.get('id', item.get('id', ''))
-                        addr = listing.get('address', {}) or {}
-                        chars = listing.get('characteristics', {}) or {}
-                        prices = listing.get('prices', {}) or {}
-                        if isinstance(prices, dict):
-                            price_val = (prices.get('rent', {}).get('gross') or
-                                        prices.get('buy', {}).get('price') or
-                                        prices.get('value'))
-                        else:
-                            price_val = prices
-                        img_list = []
-                        for img in (listing.get('images', []) or item.get('images', []) or []):
-                            if isinstance(img, dict):
-                                img_list.append(img.get('url', img.get('src', '')))
-                            elif isinstance(img, str):
-                                img_list.append(img)
-                        results.append(_make_property(
-                            external_id=f"is24-{lid}", source='ImmoScout24',
-                            source_url=f"https://www.immoscout24.ch/fr/d/{lid}",
-                            title=listing.get('title', ''), description='',
-                            property_type=_guess_type(listing.get('propertyType', listing.get('title', ''))),
-                            transaction=transaction,
-                            price=_clean_price(price_val),
-                            rooms=chars.get('numberOfRooms'),
-                            surface=chars.get('livingSpace') or chars.get('surfaceLiving'),
-                            floor=chars.get('floor'),
-                            address=f"{addr.get('street', '')} {addr.get('postalCode', '')} {addr.get('locality', '')}".strip(),
-                            city=addr.get('locality', city),
-                            canton=addr.get('region', canton),
-                            postal_code=str(addr.get('postalCode', '')) or None,
-                            latitude=None, longitude=None,
-                            features=[], images=img_list[:5],
-                            published_at=listing.get('publishDate'),
-                        ))
-            except Exception as e:
-                log.error(f"[ImmoScout24] __NEXT_DATA__ parse error: {e}")
+        # Method 1: Try __INITIAL_STATE__ (Vue.js/Nuxt — NOT Next.js)
+        # Use greedy match up to ;</script> to capture full JSON
+        for pat in [
+            r'window\.__INITIAL_STATE__\s*=\s*({.+?});\s*</script>',
+            r'window\.__INITIAL_STATE__\s*=\s*({.+?})\s*;?\s*\n',
+        ]:
+            if found_structured:
+                break
+            match2 = re.search(pat, html, re.DOTALL)
+            if match2:
+                try:
+                    raw = match2.group(1).replace('undefined', 'null')
+                    state = json.loads(raw)
+                    # Log top-level keys for debugging structure changes
+                    log.info(f"[ImmoScout24] __INITIAL_STATE__ keys: {list(state.keys())[:10]}")
 
-        # Method 2: Try __INITIAL_STATE__ (multiple regex patterns)
-        if not found_structured:
-            for pat in [
-                r'window\.__INITIAL_STATE__\s*=\s*({.+?});\s*</',
-                r'window\.__INITIAL_STATE__\s*=\s*({.+?})\s*;?\s*\n',
-                r'__INITIAL_STATE__["\']\s*[,\]]\s*({.+?})\s*\)',
-            ]:
-                match2 = re.search(pat, html, re.DOTALL)
-                if match2:
-                    try:
-                        raw = match2.group(1).replace('undefined', 'null')
-                        state = json.loads(raw)
-                        # Navigate various possible structures (ImmoScout24 changes these frequently)
-                        items = (state.get('resultList', {}).get('search', {}).get('fullSearch', {}).get('result', {}).get('listings', []) or
-                                 state.get('resultList', {}).get('search', {}).get('items', []) or
-                                 state.get('pages', {}).get('searchResult', {}).get('listings', []) or
-                                 state.get('listings', []) or [])
+                    # Navigate various possible structures
+                    items = []
+                    # Try known paths (ImmoScout24 changes these)
+                    for path_fn in [
+                        lambda s: s.get('resultList', {}).get('search', {}).get('fullSearch', {}).get('result', {}).get('listings', []),
+                        lambda s: s.get('resultList', {}).get('search', {}).get('items', []),
+                        lambda s: s.get('pages', {}).get('searchResult', {}).get('listings', []),
+                        lambda s: s.get('listings', []),
+                        lambda s: s.get('searchResult', {}).get('listings', []),
+                        lambda s: s.get('search', {}).get('listings', []),
+                    ]:
+                        try:
+                            items = path_fn(state) or []
+                            if items:
+                                break
+                        except (AttributeError, TypeError):
+                            continue
+
+                    # Deep search: recursively find any list of dicts with 'id' and 'title'/'price'
+                    if not items:
+                        def _find_listings(obj, depth=0):
+                            if depth > 5:
+                                return []
+                            if isinstance(obj, list) and len(obj) > 2:
+                                if all(isinstance(i, dict) and ('id' in i or 'title' in i) for i in obj[:3]):
+                                    return obj
+                            if isinstance(obj, dict):
+                                for v in obj.values():
+                                    found = _find_listings(v, depth + 1)
+                                    if found:
+                                        return found
+                            return []
+                        items = _find_listings(state)
                         if items:
-                            found_structured = True
-                            log.info(f"[ImmoScout24] Page {page}: {len(items)} items via __INITIAL_STATE__")
-                            for item in items:
-                                lid = item.get('id', '')
-                                results.append(_make_property(
-                                    external_id=f"is24-{lid}", source='ImmoScout24',
-                                    source_url=f"https://www.immoscout24.ch/fr/d/{lid}",
-                                    title=item.get('title', ''), description='',
-                                    property_type=_guess_type(item.get('title', '')),
-                                    transaction=transaction,
-                                    price=_clean_price(item.get('price') or item.get('priceFormatted')),
-                                    rooms=_clean_rooms(str(item.get('numberOfRooms', '') or item.get('rooms', ''))),
-                                    surface=_clean_surface(str(item.get('surfaceLiving', '') or item.get('surface', ''))),
-                                    floor=None,
-                                    address=item.get('address', ''), city=city,
-                                    canton=canton,
-                                    postal_code=_extract_postal(item.get('address', '')),
-                                    latitude=None, longitude=None,
-                                    features=[], images=[], published_at=None,
-                                ))
-                    except Exception as e:
-                        log.error(f"[ImmoScout24] __INITIAL_STATE__ parse error: {e}")
-                    break
+                            log.info(f"[ImmoScout24] Found {len(items)} items via deep search")
+
+                    if items:
+                        found_structured = True
+                        log.info(f"[ImmoScout24] Page {page}: {len(items)} items via __INITIAL_STATE__")
+                        for item in items:
+                            listing = item.get('listing', item)
+                            lid = listing.get('id', item.get('id', ''))
+                            if not lid:
+                                continue
+
+                            # Price — check multiple known field names
+                            addr = listing.get('address', {}) or {}
+                            if isinstance(addr, str):
+                                addr = {'formatted': addr}
+                            chars = listing.get('characteristics', {}) or {}
+                            prices = listing.get('prices', {}) or {}
+                            if isinstance(prices, dict):
+                                price_val = (prices.get('rent', {}).get('gross') or
+                                            prices.get('buy', {}).get('price') or
+                                            prices.get('value'))
+                            else:
+                                price_val = prices
+                            if not price_val:
+                                price_val = listing.get('price') or listing.get('priceFormatted') or item.get('price')
+
+                            # Rooms & surface — safe conversion
+                            rooms_raw = chars.get('numberOfRooms') or listing.get('numberOfRooms') or item.get('rooms')
+                            surface_raw = chars.get('livingSpace') or chars.get('surfaceLiving') or listing.get('surfaceLiving') or item.get('surface')
+
+                            # Images
+                            img_list = []
+                            for img in (listing.get('images', []) or item.get('images', []) or []):
+                                if isinstance(img, dict):
+                                    img_list.append(img.get('url', img.get('src', '')))
+                                elif isinstance(img, str):
+                                    img_list.append(img)
+
+                            # Address
+                            addr_str = ''
+                            if isinstance(addr, dict):
+                                addr_str = f"{addr.get('street', '')} {addr.get('postalCode', '')} {addr.get('locality', '')}".strip()
+                                if not addr_str.strip():
+                                    addr_str = addr.get('formatted', '')
+
+                            results.append(_make_property(
+                                external_id=f"is24-{lid}", source='ImmoScout24',
+                                source_url=f"https://www.immoscout24.ch/fr/d/{lid}",
+                                title=listing.get('title', item.get('title', '')),
+                                description=listing.get('description', '')[:500],
+                                property_type=_guess_type(listing.get('propertyType', listing.get('title', ''))),
+                                transaction=transaction,
+                                price=_clean_price(price_val),
+                                rooms=_clean_rooms(str(rooms_raw)) if rooms_raw else None,
+                                surface=int(surface_raw) if surface_raw and str(surface_raw).replace('.','').isdigit() else _clean_surface(str(surface_raw or '')),
+                                floor=chars.get('floor') or listing.get('floor'),
+                                address=addr_str,
+                                city=(addr.get('locality') if isinstance(addr, dict) else None) or city,
+                                canton=(addr.get('region') if isinstance(addr, dict) else None) or canton,
+                                postal_code=str(addr.get('postalCode', '')) if isinstance(addr, dict) and addr.get('postalCode') else _extract_postal(addr_str),
+                                latitude=listing.get('latitude') or (addr.get('latitude') if isinstance(addr, dict) else None),
+                                longitude=listing.get('longitude') or (addr.get('longitude') if isinstance(addr, dict) else None),
+                                features=[], images=img_list[:5],
+                                published_at=listing.get('publishDate') or listing.get('created'),
+                            ))
+                    else:
+                        log.warning(f"[ImmoScout24] __INITIAL_STATE__ parsed but no listings found. Top keys: {list(state.keys())}")
+                except json.JSONDecodeError as e:
+                    log.error(f"[ImmoScout24] __INITIAL_STATE__ JSON error: {e}")
+                except Exception as e:
+                    log.error(f"[ImmoScout24] __INITIAL_STATE__ parse error: {e}")
+                break
 
         # Method 3: HTML card-based fallback with broad selectors
         if not found_structured:
