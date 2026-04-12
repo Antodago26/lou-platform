@@ -724,7 +724,7 @@ def get_properties():
             tx_filter += " AND p.transaction = %s"
             tx_params.append(user_transaction)
 
-        # Get properties with scores — order is safe (from whitelist above)
+        # Get ALL scored properties (no LIMIT) for cross-portal merging
         cur.execute(f"""
             SELECT p.*, sp.total_score, sp.grade, sp.distance_km,
                    sp.score_zone, sp.score_budget, sp.score_type,
@@ -734,27 +734,11 @@ def get_properties():
                    (SELECT json_agg(json_build_object('old_price', ph.old_price, 'new_price', ph.new_price, 'change_pct', ph.change_pct, 'detected_at', ph.detected_at) ORDER BY ph.detected_at DESC) FROM price_history ph WHERE ph.property_id = p.id) as price_changes
             FROM scored_properties sp
             JOIN properties p ON p.id = sp.property_id
-            WHERE sp.user_id = %s AND sp.total_score >= %s AND p.is_active = TRUE{tx_filter}
+            WHERE sp.user_id = %s AND sp.total_score >= %s AND p.is_active = TRUE
+                  AND p.price > 1000{tx_filter}
             ORDER BY {order}
-            LIMIT %s OFFSET %s
-        """, tx_params + [per_page, offset])
+        """, tx_params)
         properties = [dict(r) for r in cur.fetchall()]
-
-        # Get total count
-        count_params = [user_id, min_score]
-        count_tx_filter = ""
-        if active_profile_id:
-            count_tx_filter += " AND sp.profile_id = %s"
-            count_params.append(active_profile_id)
-        if user_transaction:
-            count_tx_filter += " AND p.transaction = %s"
-            count_params.append(user_transaction)
-        cur.execute(f"""
-            SELECT COUNT(*) as total FROM scored_properties sp
-            JOIN properties p ON p.id = sp.property_id
-            WHERE sp.user_id = %s AND sp.total_score >= %s AND p.is_active = TRUE{count_tx_filter}
-        """, count_params)
-        total = cur.fetchone()['total']
 
         # Format for frontend with cross-portal merging
         def _merge_key(p):
@@ -868,7 +852,10 @@ def get_properties():
                         'detected_at': latest['detected_at'].isoformat() if hasattr(latest['detected_at'], 'isoformat') else str(latest['detected_at'])
                     }
 
-        return jsonify({"properties": results, "total": total, "page": page, "per_page": per_page})
+        # Paginate AFTER merge (total is now the merged count)
+        total = len(results)
+        page_results = results[offset:offset + per_page]
+        return jsonify({"properties": page_results, "total": total, "page": page, "per_page": per_page})
     finally:
         cur.close()
         return_db(conn)
@@ -906,7 +893,7 @@ def get_stats():
                 COUNT(*) FILTER (WHERE p.first_seen_at > NOW() - INTERVAL '24 hours') as new_count,
                 (SELECT COUNT(*) FROM favorites WHERE user_id = %s) as favorites
             FROM scored_properties sp
-            JOIN properties p ON p.id = sp.property_id
+            JOIN properties p ON p.id = sp.property_id AND p.price > 1000
             WHERE sp.user_id = %s AND p.is_active = TRUE{tx_filter}
         """, [user_id, user_id] + extra_params)
         stats = dict(cur.fetchone())
