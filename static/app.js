@@ -63,6 +63,12 @@
     t = t.replace(/^[\d\s'',.\u2019]+[.\u2013\u2014\-]*(?:CHF|Fr\.?)?\s*/i, '').trim();
     // Remove leading postal codes "2034 "
     t = t.replace(/^\d{4}\s+/, '').trim();
+    // Remove "Travel time X min" residuals from Homegate
+    t = t.replace(/\bTravel time\s+\d+\s*min\b/gi, '').trim();
+    t = t.replace(/\btemps de trajet\s+\d+\s*min\b/gi, '').trim();
+    // Remove leading city name if it's the only content before description
+    // e.g. "Peseux " at start when followed by nothing useful
+    t = t.replace(/^[A-ZÀ-Ü][a-zà-ü\-]+\s*$/i, '').trim();
     // If result is empty or just punctuation, return empty
     if (/^[\s.\u2013\u2014\-]*$/.test(t)) return '';
     return t;
@@ -991,13 +997,20 @@
         if (p.rooms && p.rooms > 0) details.push(p.rooms + ' pcs');
         if (p.surface && p.surface > 0) details.push(p.surface + ' m²');
 
+        var cardTitle = cleanTitle(p.title);
+        // For map card: show city as main title, cleaned title as description
+        var mapMainTitle = p.city || 'Bien';
+        var mapDesc = cardTitle || '';
+        // Clean address too — remove "Travel time" residuals
+        var cleanAddr = (p.address || '').replace(/\bTravel time\s+\d+\s*min\b/gi, '').replace(/\btemps de trajet\s+\d+\s*min\b/gi, '').trim();
+
         html += '<div class="map-card" data-id="' + p.id + '" onclick="openPropertyDetail(' + p.id + ')">' +
           (img ? '<img class="map-card-img" src="' + escapeHtml(img) + '" onerror="this.style.display=\'none\'">' : '<div class="map-card-img-ph"></div>') +
           '<div class="map-card-info">' +
             '<div class="map-card-price">' + priceStr + '</div>' +
-            '<div class="map-card-title">' + escapeHtml(cleanTitle(p.title) || p.city || 'Bien') + '</div>' +
+            '<div class="map-card-title">' + escapeHtml(mapMainTitle) + '</div>' +
             '<div class="map-card-details">' + details.join(' · ') + '</div>' +
-            '<div class="map-card-addr">' + escapeHtml(p.address || p.city || '') + '</div>' +
+            (mapDesc ? '<div class="map-card-addr">' + escapeHtml(mapDesc) + '</div>' : (cleanAddr ? '<div class="map-card-addr">' + escapeHtml(cleanAddr) + '</div>' : '')) +
             '<div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:2px">' + (function() { var ss = p.all_sources || [{source: p.source||'', url: p.source_url||''}]; return ss.map(function(s) { var n = (s.source||'').split('.')[0]||'Source'; return '<span class="prop-source-link" data-src="' + escapeHtml(s.source||'') + '" style="font-size:9px;padding:1px 5px">' + escapeHtml(n) + '</span>'; }).join(''); })() + '</div>' +
           '</div>' +
           '<div class="map-card-score" style="background:' + gc + '">' + (p.score || 0) + '</div>' +
@@ -1798,8 +1811,8 @@
       '</div>' +
       '<div class="prop-card-body">' +
         '<div class="prop-price">' + priceText + '</div>' +
-        '<div class="prop-title">' + escapeHtml(cleanTitle(p.title) || p.address || p.city || 'Bien immobilier') + '</div>' +
-        '<div class="prop-address">' + escapeHtml(p.address || '') + '</div>' +
+        '<div class="prop-title">' + escapeHtml(cleanTitle(p.title) || p.city || 'Bien immobilier') + '</div>' +
+        '<div class="prop-address">' + escapeHtml((p.address || '').replace(/\bTravel time\s+\d+\s*min\b/gi, '').replace(/\btemps de trajet\s+\d+\s*min\b/gi, '').trim() || p.city || '') + '</div>' +
         '<div class="prop-details">' + details.join(' &middot; ') + '</div>' +
         '<div class="prop-scores-mini">' +
           (p.score_detail ? (
@@ -2010,8 +2023,8 @@
       '</div>' +
       '<div class="prop-card-body">' +
         '<div class="prop-price">' + priceText + '</div>' +
-        '<div class="prop-title">' + escapeHtml(cleanTitle(p.title) || p.address || p.city || 'Bien immobilier') + '</div>' +
-        '<div class="prop-address">' + escapeHtml(p.address || '') + '</div>' +
+        '<div class="prop-title">' + escapeHtml(cleanTitle(p.title) || p.city || 'Bien immobilier') + '</div>' +
+        '<div class="prop-address">' + escapeHtml((p.address || '').replace(/\bTravel time\s+\d+\s*min\b/gi, '').replace(/\btemps de trajet\s+\d+\s*min\b/gi, '').trim() || p.city || '') + '</div>' +
         '<div class="prop-details">' + details.join(' &middot; ') + '</div>' +
         noteSnippet +
         '<div class="fav-card-footer">' +

@@ -124,6 +124,9 @@ def _make_property(external_id, source, source_url, title, description,
     clean_title = re.sub(r'^[\d\s\'\',.]+[.\u2013\u2014\-]*(?:CHF|Fr\.?)?\s*', '', clean_title).strip() if re.match(r'^[\d\',.]+', clean_title) else clean_title
     # Remove postal codes at start of title (e.g., "2016 Cortaillod ...")
     clean_title = re.sub(r'^\d{4}\s+', '', clean_title).strip()
+    # Remove "Travel time X min" residuals from Homegate
+    clean_title = re.sub(r'\bTravel time\s+\d+\s*min\b', '', clean_title, flags=re.IGNORECASE).strip()
+    clean_title = re.sub(r'\btemps de trajet\s+\d+\s*min\b', '', clean_title, flags=re.IGNORECASE).strip()
     # Final cleanup: if title is now just dashes/dots/whitespace, clear it
     if clean_title and re.match(r'^[\s.\u2013\u2014\-]+$', clean_title):
         clean_title = ''
@@ -147,7 +150,7 @@ def _make_property(external_id, source, source_url, title, description,
         'rooms': rooms,
         'surface': surface,
         'floor': floor,
-        'address': address or '',
+        'address': re.sub(r'\bTravel time\s+\d+\s*min\b', '', address or '', flags=re.IGNORECASE).strip(),
         'city': city,
         'canton': canton or CITY_CANTONS.get((city or '').lower(), ''),
         'postal_code': postal_code,
