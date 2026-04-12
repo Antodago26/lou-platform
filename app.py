@@ -2065,7 +2065,9 @@ def api_cron_scrape():
             if zones:
                 for z in zones:
                     if isinstance(z, dict) and z.get('city'):
-                        scrape_targets.add((z['city'], tx))
+                        # Normalize: capitalize first letter of each word to avoid duplicates
+                        city_norm = z['city'].strip().title()
+                        scrape_targets.add((city_norm, tx))
         # Add all NE canton cities
         for tx in transactions_needed:
             for city in NE_CITIES:
