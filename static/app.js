@@ -1525,14 +1525,14 @@
         '</div>' +
         // Row 2: Transaction + Budget
         '<div class="pf-section"><div class="pf-section-title">💰 Transaction & Budget</div>' +
-          '<div class="pf-budget-row">' +
-            '<div class="pf-field pf-tx-field"><label>Transaction</label><select id="pf-transaction" onchange="_pfSetTx()">' +
+          '<div class="pf-budget-grid">' +
+            '<div class="pf-field"><label>Transaction</label><select id="pf-transaction" onchange="_pfSetTx()">' +
               '<option value="location"' + (p.transaction !== 'achat' ? ' selected' : '') + '>Location</option>' +
               '<option value="achat"' + (p.transaction === 'achat' ? ' selected' : '') + '>Achat</option>' +
             '</select></div>' +
-            '<div class="pf-field pf-flex1"><label>Budget min</label>' +
+            '<div class="pf-field"><label>Budget min</label>' +
               '<div class="pf-range"><input type="range" id="pf-budget-min" min="0" max="' + bMinMax + '" step="' + bStep + '" value="' + bMinVal + '" oninput="_pfUpdateBudget(\'pf-budget-min\')"><span id="pf-budget-min-label">' + _pfFormatCHF(bMinVal) + '</span></div></div>' +
-            '<div class="pf-field pf-flex1"><label>Budget max</label>' +
+            '<div class="pf-field"><label>Budget max</label>' +
               '<div class="pf-range"><input type="range" id="pf-budget-max" min="0" max="' + bMinMax + '" step="' + bStep + '" value="' + bMaxVal + '" oninput="_pfUpdateBudget(\'pf-budget-max\')"><span id="pf-budget-max-label">' + _pfFormatCHF(bMaxVal) + '</span></div></div>' +
           '</div>' +
         '</div>' +
@@ -2332,14 +2332,13 @@
       '.dash-profile-row{display:flex;align-items:center;justify-content:space-between;gap:12px}',
       '.dash-edit-btn{padding:8px 18px;background:#0369a1;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;white-space:nowrap;transition:background .2s}',
       '.dash-edit-btn:hover{background:#024e7a}',
-      '.profile-form{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:24px;margin-top:12px}',
+      '.profile-form{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:24px 24px 0;margin-top:12px;max-height:75vh;overflow-y:auto}',
       '.pf-row{display:flex;gap:20px;margin-bottom:0}',
       '.pf-flex1{flex:1;min-width:0}',
       '.pf-section{margin-bottom:18px}',
       '.pf-section-title{font-size:14px;font-weight:700;margin-bottom:10px;color:#0f172a}',
       '.pf-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}',
-      '.pf-budget-row{display:flex;gap:14px;align-items:flex-end}',
-      '.pf-tx-field{width:160px;flex-shrink:0}',
+      '.pf-budget-grid{display:grid;grid-template-columns:150px 1fr 1fr;gap:14px;align-items:end}',
       '.pf-field{display:flex;flex-direction:column;gap:6px}',
       '.pf-field label{font-size:12px;color:#64748b;font-weight:600}',
       '.pf-field input,.pf-field select{padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:inherit}',
@@ -2359,11 +2358,11 @@
       '.pf-zone-add input:focus{border-color:#0369a1;outline:none}',
       '.pf-zone-add select{padding:9px 8px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px}',
       '.pf-add-btn{padding:8px 14px;background:#0369a1;color:#fff;border:none;border-radius:8px;font-size:16px;cursor:pointer;font-weight:700}',
-      '.pf-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:8px;padding-top:16px;border-top:1px solid #e2e8f0}',
+      '.pf-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:8px;padding:16px 24px;border-top:1px solid #e2e8f0;position:sticky;bottom:0;background:#fff;border-radius:0 0 16px 16px;z-index:2}',
       '.pf-save-btn{padding:11px 24px;background:#0369a1;color:#fff;border:none;border-radius:10px;font-size:14px;cursor:pointer;font-weight:600;transition:all .2s}',
       '.pf-save-btn:hover{background:#024e7a;transform:translateY(-1px);box-shadow:0 4px 12px rgba(3,105,161,.3)}',
       '.pf-cancel-btn{padding:11px 24px;background:#f1f5f9;color:#64748b;border:none;border-radius:10px;font-size:14px;cursor:pointer}',
-      '@media(max-width:768px){.pf-grid{grid-template-columns:1fr}.pf-row{flex-direction:column}.pf-budget-row{flex-direction:column}.pf-tx-field{width:100%}.dash-profile-row{flex-direction:column;align-items:stretch}.pf-zone-add{flex-wrap:wrap}}',
+      '@media(max-width:768px){.pf-grid{grid-template-columns:1fr}.pf-budget-grid{grid-template-columns:1fr}.pf-row{flex-direction:column}.dash-profile-row{flex-direction:column;align-items:stretch}.pf-zone-add{flex-wrap:wrap}}',
 
       // Properties grid
       '.prop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:20px}',
