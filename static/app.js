@@ -324,14 +324,14 @@
     var features = ce('section', 'features');
     features.id = 'features';
     features.innerHTML =
-      '<div class="features-header"><h2>Pourquoi Bon Home ?</h2><p>Un assistant immobilier complet, de la recherche a la prise de contact.</p></div>' +
+      '<div class="features-header"><h2>Pourquoi Bon Home ?</h2><p>Un assistant immobilier complet, de la recherche à la prise de contact.</p></div>' +
       '<div class="features-grid">' +
         featureCard('<circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>', 'Scraping multi-portails', 'Bon Home scrute automatiquement Homegate, ImmoScout24, Flatfox, Immobilier.ch, Comparis et bien d\'autres pour ne rien manquer.') +
-        featureCard('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>', 'Scoring intelligent', 'Chaque annonce est notee de A a D selon vos criteres : zone, budget, type, surface, equipements, fraicheur.') +
-        featureCard('<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>', 'Chatbot IA', 'Discutez avec Lou pour definir vos criteres de recherche de maniere naturelle. Il comprend vos besoins et affine votre profil.') +
-        featureCard('<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>', 'Recherche par zone', 'Definissez une ou plusieurs zones geographiques avec un rayon en km. Lou calcule la distance GPS pour chaque bien.') +
-        featureCard('<path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/>', 'Alertes en temps reel', 'Soyez averti des qu\'un nouveau bien correspondant a vos criteres apparait sur le marche.') +
-        featureCard('<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="2" width="4" height="19" rx="1"/>', 'Dashboard complet', 'Visualisez tous vos resultats, filtrez par score, triez par prix ou date, et gardez vos favoris.') +
+        featureCard('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>', 'Scoring intelligent', 'Chaque annonce est notée de A à D selon vos critères : zone, budget, type, surface, équipements, fraîcheur.') +
+        featureCard('<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>', 'Chatbot IA', 'Discutez avec Lou pour définir vos critères de recherche de manière naturelle. Il comprend vos besoins et affine votre profil.') +
+        featureCard('<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>', 'Recherche par zone', 'Définissez une ou plusieurs zones géographiques avec un rayon en km. Lou calcule la distance GPS pour chaque bien.') +
+        featureCard('<path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/>', 'Alertes en temps réel', 'Soyez averti dès qu\'un nouveau bien correspondant à vos critères apparaît sur le marché.') +
+        featureCard('<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="2" width="4" height="19" rx="1"/>', 'Dashboard complet', 'Visualisez tous vos résultats, filtrez par score, triez par prix ou date, et gardez vos favoris.') +
       '</div>';
     document.body.appendChild(features);
 
@@ -342,9 +342,9 @@
       '<div class="how-inner">' +
         '<h2>Comment ca marche ?</h2>' +
         '<div class="steps">' +
-          '<div class="step"><div class="step-num">1</div><h3>Parlez a Lou</h3><p>Dites-lui ce que vous cherchez : region, budget, type de bien, nombre de pieces...</p></div>' +
+          '<div class="step"><div class="step-num">1</div><h3>Parlez à Lou</h3><p>Dites-lui ce que vous cherchez : région, budget, type de bien, nombre de pièces...</p></div>' +
           '<div class="step"><div class="step-num">2</div><h3>Lou chasse pour vous</h3><p>Notre moteur scrute 10+ portails immobiliers suisses en continu et collecte les nouvelles annonces.</p></div>' +
-          '<div class="step"><div class="step-num">3</div><h3>Scoring & analyse</h3><p>Chaque bien est note selon 6 criteres ponderes. Seuls les meilleurs vous sont presentes.</p></div>' +
+          '<div class="step"><div class="step-num">3</div><h3>Scoring & analyse</h3><p>Chaque bien est noté selon 6 critères pondérés. Seuls les meilleurs vous sont présentés.</p></div>' +
           '<div class="step"><div class="step-num">4</div><h3>Contactez & visitez</h3><p>Retrouvez les coordonnees du proprietaire, l\'annonce originale et tous les details en un clic.</p></div>' +
         '</div>' +
       '</div>';
@@ -583,7 +583,7 @@
       '<div class="dash-header">' +
         '<h1>Mon Dashboard</h1>' +
         '<div class="dash-actions">' +
-          '<button id="refresh-btn" class="dash-refresh-btn" title="Actualiser les resultats">&#8635; Actualiser</button>' +
+          '<button id="refresh-btn" class="dash-refresh-btn" title="Actualiser les résultats">&#8635; Actualiser</button>' +
           '<select id="sort-select" class="dash-select">' +
             '<option value="score">Meilleur score</option>' +
             '<option value="price_asc">Prix croissant</option>' +
@@ -610,7 +610,7 @@
       '<div class="score-legend" id="score-legend">' +
         '<button class="score-legend-toggle" id="score-legend-btn">&#9432; Comment fonctionne le score ?</button>' +
         '<div class="score-legend-body" id="score-legend-body" style="display:none">' +
-          '<p class="score-legend-intro">Chaque bien est note de 0 a 100 selon vos criteres :</p>' +
+          '<p class="score-legend-intro">Chaque bien est noté de 0 à 100 selon vos critères :</p>' +
           '<div class="score-legend-grades">' +
             '<span class="score-legend-badge" style="background:#059669">A <small>85-100</small></span>' +
             '<span class="score-legend-badge" style="background:#0369a1">B <small>70-84</small></span>' +
@@ -619,10 +619,10 @@
           '</div>' +
           '<div class="score-legend-criteria">' +
             '<div class="score-legend-item"><strong>Zone</strong> — Proximite de vos villes cibles</div>' +
-            '<div class="score-legend-item"><strong>Budget</strong> — Adequation avec votre fourchette de prix</div>' +
+            '<div class="score-legend-item"><strong>Budget</strong> — Adéquation avec votre fourchette de prix</div>' +
             '<div class="score-legend-item"><strong>Type</strong> — Correspondance au type de bien souhaite</div>' +
-            '<div class="score-legend-item"><strong>Surface</strong> — Surface et nombre de pieces</div>' +
-            '<div class="score-legend-item"><strong>Equipements</strong> — Balcon, parking, ascenseur, etc.</div>' +
+            '<div class="score-legend-item"><strong>Surface</strong> — Surface et nombre de pièces</div>' +
+            '<div class="score-legend-item"><strong>Équipements</strong> — Balcon, parking, ascenseur, etc.</div>' +
             '<div class="score-legend-item"><strong>Fraicheur</strong> — Annonce publiee recemment</div>' +
           '</div>' +
           '<p class="score-legend-tip">Cliquez sur le badge de score d\'une annonce pour voir le detail.</p>' +
@@ -935,7 +935,7 @@
       props.sort(function(a, b) { return (b.score || 0) - (a.score || 0); });
 
       if (props.length === 0) {
-        sidebar.innerHTML = '<div style="padding:20px;color:#64748b;text-align:center">Aucun bien a afficher</div>';
+        sidebar.innerHTML = '<div style="padding:20px;color:#64748b;text-align:center">Aucun bien à afficher</div>';
         return;
       }
 
@@ -948,7 +948,7 @@
         var img = (p.images && p.images.length > 0) ? p.images[0] : '';
         var details = [];
         if (p.rooms && p.rooms > 0) details.push(p.rooms + ' pcs');
-        if (p.surface && p.surface > 0) details.push(p.surface + ' m2');
+        if (p.surface && p.surface > 0) details.push(p.surface + ' m²');
 
         html += '<div class="map-card" data-id="' + p.id + '" onclick="openPropertyDetail(' + p.id + ')">' +
           (img ? '<img class="map-card-img" src="' + escapeHtml(img) + '" onerror="this.style.display=\'none\'">' : '<div class="map-card-img-ph"></div>') +
@@ -957,6 +957,7 @@
             '<div class="map-card-title">' + escapeHtml(p.title || p.city || 'Bien') + '</div>' +
             '<div class="map-card-details">' + details.join(' · ') + '</div>' +
             '<div class="map-card-addr">' + escapeHtml(p.address || p.city || '') + '</div>' +
+            '<div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:2px">' + (function() { var ss = p.all_sources || [{source: p.source||'', url: p.source_url||''}]; return ss.map(function(s) { var n = (s.source||'').split('.')[0]||'Source'; return '<span class="prop-source-link" data-src="' + escapeHtml(s.source||'') + '" style="font-size:9px;padding:1px 5px">' + escapeHtml(n) + '</span>'; }).join(''); })() + '</div>' +
           '</div>' +
           '<div class="map-card-score" style="background:' + gc + '">' + (p.score || 0) + '</div>' +
         '</div>';
@@ -1032,9 +1033,10 @@
           '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">' +
             '<span style="background:' + color + ';color:#fff;padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700">' + (p.grade || '?') + ' ' + (p.score || 0) + '/100</span>' +
             (p.rooms ? '<span style="font-size:12px;color:#64748b">' + p.rooms + ' pcs</span>' : '') +
-            (p.surface ? '<span style="font-size:12px;color:#64748b">' + p.surface + ' m2</span>' : '') +
+            (p.surface ? '<span style="font-size:12px;color:#64748b">' + p.surface + ' m²</span>' : '') +
           '</div>' +
-          '<a href="#" onclick="openPropertyDetail(' + p.id + ');return false;" style="color:#0369a1;font-size:13px;font-weight:600;text-decoration:none">Voir le detail →</a>' +
+          '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">' + (function() { var ss = p.all_sources || [{source: p.source||'', url: p.source_url||''}]; return ss.map(function(s) { var n = (s.source||'').split('.')[0]||'Source'; return '<span class="prop-source-link" data-src="' + escapeHtml(s.source||'') + '" style="font-size:10px;padding:2px 6px">' + escapeHtml(n) + '</span>'; }).join(''); })() + '</div>' +
+          '<a href="#" onclick="openPropertyDetail(' + p.id + ');return false;" style="color:#0369a1;font-size:13px;font-weight:600;text-decoration:none">Voir le détail →</a>' +
         '</div>';
 
         var marker = L.marker([lat, lng], { icon: icon }).bindPopup(popup, { maxWidth: 280 });
@@ -1123,7 +1125,7 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (!data.profile) {
-          $('profile-bar').innerHTML = '<div class="dash-profile-empty">Aucun profil de recherche. <a href="#" id="setup-profile">Parlez a Lou</a> pour configurer vos criteres.</div>';
+          $('profile-bar').innerHTML = '<div class="dash-profile-empty">Aucun profil de recherche. <a href="#" id="setup-profile">Parlez à Lou</a> pour configurer vos critères.</div>';
           var link = $('setup-profile');
           if (link) link.onclick = function (e) {
             e.preventDefault();
@@ -1137,7 +1139,7 @@
         if (p.transaction) tags.push(p.transaction === 'location' ? 'Location' : 'Achat');
         if (p.property_types && p.property_types.length) tags.push(p.property_types.join(', '));
         if (p.budget_max) tags.push('Max ' + formatPrice(p.budget_max) + ' CHF');
-        if (p.rooms_min) tags.push(p.rooms_min + '+ pieces');
+        if (p.rooms_min) tags.push(p.rooms_min + '+ pièces');
         if (p.surface_min) tags.push(p.surface_min + '+ m2');
 
         var zones = (p.zones || []).filter(function (z) { return z && z.city; });
@@ -1191,11 +1193,28 @@
   };
   window._pfToggleChip = function (el) { el.classList.toggle('on'); };
   window._pfUpdateBudget = function (id) {
+    var bmin = $('pf-budget-min'), bmax = $('pf-budget-max');
+    if (bmin && bmax) {
+      var minV = parseInt(bmin.value), maxV = parseInt(bmax.value);
+      if (id === 'pf-budget-min' && minV > maxV) { bmax.value = minV; $('pf-budget-max-label').textContent = _pfFormatCHF(minV); }
+      if (id === 'pf-budget-max' && maxV < minV) { bmin.value = maxV; $('pf-budget-min-label').textContent = _pfFormatCHF(maxV); }
+    }
     var val = parseInt($(id).value);
     $(id + '-label').textContent = _pfFormatCHF(val);
   };
   window._pfUpdateRange = function (el) {
     el.nextElementSibling.textContent = el.value + (el.dataset.unit || '');
+    // Enforce min <= max for paired sliders
+    var pairs = [['pf-rooms-min','pf-rooms-max'],['pf-surface-min','pf-surface-max']];
+    pairs.forEach(function(pair) {
+      if (el.id === pair[0] || el.id === pair[1]) {
+        var lo = $(pair[0]), hi = $(pair[1]);
+        if (lo && hi) {
+          if (el.id === pair[0] && parseFloat(lo.value) > parseFloat(hi.value)) { hi.value = lo.value; hi.nextElementSibling.textContent = hi.value + (hi.dataset.unit || ''); }
+          if (el.id === pair[1] && parseFloat(hi.value) < parseFloat(lo.value)) { lo.value = hi.value; lo.nextElementSibling.textContent = lo.value + (lo.dataset.unit || ''); }
+        }
+      }
+    });
   };
   window._pfSetTx = function () {
     var tx = $('pf-transaction').value;
@@ -1395,7 +1414,7 @@
     // Features
     var featHtml = '';
     if (p.features && p.features.length > 0) {
-      featHtml = '<div class="detail-section"><h3>Equipements</h3><div class="detail-features">' +
+      featHtml = '<div class="detail-section"><h3>Équipements</h3><div class="detail-features">' +
         p.features.map(function(f) { return '<span class="detail-feat">✓ ' + escapeHtml(f) + '</span>'; }).join('') +
       '</div></div>';
     }
@@ -1411,7 +1430,7 @@
           '<div class="detail-price">' + priceHtml + '</div>' +
           '<h2 class="detail-title">' + escapeHtml(p.title || 'Bien immobilier') + '</h2>' +
           '<div class="detail-address">📍 ' + escapeHtml(p.address || '') + '</div>' +
-          '<div class="detail-section"><h3>Caracteristiques</h3><div class="detail-table">' + tableHtml + '</div></div>' +
+          '<div class="detail-section"><h3>Caractéristiques</h3><div class="detail-table">' + tableHtml + '</div></div>' +
           (p.description ? '<div class="detail-section"><h3>Description</h3><p class="detail-description">' + escapeHtml(p.description) + '</p></div>' : '') +
           scoreHtml +
           featHtml +
@@ -1457,7 +1476,7 @@
     }).join('');
 
     var prios = ['vue','balcon','calme','parking','transports','ecoles','commerces','animaux','cave','jardin','ascenseur','renove','minergie','meuble','buanderie'];
-    var prioLabels = {'vue':'Vue degagee','balcon':'Balcon/terrasse','calme':'Calme','parking':'Parking','transports':'Proche transports','ecoles':'Proche ecoles','commerces':'Proche commerces','animaux':'Animaux acceptes','cave':'Cave','jardin':'Jardin','ascenseur':'Ascenseur','renove':'Renove','minergie':'Minergie','meuble':'Meuble','buanderie':'Buanderie'};
+    var prioLabels = {'vue':'Vue dégagée','balcon':'Balcon/terrasse','calme':'Calme','parking':'Parking','transports':'Proche transports','ecoles':'Proche écoles','commerces':'Proche commerces','animaux':'Animaux acceptés','cave':'Cave','jardin':'Jardin','ascenseur':'Ascenseur','renove':'Rénové','minergie':'Minergie','meuble':'Meublé','buanderie':'Buanderie'};
     var pPrios = p.priorities || [];
     var prioChips = prios.map(function (pr) {
       return '<span class="pf-chip' + (pPrios.indexOf(pr) > -1 ? ' on' : '') + '" data-v="' + pr + '" onclick="_pfToggleChip(this)">' + escapeHtml(prioLabels[pr] || pr) + '</span>';
@@ -1476,7 +1495,7 @@
     formWrap.innerHTML =
       '<div class="profile-form">' +
         // Zones
-        '<div class="pf-section"><div class="pf-section-title">📍 Zones geographiques</div>' +
+        '<div class="pf-section"><div class="pf-section-title">📍 Zones géographiques</div>' +
           '<div id="pf-zone-list" class="pf-zone-list"></div>' +
           '<div class="pf-zone-add">' +
             '<input id="pf-new-city" type="text" placeholder="Ajouter une ville..." style="flex:1">' +
@@ -1502,16 +1521,16 @@
           '</div>' +
         '</div>' +
         // Caracteristiques
-        '<div class="pf-section"><div class="pf-section-title">📐 Caracteristiques</div>' +
+        '<div class="pf-section"><div class="pf-section-title">📐 Caractéristiques</div>' +
           '<div class="pf-grid">' +
-            '<div class="pf-field"><label>Pieces min</label><div class="pf-range"><input type="range" id="pf-rooms-min" min="1" max="10" step="0.5" value="' + rMinVal + '" data-unit=" pcs" oninput="_pfUpdateRange(this)"><span>' + rMinVal + ' pcs</span></div></div>' +
-            '<div class="pf-field"><label>Pieces max</label><div class="pf-range"><input type="range" id="pf-rooms-max" min="1" max="10" step="0.5" value="' + rMaxVal + '" data-unit=" pcs" oninput="_pfUpdateRange(this)"><span>' + rMaxVal + ' pcs</span></div></div>' +
+            '<div class="pf-field"><label>Pièces min</label><div class="pf-range"><input type="range" id="pf-rooms-min" min="1" max="10" step="0.5" value="' + rMinVal + '" data-unit=" pcs" oninput="_pfUpdateRange(this)"><span>' + rMinVal + ' pcs</span></div></div>' +
+            '<div class="pf-field"><label>Pièces max</label><div class="pf-range"><input type="range" id="pf-rooms-max" min="1" max="10" step="0.5" value="' + rMaxVal + '" data-unit=" pcs" oninput="_pfUpdateRange(this)"><span>' + rMaxVal + ' pcs</span></div></div>' +
             '<div class="pf-field"><label>Surface min (m²)</label><div class="pf-range"><input type="range" id="pf-surface-min" min="20" max="300" step="5" value="' + sMinVal + '" data-unit=" m²" oninput="_pfUpdateRange(this)"><span>' + sMinVal + ' m²</span></div></div>' +
             '<div class="pf-field"><label>Surface max (m²)</label><div class="pf-range"><input type="range" id="pf-surface-max" min="20" max="500" step="5" value="' + sMaxVal + '" data-unit=" m²" oninput="_pfUpdateRange(this)"><span>' + sMaxVal + ' m²</span></div></div>' +
           '</div>' +
         '</div>' +
         // Priorites
-        '<div class="pf-section"><div class="pf-section-title">⭐ Priorites & Equipements</div>' +
+        '<div class="pf-section"><div class="pf-section-title">⭐ Priorités & Équipements</div>' +
           '<div class="pf-chips" id="pf-priorities">' + prioChips + '</div>' +
         '</div>' +
         // Actions
@@ -1603,9 +1622,9 @@
       .then(function (data) {
         if (!data.properties || data.properties.length === 0) {
           list.innerHTML = '<div class="dash-empty">' +
-            '<h3 style="margin-bottom:8px;font-family:Playfair Display,serif">Pas encore de resultats</h3>' +
-            '<p>Lou est en train de chasser pour vous ! Les premiers biens apparaitront apres le prochain cycle de recherche (toutes les 2 heures).</p>' +
-            '<p style="margin-top:12px">En attendant, <a href="#" class="open-chat-link" style="color:#0369a1;cursor:pointer">parlez a Lou</a> pour affiner vos criteres.</p>' +
+            '<h3 style="margin-bottom:8px;font-family:Playfair Display,serif">Pas encore de résultats</h3>' +
+            '<p>Lou est en train de chasser pour vous ! Les premiers biens apparaîtront après le prochain cycle de recherche (toutes les 2 heures).</p>' +
+            '<p style="margin-top:12px">En attendant, <a href="#" class="open-chat-link" style="color:#0369a1;cursor:pointer">parlez à Lou</a> pour affiner vos critères.</p>' +
           '</div>';
           var chatLink = list.querySelector('.open-chat-link');
           if (chatLink) chatLink.onclick = function(e) { e.preventDefault(); document.querySelector('.chat-toggle').click(); };
@@ -2154,7 +2173,7 @@
           // Handle profile_ready — prompt signup if not logged in
           if (data.profile_ready && !isJWT(TOKEN)) {
             body.insertAdjacentHTML('beforeend', '<div class="chat-msg bot" style="background:#e0f2fe">' +
-              'Super, j\'ai tous tes criteres ! ' +
+              'Super, j\'ai tous tes critères ! ' +
               '<a href="#" class="chat-signup-link" style="color:#0369a1;font-weight:600">Cree ton espace</a> pour que je lance la recherche.' +
             '</div>');
             var signupLink = body.querySelector('.chat-signup-link');

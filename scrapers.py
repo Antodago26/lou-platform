@@ -200,6 +200,19 @@ def _extract_postal(address):
     return m.group(1) if m else None
 
 
+def _is_numeric(val):
+    """Check if a value can be safely converted to float."""
+    if isinstance(val, (int, float)):
+        return True
+    if isinstance(val, str):
+        try:
+            float(val)
+            return True
+        except (ValueError, TypeError):
+            return False
+    return False
+
+
 def _clean_price(val):
     if val is None:
         return None
@@ -249,8 +262,23 @@ def _clean_rooms(text):
 def _clean_surface(text):
     if not text:
         return None
-    nums = re.findall(r'(\d+)\s*m', str(text))
-    return int(nums[0]) if nums else None
+    s = str(text)
+    # Try explicit m²/m2 pattern first
+    m2 = re.search(r'(\d+)\s*m[²2\u00B2]', s)
+    if m2:
+        return int(m2.group(1))
+    # Try "XX m" (space before m)
+    m = re.search(r'(\d+)\s*m\b', s)
+    if m:
+        return int(m.group(1))
+    # Pure numeric string (e.g. "85" or "85.0" from structured data)
+    try:
+        val = int(float(s))
+        if 5 <= val <= 5000:  # Reasonable surface range
+            return val
+    except (ValueError, TypeError):
+        pass
+    return None
 
 
 # ============================================================
@@ -261,10 +289,10 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=2):
     log.info(f"[Homegate] Searching {city} ({transaction})")
     results = []
     tx = "rent" if transaction == "location" else "buy"
-    slug = city.lower().replace(' ', '-').replace('â', 'a').replace('é', 'e').replace('è', 'e')
+    slug = _normalize_city(city).replace(' ', '-')
     # Add canton suffix for ambiguous city names (e.g., colombier-ne, hauterive-ne)
     canton = CITY_CANTONS.get(city.lower(), '')
-    if canton and slug in ('colombier', 'hauterive', 'saint-blaise', 'corcelles-cormondrèche', 'corcelles-cormondr'):
+    if canton and slug in ('colombier', 'hauterive', 'saint-blaise', 'corcelles-cormondrèche', 'corcelles-cormondr', 'corcelles-cormondrche'):
         slug = f"{slug}-{canton.lower()}"
 
     for page in range(1, max_pages + 1):
@@ -389,12 +417,7 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
     log.info(f"[ImmoScout24] Searching {city} ({transaction})")
     results = []
     tx = "louer" if transaction == "location" else "acheter"
-    slug = city.lower().replace(' ', '-')
-    # Normalize accents for URL slug
-    for a, b in [('â', 'a'), ('é', 'e'), ('è', 'e'), ('ê', 'e'), ('ë', 'e'),
-                 ('ô', 'o'), ('î', 'i'), ('ï', 'i'), ('ü', 'u'), ('ù', 'u'), ('û', 'u'),
-                 ('ä', 'a'), ('ö', 'o'), ('ç', 'c')]:
-        slug = slug.replace(a, b)
+    slug = _normalize_city(city).replace(' ', '-')
     canton = CITY_CANTONS.get(city.lower(), '')
     # Add canton suffix for disambiguation (e.g., colombier-ne)
     if canton and slug in ('colombier', 'hauterive', 'saint-blaise'):
@@ -414,7 +437,10 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
         # Strategy: find the assignment, then extract JSON by brace-counting (regex is fragile)
         is_match = re.search(r'window\.__INITIAL_STATE__\s*=\s*', html)
         if is_match and not found_structured:
-            json_start = html.index('{', is_match.end() - 1) if '{' in html[is_match.end()-1:is_match.end()+5] else -1
+            try:
+                json_start = html.index('{', max(0, is_match.end() - 1))
+            except ValueError:
+                json_start = -1
             raw = ''
             if json_start >= 0:
                 # Brace-counting to find matching closing brace
@@ -442,7 +468,8 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
                                 break
             if raw:
                 try:
-                    raw = raw.replace('undefined', 'null')
+                    # Replace JS 'undefined' only outside of quoted strings
+                    raw = re.sub(r'(?<!["\w])undefined(?!["\w])', 'null', raw)
                     state = json.loads(raw)
                     # Log top-level keys for debugging structure changes
                     log.info(f"[ImmoScout24] __INITIAL_STATE__ keys: {list(state.keys())[:10]}")
@@ -538,7 +565,7 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
                                 transaction=transaction,
                                 price=_clean_price(price_val),
                                 rooms=_clean_rooms(str(rooms_raw)) if rooms_raw else None,
-                                surface=int(float(surface_raw)) if surface_raw and isinstance(surface_raw, (int, float)) else _clean_surface(str(surface_raw or '')),
+                                surface=int(float(surface_raw)) if surface_raw and _is_numeric(surface_raw) else _clean_surface(str(surface_raw or '')),
                                 floor=chars.get('floor') or listing.get('floor'),
                                 address=addr_str,
                                 city=(addr.get('locality') if isinstance(addr, dict) else None) or city,
@@ -667,7 +694,7 @@ def scrape_immobilier_ch(city="Lausanne", transaction="location", max_pages=2):
     log.info(f"[Immobilier.ch] Searching {city} ({transaction})")
     results = []
     tx = "louer" if transaction == "location" else "acheter"
-    slug = city.lower().replace(' ', '-').replace('â', 'a').replace('é', 'e')
+    slug = _normalize_city(city).replace(' ', '-')
     canton = CITY_CANTONS.get(city.lower(), '')
 
     for page in range(1, max_pages + 1):
@@ -677,8 +704,9 @@ def scrape_immobilier_ch(city="Lausanne", transaction="location", max_pages=2):
             f"https://www.immobilier.ch/fr/carte/{tx}/appartement-et-maison/{slug}?page={page}",
         ]
         html = ''
-        for url in urls:
-            status, html = _sb_get(url, render_js=True)
+        status = 0
+        for try_url in urls:
+            status, html = _sb_get(try_url, render_js=True)
             if status == 200 and len(html) > 5000:
                 break
 
@@ -702,14 +730,14 @@ def scrape_immobilier_ch(city="Lausanne", transaction="location", max_pages=2):
                     if obj.get('@type') not in ('Residence', 'Apartment', 'House', 'RealEstateListing', None):
                         continue
                     name = obj.get('name', '')
-                    url = obj.get('url', '')
-                    if url and url.startswith('/'):
-                        url = 'https://www.immobilier.ch' + url
+                    obj_url = obj.get('url', '')
+                    if obj_url and obj_url.startswith('/'):
+                        obj_url = 'https://www.immobilier.ch' + obj_url
                     price_spec = obj.get('offers', {}).get('price') or obj.get('price')
-                    eid_m = re.search(r'[-/](\d{5,})', url)
+                    eid_m = re.search(r'[-/](\d{5,})', obj_url)
                     results.append(_make_property(
-                        external_id=f"imch-{eid_m.group(1) if eid_m else hashlib.sha256(url.encode()).hexdigest()[:12]}",
-                        source='Immobilier.ch', source_url=url,
+                        external_id=f"imch-{eid_m.group(1) if eid_m else hashlib.sha256(obj_url.encode()).hexdigest()[:12]}",
+                        source='Immobilier.ch', source_url=obj_url,
                         title=name, description=obj.get('description', '')[:500],
                         property_type=_guess_type(name), transaction=transaction,
                         price=_clean_price(price_spec),
@@ -832,7 +860,7 @@ def scrape_immobilier_ch(city="Lausanne", transaction="location", max_pages=2):
 def scrape_anibis(city="Lausanne", transaction="location", max_pages=2):
     log.info(f"[Anibis] Searching {city} ({transaction})")
     results = []
-    slug = city.lower().replace(' ', '-').replace('â', 'a').replace('é', 'e').replace('è', 'e')
+    slug = _normalize_city(city).replace(' ', '-')
 
     for page in range(1, max_pages + 1):
         # Try multiple URL patterns (Anibis changed their URL format)
@@ -962,6 +990,18 @@ def scrape_anibis(city="Lausanne", transaction="location", max_pages=2):
 
                 eid = re.search(r'/(\d+)', href)
 
+                # Images
+                images = []
+                for img_el in card.select('img[src], img[data-src]'):
+                    src = img_el.get('src', '') or img_el.get('data-src', '')
+                    if src and src.startswith('http') and 'logo' not in src.lower() and 'icon' not in src.lower() and 'pixel' not in src.lower():
+                        images.append(src)
+                for styled in card.select('[style*="background"]'):
+                    bg_match = re.search(r'url\(["\']?(https?://[^"\')\s]+)', styled.get('style', ''))
+                    if bg_match:
+                        images.append(bg_match.group(1))
+                images = list(dict.fromkeys(images))[:5]
+
                 if title or price:
                     existing_urls.add(href)
                     results.append(_make_property(
@@ -975,7 +1015,7 @@ def scrape_anibis(city="Lausanne", transaction="location", max_pages=2):
                         canton=CITY_CANTONS.get(city.lower(), ''),
                         postal_code=_extract_postal(address or card_text),
                         latitude=None, longitude=None,
-                        features=[], images=[], published_at=None,
+                        features=[], images=images, published_at=None,
                     ))
             except Exception as e:
                 log.debug(f"[Anibis] Card parse error: {e}")
@@ -994,19 +1034,17 @@ def scrape_anibis(city="Lausanne", transaction="location", max_pages=2):
 def scrape_acheter_louer(city="Lausanne", transaction="location", max_pages=2):
     log.info(f"[Acheter-Louer] Searching {city} ({transaction})")
     results = []
-    slug = city.lower().replace(' ', '-').replace('â', 'a').replace('é', 'e').replace('è', 'e')
+    slug = _normalize_city(city).replace(' ', '-')
 
     if transaction == 'achat':
         url_patterns = [
             f"https://www.acheter-louer.ch/fr/achat-immobilier/{slug}",
             f"https://www.acheter-louer.ch/acheter/{slug}-appartements-a-vendre.html",
-            f"https://www.acheter-louer.ch/acheter/{slug.upper()}-appartements-a-vendre.html",
         ]
     else:
         url_patterns = [
             f"https://www.acheter-louer.ch/fr/location-immobilier/{slug}",
             f"https://www.acheter-louer.ch/louer/{slug}-appartements-a-louer.html",
-            f"https://www.acheter-louer.ch/louer/{slug.upper()}-appartements-a-louer.html",
         ]
 
     for page in range(1, max_pages + 1):
@@ -1117,6 +1155,18 @@ def scrape_acheter_louer(city="Lausanne", transaction="location", max_pages=2):
                 addr_el = card.select_one('[class*="location"], [class*="address"], [class*="Location"]')
                 address = addr_el.get_text(strip=True) if addr_el else ''
 
+                # Images
+                images = []
+                for img_el in card.select('img[src], img[data-src]'):
+                    src = img_el.get('src', '') or img_el.get('data-src', '')
+                    if src and src.startswith('http') and 'logo' not in src.lower() and 'icon' not in src.lower() and 'pixel' not in src.lower():
+                        images.append(src)
+                for styled in card.select('[style*="background"]'):
+                    bg_match = re.search(r'url\(["\']?(https?://[^"\')\s]+)', styled.get('style', ''))
+                    if bg_match:
+                        images.append(bg_match.group(1))
+                images = list(dict.fromkeys(images))[:5]
+
                 if title or price:
                     existing_urls.add(href)
                     results.append(_make_property(
@@ -1130,7 +1180,7 @@ def scrape_acheter_louer(city="Lausanne", transaction="location", max_pages=2):
                         canton=CITY_CANTONS.get(city.lower(), ''),
                         postal_code=_extract_postal(address or card_text),
                         latitude=None, longitude=None,
-                        features=[], images=[], published_at=None,
+                        features=[], images=images, published_at=None,
                     ))
             except Exception as e:
                 log.debug(f"[Acheter-Louer] Card parse error: {e}")
@@ -1259,16 +1309,18 @@ def scrape_flatfox(city="Lausanne", transaction="location", limit=50):
 # COMPARIS — via ScrapingBee
 # ============================================================
 
-def scrape_comparis(city="Lausanne", transaction="location", max_pages=1):
+def scrape_comparis(city="Lausanne", transaction="location", max_pages=2):
     log.info(f"[Comparis] Searching {city} ({transaction})")
     results = []
     canton = CITY_CANTONS.get(city.lower(), '')
     deal_type = 10 if transaction == 'location' else 20
 
-    url = f"https://www.comparis.ch/immobilien/result/list?requestobject=%7B%22DealType%22%3A{deal_type}%2C%22Keyword%22%3A%22{quote(city)}%22%2C%22Sort%22%3A4%2C%22Page%22%3A1%7D"
-    status, html = _sb_get(url, render_js=True)
+    for page in range(1, max_pages + 1):
+        url = f"https://www.comparis.ch/immobilien/result/list?requestobject=%7B%22DealType%22%3A{deal_type}%2C%22Keyword%22%3A%22{quote(city)}%22%2C%22Sort%22%3A4%2C%22Page%22%3A{page}%7D"
+        status, html = _sb_get(url, render_js=True)
 
-    if status == 200:
+        if status != 200:
+            break
         found = False
 
         # Method 1: Try __NEXT_DATA__
@@ -1284,10 +1336,29 @@ def scrape_comparis(city="Lausanne", transaction="location", max_pages=1):
                     log.info(f"[Comparis] {len(items)} items via __NEXT_DATA__")
                     for item in items:
                         lid = item.get('id', '')
+                        # Extract images from __NEXT_DATA__
+                        img_list = []
+                        for img in (item.get('images', []) or item.get('pictures', []) or []):
+                            if isinstance(img, dict):
+                                img_list.append(img.get('url', img.get('src', '')))
+                            elif isinstance(img, str):
+                                img_list.append(img)
+                        if not img_list and item.get('imageUrl'):
+                            img_list.append(item['imageUrl'])
+                        if not img_list and item.get('image'):
+                            img_list.append(item['image'])
+                        img_list = [u for u in img_list if u][:5]
+
+                        item_url = item.get('url', '')
+                        if item_url and item_url.startswith('/'):
+                            item_url = 'https://www.comparis.ch' + item_url
+                        if not item_url:
+                            item_url = f"https://www.comparis.ch/immobilien/detail/{lid}"
+
                         results.append(_make_property(
                             external_id=f"comp-{lid}",
                             source='Comparis',
-                            source_url=item.get('url', f"https://www.comparis.ch/immobilien/detail/{lid}"),
+                            source_url=item_url,
                             title=item.get('title', ''), description='',
                             property_type=_guess_type(item.get('title', '')),
                             transaction=transaction,
@@ -1298,7 +1369,7 @@ def scrape_comparis(city="Lausanne", transaction="location", max_pages=1):
                             address=item.get('address', ''), city=city, canton=canton,
                             postal_code=_extract_postal(item.get('address', '')),
                             latitude=None, longitude=None,
-                            features=[], images=[], published_at=None,
+                            features=[], images=img_list, published_at=None,
                         ))
             except Exception as e:
                 log.error(f"[Comparis] __NEXT_DATA__ parse error: {e}")
@@ -1343,6 +1414,14 @@ def scrape_comparis(city="Lausanne", transaction="location", max_pages=1):
                     if href.startswith('/'):
                         href = 'https://www.comparis.ch' + href
 
+                    # Images
+                    images = []
+                    for img_el in card.select('img[src], img[data-src]'):
+                        src = img_el.get('src', '') or img_el.get('data-src', '')
+                        if src and src.startswith('http') and 'logo' not in src.lower() and 'icon' not in src.lower():
+                            images.append(src)
+                    images = list(dict.fromkeys(images))[:5]
+
                     if title or price:
                         results.append(_make_property(
                             external_id=f"comp-{hashlib.sha256((title+address+str(price)).encode()).hexdigest()[:12]}",
@@ -1354,10 +1433,12 @@ def scrape_comparis(city="Lausanne", transaction="location", max_pages=1):
                             address=address, city=city, canton=canton,
                             postal_code=_extract_postal(address),
                             latitude=None, longitude=None,
-                            features=[], images=[], published_at=None,
+                            features=[], images=images, published_at=None,
                         ))
                 except Exception:
                     pass
+
+        time.sleep(1)
 
     log.info(f"[Comparis] Total: {len(results)} listings")
     return results
@@ -1374,10 +1455,16 @@ def scrape_properstar(city="Lausanne", transaction="location", max_pages=1):
     slug = _normalize_city(city).replace(' ', '-')
 
     tx_fr = "louer" if transaction == "location" else "acheter"
-    url = f"https://www.properstar.ch/suisse/{slug}/{tx_fr}/appartement"
-    status, html = _sb_get(url, render_js=True)
 
-    if status == 200:
+    # Scrape both apartments and houses
+    all_html = []
+    for prop_type in ['appartement', 'maison']:
+        url = f"https://www.properstar.ch/suisse/{slug}/{tx_fr}/{prop_type}"
+        status, html = _sb_get(url, render_js=True)
+        if status == 200 and len(html) > 2000:
+            all_html.append(html)
+
+    for html in all_html:
         soup = BeautifulSoup(html, 'html.parser')
         cards = soup.select('.listing-card, .property-card, article, [class*="listing"]')
         log.info(f"[Properstar] {len(cards)} cards found")
