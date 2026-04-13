@@ -1424,13 +1424,35 @@
     var gradeColors = { A: '#059669', B: '#0369a1', C: '#d97706', D: '#dc2626' };
     var gc = gradeColors[p.grade] || '#94a3b8';
 
-    // Images gallery
+    // Images gallery — upgrade thumbnails to HD for detail view
+    function _hdImg(url) {
+      if (!url) return url;
+      // Homegate/Cloudinary: upgrade width from thumbnail to HD
+      // e.g. /t_fill,f_auto,q_auto,w_200/ → /t_fill,f_auto,q_auto,w_1200/
+      url = url.replace(/\/t_[^/]*w_\d+[^/]*\//g, function(match) {
+        return match.replace(/w_\d+/, 'w_1200');
+      });
+      // Also handle h_ parameter: /c_fill,f_auto,h_150,... → h_800
+      url = url.replace(/h_\d+/g, 'h_800');
+      // Generic Cloudinary transforms: /w_XXX,h_YYY/ or /w_XXX/
+      url = url.replace(/\/w_\d+(,h_\d+)?\//g, '/w_1200/');
+      // Properstar: ?width=300&height=255 → ?width=1200&height=800
+      url = url.replace(/width=\d+/g, 'width=1200').replace(/height=\d+/g, 'height=800');
+      // Immobilier.ch: /NewThumbnail/ → /Original/ or /Big/
+      url = url.replace(/\/NewThumbnail\//g, '/Big/');
+      // Flatfox: add ?w=1200 if no size params
+      if (url.includes('flatfox') && !url.includes('w=')) {
+        url += (url.includes('?') ? '&' : '?') + 'w=1200';
+      }
+      return url;
+    }
+
     var galleryHtml = '';
     if (p.images && p.images.length > 0) {
       var gid = 'detail-gallery';
       galleryHtml = '<div class="detail-gallery" id="' + gid + '">';
       for (var i = 0; i < p.images.length; i++) {
-        galleryHtml += '<img src="' + escapeHtml(p.images[i]) + '" class="detail-img' + (i === 0 ? ' active' : '') + '" data-idx="' + i + '" onerror="this.style.display=\'none\'">';
+        galleryHtml += '<img src="' + escapeHtml(_hdImg(p.images[i])) + '" class="detail-img' + (i === 0 ? ' active' : '') + '" data-idx="' + i + '" onerror="this.src=\'' + escapeHtml(p.images[i]) + '\'">';
       }
       if (p.images.length > 1) {
         galleryHtml += '<button class="carousel-btn prev" onclick="event.stopPropagation();carouselNav(\'' + gid + '\',-1)">&#8249;</button>';
@@ -1507,8 +1529,8 @@
         galleryHtml +
         '<div class="detail-body">' +
           '<div class="detail-price">' + priceHtml + '</div>' +
-          '<h2 class="detail-title">' + escapeHtml(cleanTitle(p.title) || p.address || p.city || 'Bien immobilier') + '</h2>' +
-          '<div class="detail-address">📍 ' + escapeHtml(p.address || '') + '</div>' +
+          '<h2 class="detail-title">' + escapeHtml(cleanTitle(p.title) || p.city || 'Bien immobilier') + '</h2>' +
+          '<div class="detail-address">📍 ' + escapeHtml((p.address || '').replace(/\bTravel time\s+\d+\s*min\b/gi, '').replace(/^\d{4}\s+/, '').trim() || p.city || '') + '</div>' +
           '<div class="detail-section"><h3>Caractéristiques</h3><div class="detail-table">' + tableHtml + '</div></div>' +
           (p.description ? '<div class="detail-section"><h3>Description</h3><p class="detail-description">' + escapeHtml(p.description) + '</p></div>' : '') +
           scoreHtml +
