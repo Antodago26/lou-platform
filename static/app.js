@@ -56,6 +56,21 @@
     return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
+  // SVG icon helper — clean inline icons to replace emojis
+  var ICO = {
+    pin: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+    home: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>',
+    money: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+    ruler: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><path d="M1 3h6l2 2-7 7-2-2V4a1 1 0 0 1 1-1z"/><path d="M14 3h6a1 1 0 0 1 1 1v6l-2 2-7-7 2-2z"/><path d="M3 14l7 7 2-2-7-7-2 2z"/><path d="M14 21l7-7-2-2-7 7 2 2z"/></svg>',
+    star: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
+    search: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+    user: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+    phone: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
+    mail: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>',
+    wolf: '<svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" rx="12" fill="#0369a1"/><circle cx="21" cy="20" r="11" fill="none" stroke="#fff" stroke-width="2.8"/><line x1="29" y1="28" x2="39" y2="38" stroke="#fff" stroke-width="2.8" stroke-linecap="round"/><path d="M21 13 L14 19 L15.5 19 L15.5 26 L26.5 26 L26.5 19 L28 19 Z" fill="#fff" opacity="0.95"/><rect x="19.5" y="22" width="3" height="4" rx="0.5" fill="#0369a1"/></svg>',
+    check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><polyline points="20 6 9 17 4 12"/></svg>',
+  };
+
   function cleanTitle(t) {
     if (!t) return '';
     // Remove price prefixes left in DB: "CHF 1,630.–", "CHF 2,200.–Plus", "1'590.–"
@@ -1080,11 +1095,17 @@
         var lng = p.longitude;
 
         if (!lat || !lng) {
+          // Try geocoding by city name, use deterministic offset based on property ID
+          // so the same property always appears at the same spot on the map
           var cityCoords = geocodeCity(p.city || '');
           if (!cityCoords) cityCoords = geocodeCity(p.address || '');
           if (cityCoords) {
-            lat = cityCoords[0] + (Math.random() - 0.5) * 0.006;
-            lng = cityCoords[1] + (Math.random() - 0.5) * 0.006;
+            // Deterministic pseudo-random offset based on property ID (stable across reloads)
+            var seed = parseInt(String(p.id || 0).replace(/\D/g, '') || '0', 10);
+            var offsetLat = ((seed * 2654435761 >>> 0) % 1000 - 500) / 500 * 0.0015;
+            var offsetLng = ((seed * 2246822519 >>> 0) % 1000 - 500) / 500 * 0.0015;
+            lat = cityCoords[0] + offsetLat;
+            lng = cityCoords[1] + offsetLng;
           }
         }
         if (!lat || !lng) return;
@@ -1253,7 +1274,7 @@
     var c = $('pf-zone-list');
     if (!c) return;
     c.innerHTML = _pfZones.map(function (z, i) {
-      return '<div class="pf-zone"><span>📍 ' + escapeHtml(z.city) + '</span><span style="color:#0ea5e9;font-size:12px;font-weight:600">' + z.radius_km + ' km</span><button onclick="_pfRmZone(' + i + ')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px">✕</button></div>';
+      return '<div class="pf-zone"><span>' + ICO.pin + ' ' + escapeHtml(z.city) + '</span><span style="color:#0ea5e9;font-size:12px;font-weight:600">' + z.radius_km + ' km</span><button onclick="_pfRmZone(' + i + ')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px">✕</button></div>';
     }).join('');
   }
 
@@ -1506,9 +1527,9 @@
     var contactHtml = '';
     if (p.contact_name || p.contact_phone || p.contact_email) {
       contactHtml = '<div class="detail-section"><h3>Contact</h3><div class="detail-contact">';
-      if (p.contact_name) contactHtml += '<div>👤 ' + escapeHtml(p.contact_name) + '</div>';
-      if (p.contact_phone) contactHtml += '<div><a href="tel:' + escapeHtml(p.contact_phone) + '">📞 ' + escapeHtml(p.contact_phone) + '</a></div>';
-      if (p.contact_email) contactHtml += '<div><a href="mailto:' + escapeHtml(p.contact_email) + '">✉️ ' + escapeHtml(p.contact_email) + '</a></div>';
+      if (p.contact_name) contactHtml += '<div>' + ICO.user + ' ' + escapeHtml(p.contact_name) + '</div>';
+      if (p.contact_phone) contactHtml += '<div><a href="tel:' + escapeHtml(p.contact_phone) + '">' + ICO.phone + ' ' + escapeHtml(p.contact_phone) + '</a></div>';
+      if (p.contact_email) contactHtml += '<div><a href="mailto:' + escapeHtml(p.contact_email) + '">' + ICO.mail + ' ' + escapeHtml(p.contact_email) + '</a></div>';
       contactHtml += '</div></div>';
     }
 
@@ -1516,7 +1537,7 @@
     var featHtml = '';
     if (p.features && p.features.length > 0) {
       featHtml = '<div class="detail-section"><h3>Équipements</h3><div class="detail-features">' +
-        p.features.map(function(f) { return '<span class="detail-feat">✓ ' + escapeHtml(f) + '</span>'; }).join('') +
+        p.features.map(function(f) { return '<span class="detail-feat">' + ICO.check + ' ' + escapeHtml(f) + '</span>'; }).join('') +
       '</div></div>';
     }
 
@@ -1530,7 +1551,7 @@
         '<div class="detail-body">' +
           '<div class="detail-price">' + priceHtml + '</div>' +
           '<h2 class="detail-title">' + escapeHtml(cleanTitle(p.title) || p.city || 'Bien immobilier') + '</h2>' +
-          '<div class="detail-address">📍 ' + escapeHtml((p.address || '').replace(/\bTravel time\s+\d+\s*min\b/gi, '').replace(/^\d{4}\s+/, '').trim() || p.city || '') + '</div>' +
+          '<div class="detail-address">' + ICO.pin + ' ' + escapeHtml((p.address || '').replace(/\bTravel time\s+\d+\s*min\b/gi, '').replace(/^\d{4}\s+/, '').trim() || p.city || '') + '</div>' +
           '<div class="detail-section"><h3>Caractéristiques</h3><div class="detail-table">' + tableHtml + '</div></div>' +
           (p.description ? '<div class="detail-section"><h3>Description</h3><p class="detail-description">' + escapeHtml(p.description) + '</p></div>' : '') +
           scoreHtml +
@@ -1597,7 +1618,7 @@
       '<div class="profile-form">' +
         // Row 1: Zones + Type side by side
         '<div class="pf-row">' +
-          '<div class="pf-section pf-flex1"><div class="pf-section-title">📍 Zones géographiques</div>' +
+          '<div class="pf-section pf-flex1"><div class="pf-section-title">' + ICO.pin + ' Zones géographiques</div>' +
             '<div id="pf-zone-list" class="pf-zone-list"></div>' +
             '<div class="pf-zone-add">' +
               '<input id="pf-new-city" type="text" placeholder="Ajouter une ville..." style="flex:1">' +
@@ -1605,12 +1626,12 @@
               '<button class="pf-add-btn" onclick="_pfAddZone()">+</button>' +
             '</div>' +
           '</div>' +
-          '<div class="pf-section pf-flex1"><div class="pf-section-title">🏠 Type de bien</div>' +
+          '<div class="pf-section pf-flex1"><div class="pf-section-title">' + ICO.home + ' Type de bien</div>' +
             '<div class="pf-chips" id="pf-types">' + typeChips + '</div>' +
           '</div>' +
         '</div>' +
         // Row 2: Transaction + Budget
-        '<div class="pf-section"><div class="pf-section-title">💰 Transaction & Budget</div>' +
+        '<div class="pf-section"><div class="pf-section-title">' + ICO.money + ' Transaction & Budget</div>' +
           '<div class="pf-budget-grid">' +
             '<div class="pf-field"><label>Transaction</label><select id="pf-transaction" onchange="_pfSetTx()">' +
               '<option value="location"' + (p.transaction !== 'achat' ? ' selected' : '') + '>Location</option>' +
@@ -1623,7 +1644,7 @@
           '</div>' +
         '</div>' +
         // Row 3: Pièces + Surface
-        '<div class="pf-section"><div class="pf-section-title">📐 Caractéristiques</div>' +
+        '<div class="pf-section"><div class="pf-section-title">' + ICO.ruler + ' Caractéristiques</div>' +
           '<div class="pf-grid">' +
             '<div class="pf-field"><label>Pièces min</label><div class="pf-range"><input type="range" id="pf-rooms-min" min="1" max="10" step="0.5" value="' + rMinVal + '" data-unit=" pcs" oninput="_pfUpdateRange(this)"><span>' + rMinVal + ' pcs</span></div></div>' +
             '<div class="pf-field"><label>Pièces max</label><div class="pf-range"><input type="range" id="pf-rooms-max" min="1" max="10" step="0.5" value="' + rMaxVal + '" data-unit=" pcs" oninput="_pfUpdateRange(this)"><span>' + rMaxVal + ' pcs</span></div></div>' +
@@ -1632,12 +1653,12 @@
           '</div>' +
         '</div>' +
         // Row 4: Priorités
-        '<div class="pf-section"><div class="pf-section-title">⭐ Priorités & Équipements</div>' +
+        '<div class="pf-section"><div class="pf-section-title">' + ICO.star + ' Priorités & Équipements</div>' +
           '<div class="pf-chips" id="pf-priorities">' + prioChips + '</div>' +
         '</div>' +
         // Actions
         '<div class="pf-actions">' +
-          '<button id="pf-save" class="pf-save-btn">Sauvegarder & relancer Lou 🔍</button>' +
+          '<button id="pf-save" class="pf-save-btn">Sauvegarder & relancer Lou ' + ICO.search + '</button>' +
           '<button id="pf-cancel" class="pf-cancel-btn">Annuler</button>' +
         '</div>' +
       '</div>';
@@ -1735,7 +1756,7 @@
             '</div>';
           } else if (isFirstLogin) {
             list.innerHTML = '<div class="dash-empty">' +
-              '<div style="font-size:48px;margin-bottom:16px">🐺</div>' +
+              '<div style="margin-bottom:16px">' + ICO.wolf + '</div>' +
               '<h3 style="margin-bottom:8px;font-family:Playfair Display,serif">Bienvenue ! Lou est en chasse...</h3>' +
               '<p>Votre première recherche est en cours sur 8 portails immobiliers suisses. Les résultats apparaîtront dans <strong>1 à 3 minutes</strong>.</p>' +
               '<div class="first-login-progress" style="margin:20px auto;width:200px;height:4px;background:#e2e8f0;border-radius:4px;overflow:hidden">' +
