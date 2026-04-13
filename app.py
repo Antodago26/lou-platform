@@ -747,7 +747,8 @@ def get_properties():
         def _merge_keys(p):
             """Generate all possible merge keys for a property.
             Returns a list of keys — a property matches if ANY key overlaps with another property's keys.
-            This handles portals that have postal_code vs those that don't.
+            This handles portals that have postal_code vs those that don't,
+            and portals that may be missing rooms or surface data.
             """
             keys = []
             postal = (p.get('postal_code') or '').strip()
@@ -759,17 +760,32 @@ def get_properties():
 
             city = (p.get('city') or '').lower().strip()
 
-            # Always generate city-based key (main merge key)
+            # Key 1: city + exact price + rooms + surface (strongest match)
             if city and price and rooms_norm:
                 keys.append(f"city:{city}:{price}:{rooms_norm}:{surface_bucket}")
-            # Also generate postal-based key
+            # Key 2: postal + exact price + rooms (cross-portal match)
             if postal and price and rooms_norm:
                 keys.append(f"npa:{postal}:{price}:{rooms_norm}:{surface_bucket}")
 
-            # Last resort: city + price + title prefix (when rooms missing)
+            # Key 3: city + exact price + surface (when rooms missing — common on Homegate)
+            if city and price and surface_bucket and not rooms_norm:
+                keys.append(f"citysurf:{city}:{price}:{surface_bucket}")
+            if postal and price and surface_bucket and not rooms_norm:
+                keys.append(f"npasurf:{postal}:{price}:{surface_bucket}")
+
+            # Key 4: city + exact price + rooms (when surface missing)
+            if city and price and rooms_norm and not surface:
+                keys.append(f"cityrooms:{city}:{price}:{rooms_norm}")
+            if postal and price and rooms_norm and not surface:
+                keys.append(f"nparooms:{postal}:{price}:{rooms_norm}")
+
+            # Last resort: city + price + title prefix (when both rooms and surface missing)
             if not keys:
                 title_norm = re.sub(r'[^a-z0-9]', '', (p.get('title') or '').lower())[:30]
-                keys.append(f"title:{city}:{price}:{title_norm}")
+                if title_norm:
+                    keys.append(f"title:{city}:{price}:{title_norm}")
+                elif price:
+                    keys.append(f"priceonly:{city}:{price}")
 
             return keys
 
