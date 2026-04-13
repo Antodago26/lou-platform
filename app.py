@@ -2052,15 +2052,35 @@ def api_cron_scrape():
         if not profiles:
             return jsonify({"ok": True, "message": "No active profiles"})
 
-        # Collect unique city + transaction combos + all canton NE cities
-        NE_CITIES = [
-            'Neuchâtel', 'La Chaux-de-Fonds', 'Le Locle', 'Cortaillod',
-            'Peseux', 'Boudry', 'Val-de-Travers', 'Milvignes',
-            'Hauterive', 'Saint-Blaise', 'Colombier', 'Corcelles-Cormondrèche',
-            'La Tène', 'Le Landeron', 'Bevaix', 'Val-de-Ruz'
-        ]
+        # Collect unique city + transaction combos from user profiles
+        # For each canton with active users, scrape its major cities
+        CANTON_CITIES = {
+            'NE': [
+                'Neuchâtel', 'La Chaux-de-Fonds', 'Le Locle',
+                'Peseux', 'Boudry', 'Cortaillod', 'Colombier',
+                'Val-de-Travers', 'Milvignes', 'Val-de-Ruz',
+                'Hauterive', 'Saint-Blaise', 'Corcelles-Cormondrèche',
+                'La Tène', 'Le Landeron', 'Bevaix', 'Marin-Epagnier',
+                'Fleurier', 'Couvet', 'Cernier', 'Fontainemelon',
+            ],
+            'VD': [
+                'Lausanne', 'Montreux', 'Vevey', 'Nyon', 'Morges',
+                'Yverdon-les-Bains', 'Renens', 'Prilly', 'Pully',
+                'Ecublens', 'Lutry', 'Savigny',
+            ],
+            'GE': [
+                'Genève', 'Carouge', 'Meyrin', 'Lancy',
+                'Vernier', 'Onex', 'Thônex',
+            ],
+            'VS': ['Sion', 'Sierre', 'Martigny', 'Monthey'],
+            'FR': ['Fribourg', 'Bulle'],
+            'BE': ['Berne', 'Bienne'],
+            'JU': ['Delémont', 'Porrentruy'],
+        }
+
         scrape_targets = set()
         transactions_needed = set()
+        cantons_needed = set()
         for p in profiles:
             zones = p.get('zones', [])
             tx = p.get('transaction', 'location')
@@ -2068,13 +2088,24 @@ def api_cron_scrape():
             if zones:
                 for z in zones:
                     if isinstance(z, dict) and z.get('city'):
-                        # Normalize: capitalize first letter of each word to avoid duplicates
                         city_norm = z['city'].strip().title()
                         scrape_targets.add((city_norm, tx))
-        # Add all NE canton cities
+                        # Track canton so we scrape all cities in that canton
+                        ct = (z.get('canton') or '').upper()
+                        if ct:
+                            cantons_needed.add(ct)
+                        else:
+                            # Lookup canton from city
+                            from scrapers import CITY_CANTONS
+                            ct = CITY_CANTONS.get(city_norm.lower(), '')
+                            if ct:
+                                cantons_needed.add(ct.upper())
+
+        # Add all cities from cantons with active users
         for tx in transactions_needed:
-            for city in NE_CITIES:
-                scrape_targets.add((city, tx))
+            for canton in cantons_needed:
+                for city in CANTON_CITIES.get(canton, []):
+                    scrape_targets.add((city, tx))
 
         targets_list = [{"city": c, "transaction": t} for c, t in scrape_targets]
 
