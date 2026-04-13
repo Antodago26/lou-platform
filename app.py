@@ -1969,10 +1969,10 @@ def api_scrape_test():
     # 4. ImmoScout24
     try:
         slug = city.lower().replace(' ', '-')
-        r = req.get(f'https://www.immoscout24.ch/fr/immobilier/louer/lieu-{slug}',
+        r = req.get(f'https://www.immoscout24.ch/en/real-estate/rent/city-{slug}',
                      headers=headers, timeout=15)
-        has_next = '__NEXT_DATA__' in r.text
-        results['ImmoScout24'] = {"http": r.status_code, "has_NEXT_DATA": has_next, "page_size": len(r.text)}
+        has_initial = '__INITIAL_STATE__' in r.text
+        results['ImmoScout24'] = {"http": r.status_code, "has_INITIAL_STATE": has_initial, "page_size": len(r.text)}
     except Exception as e:
         log.error(f"ImmoScout24 test error: {e}")
         results['ImmoScout24'] = {"error": type(e).__name__}

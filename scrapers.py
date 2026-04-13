@@ -423,7 +423,7 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=2):
 def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
     log.info(f"[ImmoScout24] Searching {city} ({transaction})")
     results = []
-    tx = "louer" if transaction == "location" else "acheter"
+    tx = "rent" if transaction == "location" else "buy"
     slug = _normalize_city(city).replace(' ', '-')
     canton = CITY_CANTONS.get(city.lower(), '')
     # Add canton suffix for disambiguation (e.g., colombier-ne)
@@ -431,7 +431,8 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
         slug = f"{slug}-{canton.lower()}"
 
     for page in range(1, max_pages + 1):
-        url = f"https://www.immoscout24.ch/fr/immobilier/{tx}/lieu-{slug}?pn={page}"
+        # ImmoScout24 switched to English URL paths (mid-2025)
+        url = f"https://www.immoscout24.ch/en/real-estate/{tx}/city-{slug}?pn={page}"
         status, html = _sb_get(url, render_js=True)
 
         if status != 200:
@@ -565,7 +566,7 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
 
                             results.append(_make_property(
                                 external_id=f"is24-{lid}", source='ImmoScout24',
-                                source_url=f"https://www.immoscout24.ch/fr/d/{lid}",
+                                source_url=f"https://www.immoscout24.ch/en/d/{lid}",
                                 title=listing.get('title', item.get('title', '')),
                                 description=listing.get('description', '')[:500],
                                 property_type=_guess_type(listing.get('propertyType', listing.get('title', ''))),
@@ -598,7 +599,7 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
                      soup.select('[class*="result"] article') or
                      soup.select('article[class*="card"]') or
                      soup.select('[data-test*="result"] > div') or
-                     soup.select('a[href*="/fr/d/"]'))
+                     soup.select('a[href*="/en/d/"], a[href*="/fr/d/"]'))
             log.info(f"[ImmoScout24] Page {page}: {len(cards)} cards via HTML fallback")
 
             for card in cards:
@@ -722,137 +723,141 @@ def scrape_immobilier_ch(city="Lausanne", transaction="location", max_pages=2):
 
         soup = BeautifulSoup(html, 'html.parser')
 
-        # Method 1: Try JSON-LD structured data (schema.org)
-        found_jsonld = False
-        for script in soup.select('script[type="application/ld+json"]'):
-            try:
-                ld_data = json.loads(script.string or '{}')
-                if isinstance(ld_data, list):
-                    ld_data = ld_data[0] if ld_data else {}
-                items = ld_data.get('itemListElement', []) or ld_data.get('about', [])
-                if not items and ld_data.get('@type') in ('Residence', 'Apartment', 'House'):
-                    items = [ld_data]
-                for item in items:
-                    obj = item.get('item', item)
-                    if obj.get('@type') not in ('Residence', 'Apartment', 'House', 'RealEstateListing', None):
-                        continue
-                    name = obj.get('name', '')
-                    obj_url = obj.get('url', '')
-                    if obj_url and obj_url.startswith('/'):
-                        obj_url = 'https://www.immobilier.ch' + obj_url
-                    price_spec = obj.get('offers', {}).get('price') or obj.get('price')
-                    eid_m = re.search(r'[-/](\d{5,})', obj_url)
-                    results.append(_make_property(
-                        external_id=f"imch-{eid_m.group(1) if eid_m else hashlib.sha256(obj_url.encode()).hexdigest()[:12]}",
-                        source='Immobilier.ch', source_url=obj_url,
-                        title=name, description=obj.get('description', '')[:500],
-                        property_type=_guess_type(name), transaction=transaction,
-                        price=_clean_price(price_spec),
-                        rooms=_clean_rooms(name),
-                        surface=_clean_surface(str(obj.get('floorSize', {}).get('value', '') if isinstance(obj.get('floorSize'), dict) else '')),
-                        floor=None,
-                        address=str(obj.get('address', {}).get('streetAddress', '')) if isinstance(obj.get('address'), dict) else '',
-                        city=str(obj.get('address', {}).get('addressLocality', city)) if isinstance(obj.get('address'), dict) else city,
-                        canton=CITY_CANTONS.get(city.lower(), ''),
-                        postal_code=str(obj.get('address', {}).get('postalCode', '')) if isinstance(obj.get('address'), dict) else None,
-                        latitude=None, longitude=None,
-                        features=[], images=[obj['image']] if obj.get('image') else [],
-                        published_at=None,
-                    ))
-                    found_jsonld = True
-            except Exception as e:
-                log.debug(f"[Immobilier.ch] JSON-LD parse error: {e}")
-
-        # Method 2: HTML card links (broad selectors)
-        if not found_jsonld:
+        # Method 1: HTML cards with div.filter-item[data-id] — primary approach
+        # immobilier.ch uses filter-item cards with data-id and data-latlng attributes
+        cards = soup.select('div.filter-item[data-id]')
+        if not cards:
+            # Fallback to broader selectors
             tx_slug = 'acheter' if transaction == 'achat' else 'louer'
             cards = soup.select(f'a[href*="/fr/{tx_slug}/"]')
             if not cards:
-                cards = (soup.select('.filter-item') or
-                         soup.select('[class*="property"]') or
+                cards = (soup.select('[class*="property"]') or
                          soup.select('[class*="listing"]') or
                          soup.select('article'))
-            log.info(f"[Immobilier.ch] Page {page}: {len(cards)} cards via HTML")
+        log.info(f"[Immobilier.ch] Page {page}: {len(cards)} cards")
 
-            for card in cards:
-                try:
-                    # Get the link
-                    if card.name == 'a':
-                        href = card.get('href', '')
-                        link_el = card
-                    else:
-                        link_el = card.select_one('a[href]')
-                        href = link_el.get('href', '') if link_el else ''
-                    if href.startswith('/'):
-                        href = 'https://www.immobilier.ch' + href
-                    # Skip navigation/pagination links
-                    if not re.search(r'/\d{4,}', href) and not re.search(r'[-/]\d{5,}', href):
-                        continue
+        for card in cards:
+            try:
+                # ID from data-id attribute
+                data_id = card.get('data-id', '')
+
+                # Lat/Lng from data-latlng attribute
+                latlng = card.get('data-latlng', '')
+                lat, lng = None, None
+                if latlng and ',' in latlng:
+                    parts = latlng.split(',')
+                    try:
+                        lat = float(parts[0].strip())
+                        lng = float(parts[1].strip())
+                    except (ValueError, IndexError):
+                        pass
+
+                # Link: a#link-result-item-{ID} or first <a> with href
+                link_el = card.select_one(f'a#link-result-item-{data_id}') if data_id else None
+                if not link_el:
+                    link_el = card.select_one('a[href*="/fr/"]')
+                if not link_el:
+                    link_el = card if card.name == 'a' else card.select_one('a[href]')
+                href = link_el.get('href', '') if link_el else ''
+                if href.startswith('/'):
+                    href = 'https://www.immobilier.ch' + href
+                # Extract ID from URL if not from data-id
+                if not data_id:
                     eid_m = re.search(r'[-/](\d{5,})', href)
+                    data_id = eid_m.group(1) if eid_m else ''
+                if not data_id and not href:
+                    continue
 
+                # Price: strong.title contains "CHF 1'090.-/mois (+190.- charges)"
+                price = None
+                price_el = card.select_one('strong.title')
+                if price_el:
+                    price = _clean_price(price_el.get_text(strip=True))
+                if not price:
                     card_text = card.get_text(' ', strip=True)
+                    price_match = re.search(r"(?:CHF)\s*([\d'',.\u2019\u00a0\s]+)", card_text)
+                    if price_match:
+                        price = _clean_price(price_match.group(1))
 
-                    # Extract from <strong> tags (immobilier.ch pattern)
-                    strongs = card.select('strong')
-                    title = ''
-                    price = None
-                    for s in strongs:
-                        txt = s.get_text(strip=True)
-                        if re.search(r'CHF|[\d\']+\.?-', txt):
-                            price = _clean_price(txt)
-                        elif len(txt) > 5 and not price:
-                            title = txt
+                # Type + rooms: p.object-type contains "Appartement 3 pièces"
+                type_el = card.select_one('p.object-type')
+                type_text = type_el.get_text(strip=True) if type_el else ''
+                rooms = _clean_rooms(type_text)
+                prop_type = _guess_type(type_text)
 
-                    if not price:
-                        price_match = re.search(r"(?:CHF)\s*([\d'',.\u2019\u00a0\s]+)", card_text)
-                        if price_match:
-                            price = _clean_price(price_match.group(1))
-                    if not title:
-                        for el in card.select('h2, h3, strong, span'):
-                            t = el.get_text(strip=True)
-                            if t and len(t) > 5 and not re.match(r'^(?:CHF\s*)?[\d\s\'\',.]+\.?-?$', t):
-                                title = t
-                                break
+                # Address: 3rd <p> in .filter-item-content (no class) — "Peseux, Rue de Corcelles"
+                address = ''
+                content_el = card.select_one('.filter-item-content')
+                if content_el:
+                    paragraphs = content_el.select('p')
+                    # Address is typically the last <p> without a specific class like object-type
+                    for p in paragraphs:
+                        if 'object-type' not in (p.get('class') or []):
+                            addr_text = p.get_text(strip=True)
+                            if addr_text and not re.match(r'^(?:CHF\s*)?[\d\s\'\',.]+', addr_text):
+                                address = addr_text
 
-                    surface = None
+                # Title: use type_text + address as descriptive title
+                title = type_text
+                if not title:
+                    title_el = card.select_one('h2, h3, strong')
+                    title = title_el.get_text(strip=True) if title_el else ''
+
+                # Surface: span.space inside .characteristic-list
+                surface = None
+                space_el = card.select_one('span.space')
+                if space_el:
+                    surface = _clean_surface(space_el.get_text(strip=True))
+                if not surface:
+                    # Fallback: search card text for surface
+                    card_text = card.get_text(' ', strip=True)
                     surf_match = re.search(r'(\d+)\s*m[²2]', card_text)
                     if surf_match:
                         surface = int(surf_match.group(1))
-                    rooms = _clean_rooms(card_text)
 
-                    # Address
-                    address = ''
-                    addr_match = re.search(r'(\d{4}\s+[\w\s-]+)', card_text)
-                    if addr_match:
-                        address = addr_match.group(1).strip()
+                # Rooms from characteristics if not found in type
+                if not rooms:
+                    plan_el = card.select_one('i.icon-plan')
+                    if plan_el and plan_el.next_sibling:
+                        rooms = _clean_rooms(str(plan_el.next_sibling))
 
-                    # Images
-                    images = []
-                    for img_el in card.select('img[src], img[data-src]'):
-                        src = img_el.get('src', '') or img_el.get('data-src', '')
-                        if src and src.startswith('http') and 'logo' not in src.lower():
+                # Images: lazy-loaded with data-src inside .filter-carousel
+                images = []
+                for img_el in card.select('.filter-carousel img[data-src]'):
+                    src = img_el.get('data-src', '')
+                    if src and '/Medias/' in src:
+                        if src.startswith('/'):
+                            src = 'https://www.immobilier.ch' + src
+                        images.append(src)
+                # Also check regular img src
+                if not images:
+                    for img_el in card.select('img[src]'):
+                        src = img_el.get('src', '')
+                        if src and src.startswith('http') and 'logo' not in src.lower() and 'pixel' not in src.lower():
                             images.append(src)
-                    images = list(dict.fromkeys(images))[:5]
+                images = list(dict.fromkeys(images))[:5]
 
-                    if title or price:
-                        results.append(_make_property(
-                            external_id=f"imch-{eid_m.group(1) if eid_m else hashlib.sha256(href.encode()).hexdigest()[:12]}",
-                            source='Immobilier.ch', source_url=href,
-                            title=title, description='',
-                            property_type=_guess_type(title or card_text), transaction=transaction,
-                            price=price, rooms=rooms,
-                            surface=surface, floor=None,
-                            address=address, city=city,
-                            canton=CITY_CANTONS.get(city.lower(), ''),
-                            postal_code=_extract_postal(address),
-                            latitude=None, longitude=None,
-                            features=[], images=images, published_at=None,
-                        ))
-                except Exception as e:
-                    log.debug(f"[Immobilier.ch] Card parse error: {e}")
+                # Extract city from address ("Peseux, Rue de Corcelles" → "Peseux")
+                card_city = city
+                if address and ',' in address:
+                    card_city = address.split(',')[0].strip()
 
-        else:
-            log.info(f"[Immobilier.ch] Page {page}: {len(results)} items via JSON-LD")
+                if title or price:
+                    results.append(_make_property(
+                        external_id=f"imch-{data_id or hashlib.sha256(href.encode()).hexdigest()[:12]}",
+                        source='Immobilier.ch', source_url=href,
+                        title=title, description='',
+                        property_type=prop_type, transaction=transaction,
+                        price=price, rooms=rooms,
+                        surface=surface, floor=None,
+                        address=address, city=card_city,
+                        canton=CITY_CANTONS.get(city.lower(), ''),
+                        postal_code=_extract_postal(address),
+                        latitude=lat, longitude=lng,
+                        features=[], images=images, published_at=None,
+                    ))
+            except Exception as e:
+                log.debug(f"[Immobilier.ch] Card parse error: {e}")
 
         time.sleep(1)
 
@@ -865,170 +870,239 @@ def scrape_immobilier_ch(city="Lausanne", transaction="location", max_pages=2):
 # ============================================================
 
 def scrape_anibis(city="Lausanne", transaction="location", max_pages=2):
+    """Scrape Anibis.ch using their GraphQL API (c.anibis.ch).
+    The website uses opaque binary tokens in URLs, so direct URL construction is unreliable.
+    Instead, we call the search API directly."""
     log.info(f"[Anibis] Searching {city} ({transaction})")
     results = []
-    slug = _normalize_city(city).replace(' ', '-')
+    city_norm = _normalize_city(city)
+    canton = CITY_CANTONS.get(city.lower(), '').lower()
+
+    # Anibis GraphQL API
+    api_url = "https://c.anibis.ch/graphql"
+    headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        'Origin': 'https://www.anibis.ch',
+        'Referer': 'https://www.anibis.ch/',
+    }
+
+    # Map transaction to Anibis listing types
+    listing_type = "apartment" if transaction == "location" else "apartment"
+    price_type = "RENT" if transaction == "location" else "BUY"
 
     for page in range(1, max_pages + 1):
-        # Try multiple URL patterns (Anibis changed their URL format)
-        urls_to_try = [
-            f"https://www.anibis.ch/fr/immobilier/{slug}?ot={'buy' if transaction == 'achat' else 'rent'}&page={page}",
-            f"https://www.anibis.ch/fr/q/immobilier-{slug}?page={page}",
-            f"https://www.anibis.ch/fr/immobilier--{'acheter' if transaction == 'achat' else 'louer'}/{slug}?page={page}",
-        ]
-        status = 0
-        html = ''
-        for url in urls_to_try:
-            status, html = _sb_get(url, render_js=True)
-            if status == 200 and len(html) > 5000:
+        # GraphQL query for real estate search
+        query = {
+            "query": """
+                query SearchListings($category: String!, $constraints: [ListingSearchConstraint!], $offset: Int, $limit: Int, $sorting: String) {
+                    searchListingsByQuery(
+                        category: $category
+                        constraints: $constraints
+                        offset: $offset
+                        limit: $limit
+                        sorting: $sorting
+                    ) {
+                        listings {
+                            id
+                            title
+                            body
+                            price
+                            formattedPrice
+                            thumbUrl
+                            imageUrls
+                            location { id name geoCoordinate { latitude longitude } }
+                            attributes { name value }
+                            detail { url }
+                        }
+                        totalCount
+                    }
+                }
+            """,
+            "variables": {
+                "category": "realEstate",
+                "constraints": [
+                    {"name": "priceType", "value": price_type},
+                ],
+                "offset": (page - 1) * 30,
+                "limit": 30,
+                "sorting": "newest",
+            }
+        }
+
+        # Add location constraint
+        if canton:
+            query["variables"]["constraints"].append({
+                "name": "location",
+                "value": f"geo-canton-{canton}" if len(canton) == 2 else f"geo-city-{city_norm.replace(' ', '-')}"
+            })
+        else:
+            query["variables"]["constraints"].append({
+                "name": "location",
+                "value": f"geo-city-{city_norm.replace(' ', '-')}"
+            })
+
+        try:
+            r = requests.post(api_url, json=query, headers=headers, timeout=20)
+            if r.status_code != 200:
+                log.warning(f"[Anibis] GraphQL API → HTTP {r.status_code}")
+                # Fallback: try ScrapingBee HTML scraping
                 break
 
-        if status != 200:
-            break
+            data = r.json()
+            search_data = data.get('data', {}).get('searchListingsByQuery', {})
+            items = search_data.get('listings', [])
+            total = search_data.get('totalCount', 0)
+            log.info(f"[Anibis] API page {page}: {len(items)} items (total={total})")
 
-        soup = BeautifulSoup(html, 'html.parser')
-        # Try JSON-LD first
-        for script in soup.select('script[type="application/ld+json"]'):
-            try:
-                ld = json.loads(script.string or '{}')
-                items = ld.get('itemListElement', [])
-                for item in items:
-                    obj = item.get('item', item)
-                    url = obj.get('url', '')
-                    if url and url.startswith('/'):
-                        url = 'https://www.anibis.ch' + url
-                    if url and '/immobilier/' in url:
-                        eid_m = re.search(r'/(\d+)', url)
-                        results.append(_make_property(
-                            external_id=f"anibis-{eid_m.group(1) if eid_m else hashlib.sha256(url.encode()).hexdigest()[:12]}",
-                            source='Anibis', source_url=url,
-                            title=obj.get('name', ''), description='',
-                            property_type=_guess_type(obj.get('name', '')),
-                            transaction=transaction,
-                            price=_clean_price(obj.get('offers', {}).get('price') if isinstance(obj.get('offers'), dict) else None),
-                            rooms=_clean_rooms(obj.get('name', '')),
-                            surface=None, floor=None,
-                            address='', city=city,
-                            canton=CITY_CANTONS.get(city.lower(), ''),
-                            postal_code=None, latitude=None, longitude=None,
-                            features=[], images=[obj['image']] if obj.get('image') else [],
-                            published_at=None,
-                        ))
-            except Exception:
-                pass
+            if not items:
+                break
 
-        # Then try HTML cards — Anibis is a React SPA with hashed MUI classes
-        # Detail links have a numeric ID: /fr/vi/{canton}/immobilier/{category}/{slug}/{id}
-        cards = soup.select('a[href*="/fr/vi/"][href*="/immobilier/"]')
-        if not cards:
-            # Broader: any link with /immobilier/ AND a numeric segment (filters out nav links)
-            all_immo_links = soup.select('a[href*="/immobilier/"]')
-            cards = [a for a in all_immo_links if re.search(r'/\d{5,}', a.get('href', ''))]
-        if not cards:
-            cards = soup.select('.listing-card, .ItemCard, article, [class*="listing"], [class*="Listing"]')
-        # Deduplicate: skip cards for already-found URLs
-        existing_urls = {r['source_url'] for r in results}
-        log.info(f"[Anibis] Page {page}: {len(cards)} HTML cards (+ {len(results)} JSON-LD)")
-
-        for card in cards:
-            try:
-                # The card itself might be an <a> tag — get href directly
-                href = card.get('href', '')
-                if not href:
-                    link_el = card.select_one('a[href]')
-                    href = link_el.get('href', '') if link_el else ''
-                if href.startswith('/'):
-                    href = 'https://www.anibis.ch' + href
-                if href in existing_urls:
+            for item in items:
+                lid = item.get('id', '')
+                if not lid:
                     continue
 
-                # Get ALL text from the card — MUI hashes classes so we parse text directly
-                card_text = card.get_text(' ', strip=True)
-                if not card_text or len(card_text) < 20:
-                    continue  # Skip nav links like "Immobilier" or "Menu"
+                title = item.get('title', '')
+                price = _clean_price(item.get('price') or item.get('formattedPrice'))
 
-                # Skip if href doesn't look like a detail page (need numeric ID)
-                if href and '/immobilier/' in href and not re.search(r'/\d{4,}', href):
-                    continue
-
-                # Log first card text for debugging
-                if len(results) == 0:
-                    log.info(f"[Anibis] Sample card text: {card_text[:200]}")
-
-                # Try selectors first, then fall back to text parsing
-                title_el = card.select_one('h3, h2, h1, [class*="title"], [class*="Title"]')
-                title = title_el.get_text(strip=True) if title_el else ''
-                if not title:
-                    # First meaningful line of text is often the title
-                    lines = [l.strip() for l in card.stripped_strings if len(l.strip()) > 3]
-                    title = lines[0] if lines else ''
-
-                # Price: look for CHF pattern or price element
-                price = None
-                price_el = card.select_one('[class*="price"], [class*="Price"], .price')
-                if price_el:
-                    price = _clean_price(price_el.get_text(strip=True))
-                if not price:
-                    price_match = re.search(r"(?:CHF|Fr\.?)\s*([\d',.]+)", card_text)
-                    if price_match:
-                        price = _clean_price(price_match.group(0))
-                    else:
-                        # Try bare number patterns (e.g. "1'200.–" or "580'000")
-                        price_match2 = re.search(r"(\d[\d']{2,}(?:\.\s*–|\.–|\.-)?)", card_text)
-                        if price_match2:
-                            price = _clean_price(price_match2.group(1))
-
-                # Surface
+                # Extract rooms and surface from attributes
+                rooms = None
                 surface = None
-                surf_match = re.search(r'(\d+)\s*m[²2]', card_text)
-                if surf_match:
-                    surface = int(surf_match.group(1))
+                for attr in (item.get('attributes') or []):
+                    attr_name = (attr.get('name') or '').lower()
+                    attr_val = attr.get('value', '')
+                    if 'room' in attr_name or 'piece' in attr_name or attr_name == 'numberOfRooms':
+                        rooms = _clean_rooms(str(attr_val))
+                    elif 'surface' in attr_name or 'area' in attr_name or attr_name == 'livingSpace':
+                        surface = _clean_surface(str(attr_val))
 
-                rooms = _clean_rooms(card_text) or _clean_rooms(title)
+                if not rooms:
+                    rooms = _clean_rooms(title)
+                if not surface:
+                    surface = _clean_surface(title)
 
-                # Address/location
-                addr_el = card.select_one('[class*="location"], [class*="Location"], [class*="address"]')
-                address = addr_el.get_text(strip=True) if addr_el else ''
-                if not address:
-                    # Look for NPA pattern in text
-                    npa_match = re.search(r'(\d{4})\s+(\w+)', card_text)
-                    if npa_match:
-                        address = npa_match.group(0)
-
-                eid = re.search(r'/(\d+)', href)
+                # Location
+                loc = item.get('location', {}) or {}
+                loc_name = loc.get('name', '')
+                geo = loc.get('geoCoordinate', {}) or {}
+                lat = geo.get('latitude')
+                lng = geo.get('longitude')
 
                 # Images
-                images = []
-                for img_el in card.select('img[src], img[data-src]'):
-                    src = img_el.get('src', '') or img_el.get('data-src', '')
-                    if src and src.startswith('http') and 'logo' not in src.lower() and 'icon' not in src.lower() and 'pixel' not in src.lower():
-                        images.append(src)
-                for styled in card.select('[style*="background"]'):
-                    bg_match = re.search(r'url\(["\']?(https?://[^"\')\s]+)', styled.get('style', ''))
-                    if bg_match:
-                        images.append(bg_match.group(1))
-                images = list(dict.fromkeys(images))[:5]
+                images = item.get('imageUrls', []) or []
+                if not images and item.get('thumbUrl'):
+                    images = [item['thumbUrl']]
+                images = [u for u in images if u and u.startswith('http')][:5]
 
-                if title or price:
-                    existing_urls.add(href)
-                    results.append(_make_property(
-                        external_id=f"anibis-{eid.group(1) if eid else hashlib.sha256((title+card_text[:50]).encode()).hexdigest()[:12]}",
-                        source='Anibis', source_url=href,
-                        title=title, description='',
-                        property_type=_guess_type(title), transaction=transaction,
-                        price=price, rooms=rooms,
-                        surface=surface, floor=None,
-                        address=address or city, city=city,
-                        canton=CITY_CANTONS.get(city.lower(), ''),
-                        postal_code=_extract_postal(address or card_text),
-                        latitude=None, longitude=None,
-                        features=[], images=images, published_at=None,
-                    ))
-            except Exception as e:
-                log.debug(f"[Anibis] Card parse error: {e}")
-                pass
+                # Detail URL
+                detail = item.get('detail', {}) or {}
+                detail_url = detail.get('url', '')
+                if detail_url and detail_url.startswith('/'):
+                    detail_url = 'https://www.anibis.ch' + detail_url
+                if not detail_url:
+                    detail_url = f"https://www.anibis.ch/fr/vi/{lid}"
+
+                results.append(_make_property(
+                    external_id=f"anibis-{lid}", source='Anibis',
+                    source_url=detail_url,
+                    title=title, description=(item.get('body') or '')[:500],
+                    property_type=_guess_type(title),
+                    transaction=transaction,
+                    price=price, rooms=rooms, surface=surface, floor=None,
+                    address=loc_name or city, city=loc_name.split(',')[0].strip() if ',' in loc_name else (loc_name or city),
+                    canton=CITY_CANTONS.get(city.lower(), ''),
+                    postal_code=_extract_postal(loc_name),
+                    latitude=lat, longitude=lng,
+                    features=[], images=images, published_at=None,
+                ))
+
+            if len(items) < 30:
+                break  # No more pages
+
+        except Exception as e:
+            log.error(f"[Anibis] GraphQL API error: {e}")
+            break
 
         time.sleep(1)
+
+    # Fallback: if GraphQL failed, try scraping HTML via ScrapingBee
+    if not results:
+        log.info("[Anibis] GraphQL failed, trying HTML fallback via ScrapingBee")
+        slug = city_norm.replace(' ', '-')
+        # Try the landing page which has pre-built search links
+        fallback_url = f"https://www.anibis.ch/fr/immobilier--{slug}"
+        status, html = _sb_get(fallback_url, render_js=True)
+        if status == 200 and len(html) > 5000:
+            soup = BeautifulSoup(html, 'html.parser')
+
+            # Try __NEXT_DATA__ (Anibis is Next.js)
+            nd = soup.select_one('script#__NEXT_DATA__')
+            if nd:
+                try:
+                    ndata = json.loads(nd.string or '{}')
+                    # Navigate dehydratedState for listings
+                    queries = ndata.get('props', {}).get('pageProps', {}).get('dehydratedState', {}).get('queries', [])
+                    for q in queries:
+                        state_data = q.get('state', {}).get('data', {})
+                        listings = state_data.get('listings', [])
+                        if listings:
+                            log.info(f"[Anibis] Found {len(listings)} items in __NEXT_DATA__")
+                            for item in listings:
+                                lid = item.get('id', '')
+                                if not lid:
+                                    continue
+                                title = item.get('title', '')
+                                results.append(_make_property(
+                                    external_id=f"anibis-{lid}", source='Anibis',
+                                    source_url=f"https://www.anibis.ch/fr/vi/{lid}",
+                                    title=title, description='',
+                                    property_type=_guess_type(title),
+                                    transaction=transaction,
+                                    price=_clean_price(item.get('price') or item.get('formattedPrice')),
+                                    rooms=_clean_rooms(title), surface=None, floor=None,
+                                    address=city, city=city,
+                                    canton=CITY_CANTONS.get(city.lower(), ''),
+                                    postal_code=None, latitude=None, longitude=None,
+                                    features=[], images=[item['thumbUrl']] if item.get('thumbUrl') else [],
+                                    published_at=None,
+                                ))
+                except Exception as e:
+                    log.error(f"[Anibis] __NEXT_DATA__ parse error: {e}")
+
+            # Also try link-based scraping
+            if not results:
+                cards = soup.select('a[href*="/fr/vi/"][href*="/immobilier/"]')
+                if not cards:
+                    all_links = soup.select('a[href*="/immobilier/"]')
+                    cards = [a for a in all_links if re.search(r'/\d{5,}', a.get('href', ''))]
+                log.info(f"[Anibis] HTML fallback: {len(cards)} cards found")
+                for card in cards[:30]:
+                    try:
+                        href = card.get('href', '')
+                        if href.startswith('/'):
+                            href = 'https://www.anibis.ch' + href
+                        card_text = card.get_text(' ', strip=True)
+                        if len(card_text) < 15:
+                            continue
+                        eid_m = re.search(r'/(\d+)', href)
+                        price_match = re.search(r"(?:CHF|Fr\.?)\s*([\d',.]+)", card_text)
+                        results.append(_make_property(
+                            external_id=f"anibis-{eid_m.group(1) if eid_m else hashlib.sha256(href.encode()).hexdigest()[:12]}",
+                            source='Anibis', source_url=href,
+                            title=card_text[:100], description='',
+                            property_type=_guess_type(card_text),
+                            transaction=transaction,
+                            price=_clean_price(price_match.group(0)) if price_match else None,
+                            rooms=_clean_rooms(card_text), surface=_clean_surface(card_text), floor=None,
+                            address=city, city=city,
+                            canton=CITY_CANTONS.get(city.lower(), ''),
+                            postal_code=None, latitude=None, longitude=None,
+                            features=[], images=[], published_at=None,
+                        ))
+                    except Exception:
+                        pass
 
     log.info(f"[Anibis] Total: {len(results)} listings")
     return results
@@ -1458,9 +1532,7 @@ def scrape_comparis(city="Lausanne", transaction="location", max_pages=2):
 def scrape_properstar(city="Lausanne", transaction="location", max_pages=1):
     log.info(f"[Properstar] Searching {city} ({transaction})")
     results = []
-    tx = "rent" if transaction == "location" else "buy"
     slug = _normalize_city(city).replace(' ', '-')
-
     tx_fr = "louer" if transaction == "location" else "acheter"
 
     # Scrape both apartments and houses
@@ -1473,82 +1545,125 @@ def scrape_properstar(city="Lausanne", transaction="location", max_pages=1):
 
     for html in all_html:
         soup = BeautifulSoup(html, 'html.parser')
-        cards = soup.select('.listing-card, .property-card, article, [class*="listing"]')
-        log.info(f"[Properstar] {len(cards)} cards found")
+
+        # Method 1: JSON-LD ItemList (only first 5 items but structured)
+        for script in soup.select('script[type="application/ld+json"]'):
+            try:
+                ld = json.loads(script.string or '{}')
+                if ld.get('@type') != 'ItemList':
+                    continue
+                for item in ld.get('itemListElement', []):
+                    obj = item.get('item', item)
+                    if obj.get('@type') != 'RealEstateListing':
+                        continue
+                    obj_url = obj.get('url', '')
+                    eid_m = re.search(r'/(\d+)', obj_url)
+                    eid = eid_m.group(1) if eid_m else hashlib.sha256(obj_url.encode()).hexdigest()[:12]
+                    offers = obj.get('offers', {}) or {}
+                    entity = obj.get('mainEntity', {}) or {}
+                    addr = entity.get('address', {}) or {}
+                    results.append(_make_property(
+                        external_id=f"ps-{eid}", source='Properstar',
+                        source_url=obj_url if obj_url.startswith('http') else f"https://www.properstar.ch{obj_url}",
+                        title=obj.get('name', ''), description='',
+                        property_type=_guess_type(entity.get('@type', '') + ' ' + obj.get('name', '')),
+                        transaction=transaction,
+                        price=_clean_price(offers.get('price')),
+                        rooms=None, surface=None, floor=None,
+                        address=addr.get('addressLocality', city),
+                        city=addr.get('addressLocality') or city,
+                        canton=CITY_CANTONS.get(city.lower(), ''),
+                        postal_code=None, latitude=None, longitude=None,
+                        features=[], images=[], published_at=obj.get('datePosted'),
+                    ))
+            except Exception as e:
+                log.debug(f"[Properstar] JSON-LD error: {e}")
+
+        # Method 2: HTML cards (article.item-adaptive) — up to 20 per page
+        existing_ids = {r['external_id'] for r in results}
+        cards = soup.select('article.item-adaptive')
+        if not cards:
+            # Fallback to broader selectors
+            cards = soup.select('article.card-global, article.card-extended')
+        if not cards:
+            cards = soup.select('.listing-card, .property-card, article')
+        log.info(f"[Properstar] {len(cards)} HTML cards found")
 
         for card in cards:
             try:
-                # Link: find the main property link (avoid nav/header links)
-                link_el = card.select_one('a[href*="/listing/"], a[href*="/property/"], a[href*="/suisse/"]')
+                # Link: a.listing-title has the detail href
+                link_el = card.select_one('a.listing-title')
+                if not link_el:
+                    link_el = card.select_one('a[href*="/annonce/"]')
                 if not link_el:
                     link_el = card.select_one('a[href]')
                 href = link_el.get('href', '') if link_el else ''
                 if href.startswith('/'):
                     href = 'https://www.properstar.ch' + href
-                if not href or href == 'https://www.properstar.ch':
+                if not href:
                     continue
 
-                # Price: look for price element, avoid grabbing title text
-                price_el = card.select_one('[class*="price"], [class*="Price"]')
-                price_text = price_el.get_text(strip=True) if price_el else ''
-                price = _clean_price(price_text) if price_text else None
+                # ID from /annonce/{id}
+                eid_m = re.search(r'/annonce/(\d+)', href) or re.search(r'/(\d+)', href)
+                eid = eid_m.group(1) if eid_m else hashlib.sha256(href.encode()).hexdigest()[:12]
+                if f"ps-{eid}" in existing_ids:
+                    continue
 
-                # Title: find title, but exclude price elements
-                title = ''
-                for el in card.select('h3, h2, h4, [class*="title"], [class*="Title"]'):
-                    # Skip if this element IS the price element
-                    if price_el and el == price_el:
-                        continue
-                    t = el.get_text(strip=True)
-                    # Skip if text is just a price
-                    if t and not re.match(r'^(?:CHF\s*)?[\d\s\'\',.]+\.?$', t) and len(t) > 3:
-                        title = t
-                        break
+                # Price: .listing-price-main span
+                price = None
+                price_el = card.select_one('.listing-price-main span')
+                if not price_el:
+                    price_el = card.select_one('[class*="price"]')
+                if price_el:
+                    price = _clean_price(price_el.get_text(strip=True))
 
-                # Extract address/location from card text
-                card_text = card.get_text(' ', strip=True)
-                address = city
-                postal = None
-                addr_match = re.search(r'(\d{4})\s+([\w\s-]+?)(?:\s*(?:CHF|Fr|pièce|m²|\d+\s*pcs))', card_text)
-                if addr_match:
-                    postal = addr_match.group(1)
-                    address = f"{addr_match.group(1)} {addr_match.group(2).strip()}"
+                # Title: a.listing-title text
+                title = link_el.get_text(strip=True) if link_el else ''
 
-                # Rooms from card text (not just title)
-                rooms = _clean_rooms(card_text)
+                # Location: .item-location
+                location_el = card.select_one('.item-location')
+                address = location_el.get('title', '') or (location_el.get_text(strip=True) if location_el else '')
+                if not address:
+                    address = city
 
-                # Surface from card text
-                surface = _clean_surface(card_text)
+                # Highlights: "Appartement • 2.5 pces • 65 m²"
+                highlights_el = card.select_one('.item-highlights')
+                highlights = highlights_el.get_text(strip=True) if highlights_el else ''
+                rooms = _clean_rooms(highlights)
+                surface = _clean_surface(highlights)
+                prop_type = _guess_type(highlights + ' ' + title)
 
-                # Extract images
+                # Images: .image-gallery-picture img + srcSet
                 images = []
-                for img_el in card.select('img[src], img[data-src]'):
-                    src = img_el.get('src', '') or img_el.get('data-src', '')
-                    if src and src.startswith('http') and 'logo' not in src.lower() and 'icon' not in src.lower() and 'pixel' not in src.lower():
+                for img_el in card.select('.image-gallery-picture img, .item-picture-img img'):
+                    src = img_el.get('src', '')
+                    if src and src.startswith('http') and 'logo' not in src.lower():
                         images.append(src)
-                for styled in card.select('[style*="background"]'):
-                    style = styled.get('style', '')
-                    bg_match = re.search(r'url\(["\']?(https?://[^"\')\s]+)', style)
-                    if bg_match:
-                        images.append(bg_match.group(1))
+                # Also check <source> srcSet for avif/webp
+                for source_el in card.select('.image-gallery-picture source, .item-picture-img source'):
+                    srcset = source_el.get('srcSet', '') or source_el.get('srcset', '')
+                    if srcset:
+                        # Take first URL from srcSet
+                        first_url = srcset.split(',')[0].strip().split(' ')[0]
+                        if first_url.startswith('http'):
+                            images.append(first_url)
                 images = list(dict.fromkeys(images))[:5]
 
                 if price or title:
+                    existing_ids.add(f"ps-{eid}")
                     results.append(_make_property(
-                        external_id=f"ps-{hashlib.sha256((str(price)+href).encode()).hexdigest()[:12]}",
-                        source='Properstar', source_url=href,
-                        title=title, description='',
-                        property_type=_guess_type(card_text), transaction=transaction,
-                        price=price, rooms=rooms,
-                        surface=surface, floor=None,
+                        external_id=f"ps-{eid}", source='Properstar',
+                        source_url=href, title=title, description='',
+                        property_type=prop_type, transaction=transaction,
+                        price=price, rooms=rooms, surface=surface, floor=None,
                         address=address, city=city,
                         canton=CITY_CANTONS.get(city.lower(), ''),
-                        postal_code=postal,
+                        postal_code=_extract_postal(address),
                         latitude=None, longitude=None,
                         features=[], images=images, published_at=None,
                     ))
-            except Exception:
-                pass
+            except Exception as e:
+                log.debug(f"[Properstar] Card parse error: {e}")
 
     log.info(f"[Properstar] Total: {len(results)} listings")
     return results
