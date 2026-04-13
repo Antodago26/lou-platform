@@ -186,6 +186,21 @@
             localStorage.setItem('lou_user', JSON.stringify(data.user));
             TOKEN = data.token;
             USER = data.user;
+            // If signup, trigger initial scraping so results appear quickly
+            if (mode === 'signup') {
+              localStorage.setItem('lou_first_login', 'true');
+              fetch(API + '/api/scrape', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + data.token },
+                body: '{}'
+              }).catch(function () {});
+              // Also trigger scoring for any existing properties in DB
+              fetch(API + '/api/score', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + data.token },
+                body: '{}'
+              }).catch(function () {});
+            }
             // On external hosts (Webflow), render dashboard in place
             var isRenderHost = window.location.hostname === 'lou-platform.onrender.com' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
             if (isRenderHost) {
@@ -695,7 +710,14 @@
     // Load data
     loadStats();
     loadProfileBar();
-    loadProperties(1, 'score', 0);
+    // If first login, trigger scoring first (properties may already exist in DB from other users' scrapes)
+    if (localStorage.getItem('lou_first_login') === 'true') {
+      apiFetch(API + '/api/score', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+        .then(function () { loadProperties(1, 'score', 0); })
+        .catch(function () { loadProperties(1, 'score', 0); });
+    } else {
+      loadProperties(1, 'score', 0);
+    }
 
     // Refresh button — reload data from database without scraping
     $('refresh-btn').onclick = function () {
@@ -1682,12 +1704,35 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (!data.properties || data.properties.length === 0) {
+          var isFirstLogin = localStorage.getItem('lou_first_login') === 'true';
           if (currentNewOnly) {
             list.innerHTML = '<div class="dash-empty">' +
               '<h3 style="margin-bottom:8px;font-family:Playfair Display,serif">Aucun nouveau bien</h3>' +
               '<p>Aucun nouveau bien n\'a été détecté dans les dernières 24 heures.</p>' +
               '<p style="margin-top:12px">Les résultats se mettent à jour automatiquement toutes les 2 heures.</p>' +
             '</div>';
+          } else if (isFirstLogin) {
+            list.innerHTML = '<div class="dash-empty">' +
+              '<div style="font-size:48px;margin-bottom:16px">🐺</div>' +
+              '<h3 style="margin-bottom:8px;font-family:Playfair Display,serif">Bienvenue ! Lou est en chasse...</h3>' +
+              '<p>Votre première recherche est en cours sur 8 portails immobiliers suisses. Les résultats apparaîtront dans <strong>1 à 3 minutes</strong>.</p>' +
+              '<div class="first-login-progress" style="margin:20px auto;width:200px;height:4px;background:#e2e8f0;border-radius:4px;overflow:hidden">' +
+                '<div style="height:100%;background:#0369a1;border-radius:4px;animation:progressBar 90s linear forwards"></div>' +
+              '</div>' +
+              '<p style="margin-top:12px;color:#64748b;font-size:13px">Actualisez la page dans un instant, ou <a href="#" class="open-chat-link" style="color:#0369a1;cursor:pointer">discutez avec Lou</a> en attendant.</p>' +
+              '<button class="dash-btn" id="first-login-refresh" style="margin-top:16px;padding:10px 24px;background:#0369a1;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600">↻ Actualiser les résultats</button>' +
+            '</div>';
+            // Auto-refresh after 30 seconds
+            setTimeout(function () {
+              loadProperties(1, 'score', 0);
+              loadStats();
+            }, 30000);
+            // Another refresh at 90 seconds
+            setTimeout(function () {
+              loadProperties(1, 'score', 0);
+              loadStats();
+              localStorage.removeItem('lou_first_login');
+            }, 90000);
           } else {
             list.innerHTML = '<div class="dash-empty">' +
               '<h3 style="margin-bottom:8px;font-family:Playfair Display,serif">Pas encore de résultats</h3>' +
@@ -1697,9 +1742,21 @@
           }
           var chatLink = list.querySelector('.open-chat-link');
           if (chatLink) chatLink.onclick = function(e) { e.preventDefault(); document.querySelector('.chat-toggle').click(); };
+          var refreshBtn = $('first-login-refresh');
+          if (refreshBtn) refreshBtn.onclick = function () {
+            this.textContent = '⟳ Chargement...';
+            this.disabled = true;
+            // Trigger scoring first, then reload
+            apiFetch(API + '/api/score', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+              .then(function () { loadProperties(1, 'score', 0); loadStats(); })
+              .catch(function () { loadProperties(1, 'score', 0); loadStats(); });
+          };
           $('pagination').innerHTML = '';
           return;
         }
+
+        // Clear first login flag once we have results
+        localStorage.removeItem('lou_first_login');
 
         // Store property data for detail view
         window._propData = window._propData || {};
@@ -2540,6 +2597,7 @@
       '.detail-overlay{position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:2000;display:flex;justify-content:center;overflow-y:auto;padding:24px;backdrop-filter:blur(4px)}',
       '.detail-panel{background:#fff;border-radius:16px;width:100%;max-width:720px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.2);margin:auto;position:relative;animation:detailIn .25s ease}',
       '@keyframes detailIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}',
+      '@keyframes progressBar{from{width:0}to{width:100%}}',
       '.detail-close{position:absolute;top:16px;right:16px;width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.5);color:#fff;border:none;font-size:18px;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center;transition:background .2s}',
       '.detail-close:hover{background:rgba(0,0,0,.7)}',
       '.detail-gallery{position:relative;width:100%;height:360px;background:#e2e8f0;overflow:hidden}',
