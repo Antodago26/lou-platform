@@ -1790,17 +1790,23 @@
 
       // Re-score, then refresh everything in one wave. loadProfileBar() runs
       // LAST so the form disappearance acts as the visible "done" signal.
+      // Each refresh is isolated so one throw doesn't kill the rest, AND
+      // doesn't bubble up to the outer .catch (which would mask the real error
+      // by showing "Erreur reseau" instead of e.g. a /api/score failure).
       return apiFetch(API + '/api/score', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
-        .catch(function () {})
+        .catch(function (e) { console.warn('[saveProfile] /api/score failed', e); })
         .then(function () {
-          loadProperties(1, 'score', 0);
-          loadStats();
-          loadProfileBar();
+          try { loadProperties(1, 'score', 0); } catch (e) { console.error('[saveProfile] loadProperties threw', e); }
+          try { loadStats(); } catch (e) { console.error('[saveProfile] loadStats threw', e); }
+          try { loadProfileBar(); } catch (e) { console.error('[saveProfile] loadProfileBar threw', e); }
           try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
         });
     })
-    .catch(function () {
-      btn.textContent = 'Erreur reseau';
+    .catch(function (e) {
+      // Surface the real error on the button so we can diagnose without DevTools.
+      console.error('[saveProfile] outer catch fired', e);
+      var msg = (e && (e.message || e.name)) || 'inconnu';
+      btn.textContent = 'Err: ' + String(msg).slice(0, 60);
       btn.disabled = false;
     });
   }
