@@ -2975,28 +2975,16 @@
   // ROUTER — Determine which page to show
   // ============================================================
   var path = window.location.pathname;
-  var isRender = window.location.hostname === 'lou-platform.onrender.com' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
   if (path === '/dashboard') {
-    showDashboard();
-  } else if (!isRender) {
-    // External host (Webflow etc.)
-    // If user is logged in, show dashboard; otherwise hook into existing page
-    if (isJWT(TOKEN) && USER) {
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', showDashboard);
-      } else {
-        showDashboard();
-      }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', showDashboard);
     } else {
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initLanding);
-      } else {
-        initLanding();
-      }
+      showDashboard();
     }
   } else {
-    // Render host — HTML already exists, just hook CTAs
+    // Landing or any other public page — always hook CTAs, never auto-redirect to dashboard.
+    // When logged in, initLanding swaps the "Connexion" button for "Mon Dashboard".
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', initLanding);
     } else {
