@@ -2324,6 +2324,26 @@ def dashboard():
     return send_from_directory('static', 'dashboard.html')
 
 
+@app.route('/privacy')
+def privacy():
+    return send_from_directory('static', 'privacy.html')
+
+
+@app.route('/terms')
+def terms():
+    return send_from_directory('static', 'terms.html')
+
+
+@app.route('/profil')
+def profil():
+    return send_from_directory('static', 'profil.html')
+
+
+@app.route('/faq')
+def faq():
+    return send_from_directory('static', 'faq.html')
+
+
 @app.route('/health')
 def health():
     return jsonify({"status": "ok"})

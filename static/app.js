@@ -126,7 +126,7 @@
       '<input id="lou-auth-name" type="text" placeholder="Votre nom" style="display:none">',
       '<div id="lou-hcaptcha" style="display:none;margin-bottom:12px"></div>',
       '<button class="auth-submit" id="lou-auth-btn">Se connecter</button>',
-      '<div class="lou-auth-switch"><a id="lou-auth-toggle">Creer un compte</a></div>',
+      '<div class="lou-auth-switch"><a id="lou-auth-toggle">Créer un compte</a></div>',
       '<div class="lou-auth-err" id="lou-auth-err"></div>',
       '</div>'
     ].join('');
@@ -143,7 +143,7 @@
       mode = mode === 'login' ? 'signup' : 'login';
       $('lou-auth-name').style.display = mode === 'signup' ? 'block' : 'none';
       $('lou-auth-btn').textContent = mode === 'signup' ? "S'inscrire" : 'Se connecter';
-      this.textContent = mode === 'signup' ? 'Deja un compte ? Se connecter' : 'Creer un compte';
+      this.textContent = mode === 'signup' ? 'Déjà un compte ? Se connecter' : 'Créer un compte';
       $('lou-auth-err').style.display = 'none';
       // Show/hide hCaptcha
       var hcDiv = $('lou-hcaptcha');
@@ -332,7 +332,7 @@
       '</a>' +
       '<div class="nav-links">' +
         '<a href="#features">Fonctions</a>' +
-        '<a href="#how">Comment ca marche</a>' +
+        '<a href="#how">Comment ça marche</a>' +
         '<a href="#" class="btn btn-primary" id="nav-login-btn">Connexion</a>' +
       '</div>';
     document.body.appendChild(nav);
@@ -342,9 +342,9 @@
     hero.innerHTML =
       '<div class="hero-text">' +
         '<h1>Le bon <em>home</em>,<br>au bon moment.</h1>' +
-        '<p>Bon Home scrute 10+ portails immobiliers suisses en continu. Lou, notre IA, deniche les biens qui vous correspondent et vous les presente — scores, analyses, tout est pret.</p>' +
+        '<p>Bon Home scrute 10+ portails immobiliers suisses en continu. Lou, notre IA, déniche les biens qui vous correspondent et vous les présente — scores, analyses, tout est prêt.</p>' +
         '<div class="hero-ctas">' +
-          '<a href="#" class="btn btn-primary" id="hero-cta-1">Parler a Lou</a>' +
+          '<a href="#" class="btn btn-primary" id="hero-cta-1">Parler à Lou</a>' +
           '<a href="#how" class="btn btn-outline">En savoir plus</a>' +
         '</div>' +
       '</div>' +
@@ -362,8 +362,8 @@
     statsBar.innerHTML =
       '<div class="stats-bar-inner">' +
         '<div><strong>10+</strong><span>Portails suisses</span></div>' +
-        '<div><strong>500+</strong><span>Annonces analysees</span></div>' +
-        '<div><strong>6</strong><span>Criteres de scoring</span></div>' +
+        '<div><strong>500+</strong><span>Annonces analysées</span></div>' +
+        '<div><strong>6</strong><span>Critères de scoring</span></div>' +
         '<div><strong>24/7</strong><span>Veille automatique</span></div>' +
       '</div>';
     document.body.appendChild(statsBar);
@@ -388,12 +388,12 @@
     how.id = 'how';
     how.innerHTML =
       '<div class="how-inner">' +
-        '<h2>Comment ca marche ?</h2>' +
+        '<h2>Comment ça marche ?</h2>' +
         '<div class="steps">' +
           '<div class="step"><div class="step-num">1</div><h3>Parlez à Lou</h3><p>Dites-lui ce que vous cherchez : région, budget, type de bien, nombre de pièces...</p></div>' +
           '<div class="step"><div class="step-num">2</div><h3>Lou chasse pour vous</h3><p>Notre moteur scrute 10+ portails immobiliers suisses en continu et collecte les nouvelles annonces.</p></div>' +
           '<div class="step"><div class="step-num">3</div><h3>Scoring & analyse</h3><p>Chaque bien est noté selon 6 critères pondérés. Seuls les meilleurs vous sont présentés.</p></div>' +
-          '<div class="step"><div class="step-num">4</div><h3>Contactez & visitez</h3><p>Retrouvez les coordonnees du proprietaire, l\'annonce originale et tous les details en un clic.</p></div>' +
+          '<div class="step"><div class="step-num">4</div><h3>Contactez & visitez</h3><p>Retrouvez les coordonnées du propriétaire, l\'annonce originale et tous les détails en un clic.</p></div>' +
         '</div>' +
       '</div>';
     document.body.appendChild(how);
@@ -401,9 +401,9 @@
     // CTA
     var ctaSection = ce('section', 'cta');
     ctaSection.innerHTML =
-      '<h2>Pret a trouver le bon home ?</h2>' +
+      '<h2>Prêt à trouver le bon home ?</h2>' +
       '<p>Rejoignez Bon Home et laissez Lou faire le travail de recherche pour vous.</p>' +
-      '<a href="#" class="btn btn-primary" id="cta-bottom">Parler a Lou</a>';
+      '<a href="#" class="btn btn-primary" id="cta-bottom">Parler à Lou</a>';
     document.body.appendChild(ctaSection);
 
     // FOOTER
@@ -571,7 +571,7 @@
         if (data.error) { document.getElementById('admin-body').innerHTML = '<p style="color:#dc2626">' + escapeHtml(data.error) + '</p>'; return; }
         var users = data.users || [];
         var html = '<div class="admin-stats"><strong>' + users.length + '</strong> utilisateur' + (users.length > 1 ? 's' : '') + ' inscrits</div>';
-        html += '<table class="admin-table"><thead><tr><th>Nom</th><th>Email</th><th>Inscription</th><th>Derniere connexion</th><th>Plan</th><th>Profils</th><th>Favoris</th><th>Statut</th></tr></thead><tbody>';
+        html += '<table class="admin-table"><thead><tr><th>Nom</th><th>Email</th><th>Inscription</th><th>Dernière connexion</th><th>Plan</th><th>Profils</th><th>Favoris</th><th>Statut</th></tr></thead><tbody>';
         users.forEach(function(u){
           var created = u.created_at ? new Date(u.created_at).toLocaleDateString('fr-CH') : '-';
           var lastLogin = u.last_login ? new Date(u.last_login).toLocaleDateString('fr-CH') : 'Jamais';
@@ -613,7 +613,7 @@
       '<div class="dash-nav-right">' +
         '<button class="dash-admin-btn" id="admin-btn" style="display:none">Admin</button>' +
         '<span class="dash-user-email">' + escapeHtml(USER.email || '') + '</span>' +
-        '<button class="dash-logout-btn" id="logout-btn">Deconnexion</button>' +
+        '<button class="dash-logout-btn" id="logout-btn">Déconnexion</button>' +
       '</div>';
     document.body.appendChild(nav);
 
@@ -635,8 +635,8 @@
           '<select id="sort-select" class="dash-select">' +
             '<option value="score">Meilleur score</option>' +
             '<option value="price_asc">Prix croissant</option>' +
-            '<option value="price_desc">Prix decroissant</option>' +
-            '<option value="newest">Plus recents</option>' +
+            '<option value="price_desc">Prix décroissant</option>' +
+            '<option value="newest">Plus récents</option>' +
             '<option value="surface">Plus grande surface</option>' +
           '</select>' +
           '<select id="grade-filter" class="dash-select">' +
@@ -649,7 +649,7 @@
       '</div>' +
       // Stats row
       '<div class="dash-stats" id="dash-stats">' +
-        '<div class="dash-stat"><div class="dash-stat-num" id="stat-total">-</div><div class="dash-stat-lbl">Biens analyses</div></div>' +
+        '<div class="dash-stat"><div class="dash-stat-num" id="stat-total">-</div><div class="dash-stat-lbl">Biens analysés</div></div>' +
         '<div class="dash-stat clickable" id="stat-new-card" style="cursor:pointer"><div class="dash-stat-num" id="stat-new">-</div><div class="dash-stat-lbl">Nouveaux (24h)</div></div>' +
         '<div class="dash-stat clickable" id="stat-fav-card" style="cursor:pointer"><div class="dash-stat-num" id="stat-favs">-</div><div class="dash-stat-lbl">Favoris</div></div>' +
         '<div class="dash-stat"><div class="dash-stat-num" id="stat-grade-a">-</div><div class="dash-stat-lbl">Classe A</div></div>' +
@@ -666,14 +666,14 @@
             '<span class="score-legend-badge" style="background:#dc2626">D <small>0-54</small></span>' +
           '</div>' +
           '<div class="score-legend-criteria">' +
-            '<div class="score-legend-item"><strong>Zone</strong> — Proximite de vos villes cibles</div>' +
-            '<div class="score-legend-item"><strong>Budget</strong> — Adéquation avec votre fourchette de prix</div>' +
-            '<div class="score-legend-item"><strong>Type</strong> — Correspondance au type de bien souhaite</div>' +
-            '<div class="score-legend-item"><strong>Surface</strong> — Surface et nombre de pièces</div>' +
-            '<div class="score-legend-item"><strong>Équipements</strong> — Balcon, parking, ascenseur, etc.</div>' +
-            '<div class="score-legend-item"><strong>Fraicheur</strong> — Annonce publiee recemment</div>' +
+            '<div class="score-legend-item"><strong>Zone</strong> — Proximité de vos villes cibles (distance réelle en km)</div>' +
+            '<div class="score-legend-item"><strong>Budget</strong> — Adéquation entre le prix du bien et votre budget max</div>' +
+            '<div class="score-legend-item"><strong>Type</strong> — Correspondance au type de bien souhaité (appartement, maison…)</div>' +
+            '<div class="score-legend-item"><strong>Surface</strong> — Surface et nombre de pièces par rapport à votre minimum</div>' +
+            '<div class="score-legend-item"><strong>Équipements</strong> — Parking, balcon, ascenseur, etc. détectés dans l\'annonce</div>' +
+            '<div class="score-legend-item"><strong>Fraîcheur</strong> — Date de publication récente de l\'annonce</div>' +
           '</div>' +
-          '<p class="score-legend-tip">Cliquez sur le badge de score d\'une annonce pour voir le detail.</p>' +
+          '<p class="score-legend-tip">Cliquez sur le badge de score d\'une annonce pour voir le détail.</p>' +
         '</div>' +
       '</div>' +
       // View tabs
@@ -688,10 +688,10 @@
       '<div id="fav-toolbar" class="fav-toolbar" style="display:none">' +
         '<div class="fav-toolbar-left">' +
           '<select id="fav-sort" class="dash-select">' +
-            '<option value="date">Plus recents</option>' +
+            '<option value="date">Plus récents</option>' +
             '<option value="score">Meilleur score</option>' +
             '<option value="price_asc">Prix croissant</option>' +
-            '<option value="price_desc">Prix decroissant</option>' +
+            '<option value="price_desc">Prix décroissant</option>' +
           '</select>' +
           '<button id="fav-compare-btn" class="fav-action-btn">&#9878; Comparer</button>' +
         '</div>' +
@@ -746,11 +746,17 @@
       btn.disabled = false;
     };
 
-    // Sort/filter change
+    // Sort/filter change — re-sort active view (properties list OR map sidebar)
     $('sort-select').onchange = function () {
       currentNewOnly = false;
       document.querySelectorAll('.dash-stat').forEach(function(s) { s.classList.remove('stat-active'); });
-      loadProperties(1, this.value, parseInt($('grade-filter').value), false);
+      if (currentView === 'map') {
+        _mapCurrentSort = this.value;
+        _mapVisibleCount = _mapPageSize; // Reset pagination
+        _refreshMapSidebar();
+      } else {
+        loadProperties(1, this.value, parseInt($('grade-filter').value), false);
+      }
     };
     $('grade-filter').onchange = function () {
       currentNewOnly = false;
@@ -816,7 +822,8 @@
       $('map-view').style.display = isMap ? '' : 'none';
       $('pagination').style.display = (isFav || isMap) ? 'none' : '';
       $('fav-toolbar').style.display = isFav ? '' : 'none';
-      $('sort-select').style.display = (isFav || isMap) ? 'none' : '';
+      // Keep sort/filter visible on all views (rewire them for each view via onchange handlers below)
+      $('sort-select').style.display = isFav ? 'none' : '';
       $('grade-filter').style.display = (isFav || isMap) ? 'none' : '';
       $('compare-panel').style.display = 'none';
       if (isFav) {
@@ -954,6 +961,9 @@
     var _mapHighlightedCard = null;
 
     var _mapAllProps = null; // All properties for map (loaded separately)
+    var _mapCurrentSort = 'score'; // Current sort for map sidebar
+    var _mapPageSize = 50; // Progressive loading size
+    var _mapVisibleCount = 50; // Number of cards currently visible
 
     function loadMapView() {
       var container = $('map-view');
@@ -1015,17 +1025,31 @@
       if (!sidebar) return;
       var data = _mapAllProps || window._propData || {};
       var props = Object.keys(data).map(function(id) { return data[id]; });
-      // Sort by score descending
-      props.sort(function(a, b) { return (b.score || 0) - (a.score || 0); });
+
+      // Sort according to current sort choice (sync with main sort dropdown if available)
+      var sortSel = $('sort-select');
+      if (sortSel && sortSel.value) _mapCurrentSort = sortSel.value;
+      var sortKey = _mapCurrentSort || 'score';
+      props.sort(function(a, b) {
+        if (sortKey === 'price_asc') return (a.price || Infinity) - (b.price || Infinity);
+        if (sortKey === 'price_desc') return (b.price || 0) - (a.price || 0);
+        if (sortKey === 'newest') return (new Date(b.published_at || b.scraped_at || 0)) - (new Date(a.published_at || a.scraped_at || 0));
+        if (sortKey === 'surface') return (b.surface || 0) - (a.surface || 0);
+        return (b.score || 0) - (a.score || 0); // default: score
+      });
 
       if (props.length === 0) {
         sidebar.innerHTML = '<div style="padding:20px;color:#64748b;text-align:center">Aucun bien à afficher</div>';
         return;
       }
 
-      var html = '<div class="map-sidebar-header"><span>' + props.length + ' biens</span></div>';
+      // Progressive loading: show first N cards, with a "Voir plus" button
+      var visible = Math.min(_mapVisibleCount, props.length);
+      var shown = props.slice(0, visible);
+
+      var html = '<div class="map-sidebar-header"><span>' + visible + ' / ' + props.length + ' biens</span></div>';
       html += '<div class="map-sidebar-list" id="map-sidebar-list">';
-      props.forEach(function(p) {
+      shown.forEach(function(p) {
         var gradeColors = { A: '#059669', B: '#0369a1', C: '#d97706', D: '#dc2626' };
         var gc = gradeColors[p.grade] || '#94a3b8';
         var priceStr = p.price ? formatPrice(p.price) + ' CHF' : 'Prix sur demande';
@@ -1054,7 +1078,23 @@
         '</div>';
       });
       html += '</div>';
+
+      // "Load more" button when more items available
+      if (visible < props.length) {
+        var remaining = props.length - visible;
+        html += '<button id="map-load-more" class="map-load-more-btn">Voir ' + Math.min(_mapPageSize, remaining) + ' biens de plus (' + remaining + ' restants)</button>';
+      }
+
       sidebar.innerHTML = html;
+
+      // Wire up "load more"
+      var loadMoreBtn = $('map-load-more');
+      if (loadMoreBtn) {
+        loadMoreBtn.onclick = function() {
+          _mapVisibleCount += _mapPageSize;
+          _refreshMapSidebar();
+        };
+      }
 
       // Hover card -> highlight marker
       sidebar.querySelectorAll('.map-card').forEach(function(card) {
@@ -1383,9 +1423,19 @@
     try { scores = JSON.parse(el.getAttribute('data-scores')); } catch(err) { return; }
 
     function scoreColor(v) { return v >= 80 ? '#059669' : v >= 60 ? '#0369a1' : v >= 40 ? '#d97706' : '#dc2626'; }
+    var ST_TIPS = (window.SCORE_TOOLTIPS_INLINE = window.SCORE_TOOLTIPS_INLINE || {
+      'Zone': 'Distance entre le bien et vos zones de recherche',
+      'Budget': 'Rapport entre le prix et votre budget max',
+      'Type': 'Correspondance au type de bien souhaité',
+      'Surface': 'Surface et nombre de pièces vs votre minimum',
+      'Equip.': 'Équipements demandés détectés dans l\'annonce',
+      'Fraicheur': 'Date de publication récente de l\'annonce'
+    });
     function scoreRow(label, val) {
       val = val || 0;
-      return '<div class="st-row"><span>' + label + '</span>' +
+      var tip = ST_TIPS[label] || '';
+      var helpHtml = tip ? ' <span class="st-help" title="' + tip.replace(/"/g, '&quot;') + '" style="display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;font-size:10px;font-weight:700;background:#e2e8f0;color:#475569;border-radius:50%;cursor:help;margin-left:4px">?</span>' : '';
+      return '<div class="st-row" title="' + tip.replace(/"/g, '&quot;') + '"><span>' + label + helpHtml + '</span>' +
         '<div style="flex:1;margin:0 8px;height:6px;background:#e2e8f0;border-radius:3px"><div style="width:' + val + '%;height:100%;background:' + scoreColor(val) + ';border-radius:3px"></div></div>' +
         '<strong>' + val + '</strong></div>';
     }
@@ -1393,7 +1443,8 @@
     var tip = document.createElement('div');
     tip.className = 'score-tooltip';
     tip._sourceEl = el;
-    tip.innerHTML = '<div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#0f172a">Detail du score</div>' +
+    tip.innerHTML = '<div style="font-weight:700;font-size:14px;margin-bottom:4px;color:#0f172a">Détail du score</div>' +
+        '<div style="font-size:11px;color:#64748b;margin-bottom:10px">Survolez un critère pour l\'explication</div>' +
         scoreRow('Zone', scores.zone) +
         scoreRow('Budget', scores.budget) +
         scoreRow('Type', scores.type) +
@@ -1495,10 +1546,10 @@
     var rows = [];
     if (p.rooms) rows.push(['Pièces', p.rooms + ' pcs']);
     if (p.surface) rows.push(['Surface', p.surface + ' m²']);
-    if (p.floor !== null && p.floor !== undefined) rows.push(['Etage', p.floor + 'e']);
+    if (p.floor !== null && p.floor !== undefined) rows.push(['Étage', p.floor + 'e']);
     if (p.distance_km !== null && p.distance_km !== undefined) rows.push(['Distance', p.distance_km + ' km']);
     if (p.days_online !== null && p.days_online !== undefined) rows.push(['En ligne depuis', p.days_online <= 1 ? 'Aujourd\'hui' : p.days_online + ' jours']);
-    if (p.published_at) rows.push(['Publie le', new Date(p.published_at).toLocaleDateString('fr-CH')]);
+    if (p.published_at) rows.push(['Publié le', new Date(p.published_at).toLocaleDateString('fr-CH')]);
 
     var tableHtml = rows.map(function(r) {
       return '<div class="detail-row"><span>' + r[0] + '</span><strong>' + r[1] + '</strong></div>';
@@ -1510,7 +1561,7 @@
       '<div class="detail-score-badge" style="background:' + gc + '"><span class="dsb-num">' + (p.score||0) + '</span><span class="dsb-grade">' + (p.grade||'') + '</span></div>' +
       '<div class="detail-score-bars">' +
         _detailBar('Zone', sd.zone) + _detailBar('Budget', sd.budget) + _detailBar('Type', sd.type) +
-        _detailBar('Surface', sd.surface) + _detailBar('Equip.', sd.equipment) + _detailBar('Fraicheur', sd.freshness) +
+        _detailBar('Surface', sd.surface) + _detailBar('Equip.', sd.equipment) + _detailBar('Fraîcheur', sd.freshness) +
       '</div></div>';
 
     // Sources
@@ -1575,10 +1626,25 @@
     });
   };
 
+  // Explanatory tooltips for each scoring criterion
+  var SCORE_TOOLTIPS = {
+    'Zone': 'Correspond à la distance entre le bien et vos zones de recherche. Plus le bien est proche d\'une de vos villes, plus le score est élevé.',
+    'Budget': 'Correspond au rapport entre le prix du bien et votre budget max. Un bien pile dans votre fourchette obtient 100, un bien hors budget descend à 0.',
+    'Type': 'Correspond au type de bien recherché (appartement, maison, etc.). Score maximal si le type correspond exactement.',
+    'Surface': 'Correspond à la surface et au nombre de pièces par rapport à votre minimum. Plus c\'est grand que votre seuil, mieux c\'est.',
+    'Equip.': 'Correspond aux équipements demandés (parking, balcon, ascenseur, etc.) détectés dans l\'annonce.',
+    'Equipements': 'Correspond aux équipements demandés (parking, balcon, ascenseur, etc.) détectés dans l\'annonce.',
+    'Fraicheur': 'Correspond à la date de publication de l\'annonce. Une annonce récente obtient un meilleur score.',
+    'Fraîcheur': 'Correspond à la date de publication de l\'annonce. Une annonce récente obtient un meilleur score.'
+  };
+
   function _detailBar(label, val) {
     val = val || 0;
     var color = val >= 80 ? '#059669' : val >= 60 ? '#0369a1' : val >= 40 ? '#d97706' : '#dc2626';
-    return '<div class="dsb-row"><span>' + label + '</span><div class="dsb-track"><div class="dsb-fill" style="width:' + val + '%;background:' + color + '"></div></div><strong>' + val + '</strong></div>';
+    var tip = SCORE_TOOLTIPS[label] || '';
+    var tipAttr = tip ? ' title="' + escapeHtml(tip) + '"' : '';
+    var helpIcon = tip ? ' <span class="dsb-help" title="' + escapeHtml(tip) + '">?</span>' : '';
+    return '<div class="dsb-row"' + tipAttr + '><span>' + label + helpIcon + '</span><div class="dsb-track"><div class="dsb-fill" style="width:' + val + '%;background:' + color + '"></div></div><strong>' + val + '</strong></div>';
   }
 
   function toggleProfileForm() {
@@ -1894,7 +1960,7 @@
 
     var scoreDetailAttr = '';
     if (p.score_detail) {
-      scoreDetailAttr = ' data-scores=\'' + JSON.stringify({zone: p.score_detail.zone||0, budget: p.score_detail.budget||0, type: p.score_detail.type||0, surface: p.score_detail.surface||0, equipment: p.score_detail.equipment||0, freshness: p.score_detail.freshness||0}) + '\' onclick="showScoreDetail(this, event)" title="Cliquez pour le detail"';
+      scoreDetailAttr = ' data-scores=\'' + JSON.stringify({zone: p.score_detail.zone||0, budget: p.score_detail.budget||0, type: p.score_detail.type||0, surface: p.score_detail.surface||0, equipment: p.score_detail.equipment||0, freshness: p.score_detail.freshness||0}) + '\' onclick="showScoreDetail(this, event)" title="Cliquez pour voir le détail du score"';
     }
 
     return '<div class="prop-card" onclick="openPropertyDetail(' + p.id + ')" style="cursor:pointer">' +
@@ -1995,10 +2061,11 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (!data.favorites || data.favorites.length === 0) {
-          list.innerHTML = '<div class="dash-empty">' +
-            '<div style="font-size:48px;margin-bottom:16px">&#9825;</div>' +
-            '<div style="font-size:16px;font-weight:600;margin-bottom:8px">Aucun favori</div>' +
-            '<div>Cliquez sur le coeur d\'un bien pour l\'ajouter a vos favoris</div>' +
+          list.innerHTML = '<div class="dash-empty fav-empty">' +
+            '<div class="fav-empty-icon">&#10084;&#65039;</div>' +
+            '<div class="fav-empty-title">Aucun favori pour l\'instant</div>' +
+            '<div class="fav-empty-text">Cliquez sur le cœur d\'un bien pour le retrouver ici.</div>' +
+            '<button class="fav-empty-cta" onclick="document.querySelector(\'.dash-tab[data-view=properties]\').click()">Parcourir les biens</button>' +
           '</div>';
           return;
         }
@@ -2351,7 +2418,7 @@
           if (data.profile_ready && !isJWT(TOKEN)) {
             body.insertAdjacentHTML('beforeend', '<div class="chat-msg bot" style="background:#e0f2fe">' +
               'Super, j\'ai tous tes critères ! ' +
-              '<a href="#" class="chat-signup-link" style="color:#0369a1;font-weight:600">Cree ton espace</a> pour que je lance la recherche.' +
+              '<a href="#" class="chat-signup-link" style="color:#0369a1;font-weight:600">Crée ton espace</a> pour que je lance la recherche.' +
             '</div>');
             var signupLink = body.querySelector('.chat-signup-link');
             if (signupLink) signupLink.onclick = function (e) {
@@ -2598,6 +2665,12 @@
       // Loading / Empty
       '.dash-loading{text-align:center;padding:48px;color:#64748b;font-size:15px}',
       '.dash-empty{text-align:center;padding:48px;color:#64748b;font-size:15px;background:#fff;border:1px dashed #cbd5e1;border-radius:12px}',
+      '.fav-empty{padding:64px 32px;background:linear-gradient(135deg,#f8fafc 0%,#fff 100%);border:1px solid #e2e8f0}',
+      '.fav-empty-icon{font-size:56px;margin-bottom:20px;display:block;filter:grayscale(.3)}',
+      '.fav-empty-title{font-family:"Playfair Display",Georgia,serif;font-size:22px;font-weight:700;color:#0f172a;margin-bottom:8px}',
+      '.fav-empty-text{font-size:15px;color:#64748b;margin-bottom:24px;max-width:380px;margin-left:auto;margin-right:auto;line-height:1.5}',
+      '.fav-empty-cta{background:#0369a1;color:#fff;border:none;padding:12px 28px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s}',
+      '.fav-empty-cta:hover{background:#0284c7;transform:translateY(-1px);box-shadow:0 4px 16px rgba(3,105,161,.3)}',
 
       // Pagination
       '.dash-pagination{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:28px;padding-bottom:32px;flex-wrap:wrap}',
@@ -2646,17 +2719,19 @@
       '.detail-address{font-size:14px;color:#64748b;margin-bottom:24px}',
       '.detail-section{margin-bottom:24px}',
       '.detail-section h3{font-size:15px;font-weight:700;color:#0f172a;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #f1f5f9}',
-      '.detail-table{display:grid;grid-template-columns:1fr 1fr;gap:0}',
-      '.detail-row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f8fafc;font-size:14px}',
+      '.detail-table{display:grid;grid-template-columns:1fr 1fr;column-gap:24px;row-gap:4px}',
+      '.detail-row{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f8fafc;border-radius:8px;font-size:14px;gap:12px}',
       '.detail-row span{color:#64748b}',
-      '.detail-row strong{color:#0f172a}',
+      '.detail-row strong{color:#0f172a;text-align:right}',
       '.detail-score-wrap{display:flex;gap:20px;align-items:flex-start;margin-bottom:24px;padding:20px;background:#f8fafc;border-radius:12px}',
       '.detail-score-badge{width:64px;height:64px;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0}',
       '.dsb-num{font-size:22px;font-weight:800;color:#fff;line-height:1}',
       '.dsb-grade{font-size:13px;font-weight:700;color:rgba(255,255,255,.8)}',
       '.detail-score-bars{flex:1;display:flex;flex-direction:column;gap:6px}',
-      '.dsb-row{display:flex;align-items:center;gap:10px;font-size:13px}',
-      '.dsb-row span{min-width:70px;color:#64748b}',
+      '.dsb-row{display:flex;align-items:center;gap:10px;font-size:13px;cursor:help}',
+      '.dsb-row span{min-width:90px;color:#64748b;display:flex;align-items:center;gap:4px}',
+      '.dsb-help{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;font-size:10px;font-weight:700;background:#e2e8f0;color:#475569;border-radius:50%;cursor:help;line-height:1}',
+      '.dsb-help:hover{background:#0369a1;color:#fff}',
       '.dsb-track{flex:1;height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden}',
       '.dsb-fill{height:100%;border-radius:3px;transition:width .3s}',
       '.dsb-row strong{min-width:24px;text-align:right;font-size:13px;color:#334155}',
@@ -2758,6 +2833,8 @@
       '.map-split{display:flex;height:100%;width:100%}',
       '.map-sidebar{width:380px;min-width:320px;height:100%;overflow-y:auto;background:#f8fafc;border-right:1px solid #e2e8f0}',
       '.map-sidebar-header{padding:12px 16px;border-bottom:1px solid #e2e8f0;font-size:13px;font-weight:600;color:#64748b;background:#fff;position:sticky;top:0;z-index:1}',
+      '.map-load-more-btn{display:block;width:calc(100% - 24px);margin:12px;padding:12px;background:#fff;border:1px solid #0369a1;color:#0369a1;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s}',
+      '.map-load-more-btn:hover{background:#0369a1;color:#fff;transform:translateY(-1px);box-shadow:0 4px 12px rgba(3,105,161,.2)}',
       '.map-sidebar-list{padding:8px}',
       '.map-card{display:flex;gap:10px;padding:10px;margin-bottom:6px;background:#fff;border-radius:10px;border:1px solid #e2e8f0;cursor:pointer;transition:all .15s;position:relative}',
       '.map-card:hover{border-color:#0369a1;box-shadow:0 2px 8px rgba(3,105,161,.1)}',
