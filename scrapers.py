@@ -304,7 +304,7 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=2):
 
     for page in range(1, max_pages + 1):
         url = f"https://www.homegate.ch/{tx}/real-estate/city-{slug}/matching-list?ep={page}"
-        status, html = _sb_get(url, render_js=False)
+        status, html = _sb_get(url, render_js=True)
 
         if status != 200:
             log.warning(f"[Homegate] Page {page}: HTTP {status}")
@@ -534,6 +534,23 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
                             if not lid:
                                 continue
 
+                            # Extract full URL if available (ImmoScout needs slug + ID)
+                            seo_info = listing.get('seoInformation', {}) or item.get('seoInformation', {}) or {}
+                            listing_url = (
+                                seo_info.get('listingUrl') or
+                                seo_info.get('url') or
+                                listing.get('url') or
+                                listing.get('listingUrl') or
+                                item.get('url') or
+                                ''
+                            )
+                            if listing_url and listing_url.startswith('/'):
+                                listing_url = 'https://www.immoscout24.ch' + listing_url
+                            if not listing_url or 'immoscout24' not in listing_url:
+                                # Fallback: redirect-safe URL pattern (with tx so /en/d/ works)
+                                tx_path = 'buy' if transaction == 'achat' else 'rent'
+                                listing_url = f"https://www.immoscout24.ch/en/real-estate/{tx_path}/detail/{lid}"
+
                             # Price — check multiple known field names
                             addr = listing.get('address', {}) or {}
                             if isinstance(addr, str):
@@ -572,7 +589,7 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
 
                             results.append(_make_property(
                                 external_id=f"is24-{lid}", source='ImmoScout24',
-                                source_url=f"https://www.immoscout24.ch/en/d/{lid}",
+                                source_url=listing_url,
                                 title=listing.get('title', item.get('title', '')),
                                 description=listing.get('description', '')[:500],
                                 property_type=_guess_type(listing.get('propertyType', listing.get('title', ''))),
@@ -1207,8 +1224,65 @@ def scrape_acheter_louer(city="Lausanne", transaction="location", max_pages=1):
 
 
 # ============================================================
-# FLATFOX — Direct API (no ScrapingBee needed)
+# FLATFOX — Direct API with bounding box geo-search
 # ============================================================
+
+# Bounding boxes (south, west, north, east) for Swiss cities — ~5km radius around center
+CITY_BBOXES = {
+    'lausanne':             (46.505, 6.585, 46.555, 6.680),
+    'geneve':               (46.170, 6.100, 46.230, 6.200),
+    'genève':               (46.170, 6.100, 46.230, 6.200),
+    'neuchatel':            (46.975, 6.890, 47.020, 6.960),
+    'neuchâtel':            (46.975, 6.890, 47.020, 6.960),
+    'fribourg':             (46.780, 7.130, 46.820, 7.180),
+    'sion':                 (46.220, 7.330, 46.250, 7.400),
+    'montreux':             (46.420, 6.890, 46.460, 6.940),
+    'nyon':                 (46.370, 6.220, 46.400, 6.260),
+    'morges':               (46.500, 6.480, 46.520, 6.520),
+    'yverdon':              (46.760, 6.620, 46.790, 6.660),
+    'yverdon-les-bains':    (46.760, 6.620, 46.790, 6.660),
+    'la chaux-de-fonds':    (47.085, 6.790, 47.120, 6.850),
+    'bienne':               (47.120, 7.220, 47.160, 7.280),
+    'biel':                 (47.120, 7.220, 47.160, 7.280),
+    'delemont':             (47.350, 7.330, 47.370, 7.370),
+    'delémont':             (47.350, 7.330, 47.370, 7.370),
+    'berne':                (46.930, 7.410, 46.970, 7.480),
+    'bern':                 (46.930, 7.410, 46.970, 7.480),
+    'vevey':                (46.450, 6.830, 46.470, 6.870),
+    'renens':               (46.525, 6.570, 46.545, 6.600),
+    'zurich':               (47.340, 8.480, 47.410, 8.580),
+    'zürich':               (47.340, 8.480, 47.410, 8.580),
+    'basel':                (47.530, 7.560, 47.580, 7.620),
+    'bâle':                 (47.530, 7.560, 47.580, 7.620),
+    'lugano':               (45.990, 8.920, 46.020, 8.970),
+    'lucerne':              (47.030, 8.270, 47.070, 8.330),
+    'luzern':               (47.030, 8.270, 47.070, 8.330),
+    'winterthur':           (47.480, 8.700, 47.520, 8.760),
+    'st. gallen':           (47.410, 9.350, 47.440, 9.410),
+    'carouge':              (46.175, 6.130, 46.195, 6.155),
+    'meyrin':               (46.220, 6.065, 46.240, 6.095),
+    'prilly':               (46.525, 6.590, 46.540, 6.610),
+    'pully':                (46.505, 6.650, 46.530, 6.680),
+    'ecublens':             (46.520, 6.540, 46.540, 6.570),
+    'sierre':               (46.280, 7.510, 46.310, 7.560),
+    'martigny':             (46.090, 7.060, 46.120, 7.090),
+    'colombier':            (46.960, 6.850, 46.980, 6.880),
+    'peseux':               (46.980, 6.850, 46.995, 6.870),
+    'boudry':               (46.940, 6.820, 46.960, 6.860),
+    'cortaillod':           (46.935, 6.830, 46.950, 6.860),
+    'marin-epagnier':       (47.000, 6.970, 47.020, 7.000),
+    'hauterive':            (46.990, 6.930, 47.005, 6.950),
+    'saint-blaise':         (47.005, 6.970, 47.020, 6.995),
+    'le locle':             (47.050, 6.730, 47.070, 6.760),
+    'val-de-travers':       (46.900, 6.570, 46.930, 6.640),
+    'fleurier':             (46.895, 6.570, 46.920, 6.600),
+    'milvignes':            (46.990, 6.900, 47.010, 6.930),
+    'la tène':              (47.000, 6.970, 47.015, 6.995),
+    'le landeron':          (47.050, 7.060, 47.070, 7.090),
+    'bevaix':               (46.925, 6.810, 46.945, 6.830),
+    'val-de-ruz':           (47.030, 6.890, 47.060, 6.930),
+    'corcelles-cormondrèche': (46.970, 6.860, 46.990, 6.890),
+}
 
 def scrape_flatfox(city="Lausanne", transaction="location", limit=50):
     log.info(f"[Flatfox] Searching {city} ({transaction})")
@@ -1216,46 +1290,80 @@ def scrape_flatfox(city="Lausanne", transaction="location", limit=50):
     offer_type = 'RENT' if transaction == 'location' else 'SELL'
     city_norm = _normalize_city(city)
 
-    # Public API — no auth needed, returns all listings, we filter client-side by city
-    api_url = "https://flatfox.ch/api/v1/public-listing/"
     headers = {
         'Accept': 'application/json',
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
     }
 
-    # Paginate through listings, filter by city + offer_type client-side
-    # Cap at 8 pages (800 listings) — most Swiss cities have few Flatfox listings
-    # Stop early if no matches found after checking enough pages
-    max_pages = 8
-    page_size = 100
-    found = 0
-    pages_without_match = 0
+    bbox = CITY_BBOXES.get(city.lower())
+    if not bbox:
+        # Try normalized name
+        bbox = CITY_BBOXES.get(city_norm)
+    if not bbox:
+        log.warning(f"[Flatfox] No bounding box for {city}, skipping")
+        return results
 
-    for page_idx in range(max_pages):
+    south, west, north, east = bbox
+
+    # Step 1: Get all listing PKs via the pin (geo-search) API
+    pin_url = "https://flatfox.ch/api/v1/pin/"
+    try:
+        r = requests.get(pin_url, params={
+            'north': north,
+            'east': east,
+            'south': south,
+            'west': west,
+            'offer_type': offer_type,
+            'max_count': 500,
+        }, headers=headers, timeout=30)
+
+        if r.status_code != 200:
+            log.warning(f"[Flatfox] Pin API → HTTP {r.status_code}")
+            return results
+
+        pins = r.json()
+        if not isinstance(pins, list):
+            pins = pins.get('results', [])
+
+        # Extract PKs from pins
+        pks = []
+        for pin in pins:
+            pk = pin.get('pk') or pin.get('id')
+            if pk:
+                pks.append(str(pk))
+
+        log.info(f"[Flatfox] Pin API returned {len(pks)} listings in bbox for {city}")
+
+        if not pks:
+            return results
+
+    except Exception as e:
+        log.error(f"[Flatfox] Pin API error: {e}")
+        return results
+
+    # Step 2: Fetch full listing details in batches via public-listing API
+    detail_url = "https://flatfox.ch/api/v1/public-listing/"
+    batch_size = 50
+
+    for i in range(0, len(pks), batch_size):
+        batch = pks[i:i + batch_size]
         try:
-            r = requests.get(api_url, params={
-                'limit': page_size,
-                'offset': page_idx * page_size,
-            }, headers=headers, timeout=20)
+            r = requests.get(detail_url, params=[('pk', pk) for pk in batch],
+                             headers=headers, timeout=30)
 
             if r.status_code != 200:
-                log.warning(f"[Flatfox] API page {page_idx} → HTTP {r.status_code}")
-                break
+                log.warning(f"[Flatfox] Detail batch {i // batch_size} → HTTP {r.status_code}")
+                continue
 
             data = r.json()
             items = data.get('results', [])
-            if not items:
-                break
-
-            total_count = data.get('count', 0)
-            log.info(f"[Flatfox] Page {page_idx}: {len(items)} items (total={total_count})")
+            log.info(f"[Flatfox] Detail batch {i // batch_size}: {len(items)} items")
 
             for item in items:
-                # Filter by city (accent-insensitive)
+                # Double-check city match (pins might include edge cases)
                 item_city = _normalize_city(item.get('city') or '')
                 if item_city != city_norm:
                     continue
-                # Filter by offer type
                 if item.get('offer_type') != offer_type:
                     continue
 
@@ -1301,30 +1409,12 @@ def scrape_flatfox(city="Lausanne", transaction="location", limit=50):
                 )
                 if prop:
                     results.append(prop)
-                    found += 1
-
-            # Track consecutive pages without a match
-            page_matches = sum(1 for item in items
-                               if _normalize_city(item.get('city') or '') == city_norm
-                               and item.get('offer_type') == offer_type)
-            if page_matches == 0:
-                pages_without_match += 1
-            else:
-                pages_without_match = 0
-
-            # Stop early if we've found enough
-            if found >= limit:
-                break
-            # Stop if 3 consecutive pages had no matches (listings are roughly geo-sorted)
-            if pages_without_match >= 3:
-                log.info(f"[Flatfox] 3 pages without matches after {found} results, stopping")
-                break
 
         except Exception as e:
-            log.error(f"[Flatfox] API page {page_idx} error: {e}")
-            break
+            log.error(f"[Flatfox] Detail batch error: {e}")
 
-        time.sleep(0.5)
+        if i + batch_size < len(pks):
+            time.sleep(0.3)
 
     log.info(f"[Flatfox] Total: {len(results)} listings for {city}")
     return results
@@ -1487,6 +1577,9 @@ def scrape_properstar(city="Lausanne", transaction="location", max_pages=1):
         if status == 200 and len(html) > 2000:
             all_html.append(html)
 
+    # Track existing IDs across both appartement + maison pages to avoid duplicates
+    existing_ids = set()
+
     for html in all_html:
         soup = BeautifulSoup(html, 'html.parser')
 
@@ -1503,6 +1596,9 @@ def scrape_properstar(city="Lausanne", transaction="location", max_pages=1):
                     obj_url = obj.get('url', '')
                     eid_m = re.search(r'/(\d+)', obj_url)
                     eid = eid_m.group(1) if eid_m else hashlib.sha256(obj_url.encode()).hexdigest()[:12]
+                    if f"ps-{eid}" in existing_ids:
+                        continue
+                    existing_ids.add(f"ps-{eid}")
                     offers = obj.get('offers', {}) or {}
                     entity = obj.get('mainEntity', {}) or {}
                     addr = entity.get('address', {}) or {}
@@ -1524,7 +1620,6 @@ def scrape_properstar(city="Lausanne", transaction="location", max_pages=1):
                 log.debug(f"[Properstar] JSON-LD error: {e}")
 
         # Method 2: HTML cards (article.item-adaptive) — up to 20 per page
-        existing_ids = {r['external_id'] for r in results}
         cards = soup.select('article.item-adaptive')
         if not cards:
             # Fallback to broader selectors

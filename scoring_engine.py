@@ -10,6 +10,7 @@ Intégrer dans le cron job après chaque scrape:
 """
 
 import math
+import unicodedata
 from datetime import datetime
 
 
@@ -23,6 +24,92 @@ def haversine(lat1, lon1, lat2, lon2):
          math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
          math.sin(dlon / 2) ** 2)
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+# Coordonnées centrales des villes suisses — fallback pour le scoring quand
+# le portail (Properstar, Immobilier.ch, etc.) n'extrait pas lat/lng.
+CITY_COORDS = {
+    'lausanne':             (46.520, 6.632),
+    'geneve':               (46.204, 6.143),
+    'genève':               (46.204, 6.143),
+    'neuchatel':            (46.992, 6.931),
+    'neuchâtel':            (46.992, 6.931),
+    'fribourg':             (46.806, 7.162),
+    'sion':                 (46.227, 7.359),
+    'montreux':             (46.434, 6.912),
+    'nyon':                 (46.383, 6.239),
+    'morges':               (46.510, 6.498),
+    'yverdon':              (46.778, 6.641),
+    'yverdon-les-bains':    (46.778, 6.641),
+    'la chaux-de-fonds':    (47.100, 6.826),
+    'bienne':               (47.141, 7.247),
+    'biel':                 (47.141, 7.247),
+    'delemont':             (47.366, 7.343),
+    'delémont':             (47.366, 7.343),
+    'berne':                (46.948, 7.447),
+    'bern':                 (46.948, 7.447),
+    'vevey':                (46.462, 6.843),
+    'renens':               (46.538, 6.588),
+    'zurich':               (47.377, 8.541),
+    'zürich':               (47.377, 8.541),
+    'basel':                (47.559, 7.588),
+    'bâle':                 (47.559, 7.588),
+    'lugano':               (46.004, 8.951),
+    'lucerne':              (47.050, 8.308),
+    'luzern':               (47.050, 8.308),
+    'winterthur':           (47.500, 8.724),
+    'st. gallen':           (47.424, 9.376),
+    'carouge':              (46.180, 6.141),
+    'meyrin':               (46.231, 6.080),
+    'prilly':               (46.535, 6.603),
+    'pully':                (46.510, 6.662),
+    'ecublens':             (46.528, 6.561),
+    'sierre':               (46.292, 7.535),
+    'martigny':             (46.102, 7.074),
+    # Canton NE — villages
+    'auvernier':            (46.974, 6.881),
+    'colombier':            (46.968, 6.869),
+    'peseux':               (46.988, 6.859),
+    'boudry':               (46.950, 6.838),
+    'cortaillod':           (46.941, 6.845),
+    'marin-epagnier':       (47.006, 6.984),
+    'marin':                (47.006, 6.984),
+    'hauterive':            (46.997, 6.941),
+    'saint-blaise':         (47.011, 6.983),
+    'le locle':             (47.056, 6.748),
+    'val-de-travers':       (46.916, 6.606),
+    'fleurier':             (46.902, 6.585),
+    'milvignes':            (46.997, 6.916),
+    'la tène':              (47.007, 6.988),
+    'le landeron':          (47.056, 7.072),
+    'bevaix':               (46.935, 6.820),
+    'val-de-ruz':           (47.048, 6.908),
+    'corcelles-cormondrèche': (46.982, 6.872),
+    'corcelles':            (46.982, 6.872),
+    'cernier':              (47.060, 6.903),
+}
+
+
+def _norm_city_name(name):
+    """Normalise un nom de ville : sans accent, minuscules."""
+    if not name:
+        return ''
+    s = unicodedata.normalize('NFD', str(name).lower().strip())
+    return ''.join(c for c in s if unicodedata.category(c) != 'Mn')
+
+
+def _lookup_city_coords(city):
+    """Retourne (lat, lng) pour une ville connue, ou None."""
+    if not city:
+        return None
+    c = city.lower().strip()
+    if c in CITY_COORDS:
+        return CITY_COORDS[c]
+    cn = _norm_city_name(city)
+    for k, v in CITY_COORDS.items():
+        if _norm_city_name(k) == cn:
+            return v
+    return None
 
 
 # Synonymes pour la détection d'équipements dans les descriptions
@@ -76,19 +163,31 @@ def score_zone(prop, zones):
     target_radius = 3.0
     city_match = False
 
+    # Fallback: coordonnées centrales de la ville si GPS manquant sur l'annonce
+    prop_lat = prop.get('latitude')
+    prop_lng = prop.get('longitude')
+    if not (prop_lat and prop_lng):
+        fallback = _lookup_city_coords(prop.get('city', ''))
+        if fallback:
+            prop_lat, prop_lng = fallback
+
     for zone in zones:
-        # Check exact city match
-        if (prop.get('city', '').lower().strip() ==
-                zone.get('city', '').lower().strip()):
+        # Check exact city match (accent-insensitive)
+        if (_norm_city_name(prop.get('city', '')) ==
+                _norm_city_name(zone.get('city', ''))):
             city_match = True
 
+        # Fallback: coordonnées centrales de la ville de la zone si GPS manquant
+        zone_lat = zone.get('latitude')
+        zone_lng = zone.get('longitude')
+        if not (zone_lat and zone_lng):
+            fallback = _lookup_city_coords(zone.get('city', ''))
+            if fallback:
+                zone_lat, zone_lng = fallback
+
         # GPS distance
-        if (prop.get('latitude') and prop.get('longitude') and
-                zone.get('latitude') and zone.get('longitude')):
-            d = haversine(
-                prop['latitude'], prop['longitude'],
-                zone['latitude'], zone['longitude']
-            )
+        if prop_lat and prop_lng and zone_lat and zone_lng:
+            d = haversine(prop_lat, prop_lng, zone_lat, zone_lng)
             if d < min_distance:
                 min_distance = d
                 target_radius = zone.get('radius_km', 3.0) or 3.0

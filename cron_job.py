@@ -2,9 +2,9 @@
 Bon Home — Cron Job
 Scrape → Save → Score → Alert
 
-Run every 2 hours via Render Cron Job:
+Run once per day via Render Cron Job:
   Command: python cron_job.py
-  Schedule: 0 */2 * * *
+  Schedule: 0 16 * * *  (16h UTC = 18h CEST été / 17h CET hiver)
   Env: DATABASE_URL, ANTHROPIC_API_KEY (optional for alerts)
 """
 

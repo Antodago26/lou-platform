@@ -744,6 +744,61 @@ def get_properties():
         properties = [dict(r) for r in cur.fetchall()]
 
         # Format for frontend with cross-portal merging
+        def _street_tokens(addr):
+            """Extract meaningful street tokens (length ≥ 4, stop-words filtered)."""
+            if not addr:
+                return set()
+            tokens = re.findall(r'[A-Za-zÀ-ÿ]{4,}', str(addr).lower())
+            stop = {
+                'rue', 'avenue', 'route', 'chemin', 'place', 'boulevard', 'quai',
+                'strasse', 'gasse', 'weg', 'platz', 'allee',
+                'suisse', 'svizzera', 'canton', 'neuchatel', 'lausanne', 'geneve',
+                'appartement', 'maison', 'immeuble', 'villa', 'studio',
+            }
+            return set(t for t in tokens if t not in stop)
+
+        def _haversine_km(lat1, lng1, lat2, lng2):
+            try:
+                import math as _m
+                R = 6371
+                la1, lo1, la2, lo2 = float(lat1), float(lng1), float(lat2), float(lng2)
+                dla = _m.radians(la2 - la1); dlo = _m.radians(lo2 - lo1)
+                a = _m.sin(dla / 2) ** 2 + _m.cos(_m.radians(la1)) * _m.cos(_m.radians(la2)) * _m.sin(dlo / 2) ** 2
+                return R * 2 * _m.atan2(_m.sqrt(a), _m.sqrt(1 - a))
+            except Exception:
+                return None
+
+        def _can_merge(existing, new):
+            """Vérifie que deux biens avec des merge-keys communs sont bien le même objet physique.
+            Retourne True si au moins un signal de localisation concorde, False sinon (conservateur).
+            """
+            # Signal 1: coordonnées GPS rapprochées (< 300m)
+            lat1, lng1 = existing.get('latitude'), existing.get('longitude')
+            lat2, lng2 = new.get('latitude'), new.get('longitude')
+            if lat1 and lng1 and lat2 and lng2:
+                d = _haversine_km(lat1, lng1, lat2, lng2)
+                if d is not None:
+                    if d <= 0.3:  # 300m — même bâtiment
+                        return True
+                    if d > 1.0:  # > 1km — définitivement différents
+                        return False
+                    # Entre 300m et 1km : on tombe sur les autres signaux
+            # Signal 2: même code postal (extrait)
+            pc1 = (existing.get('postal_code') or '').strip()
+            pc2 = (new.get('postal_code') or '').strip()
+            if pc1 and pc2:
+                if pc1 != pc2:
+                    return False
+                # Même postal → signal fort, on accepte
+                return True
+            # Signal 3: tokens de rue en commun
+            t1 = _street_tokens(existing.get('address', ''))
+            t2 = _street_tokens(new.get('address', ''))
+            if t1 and t2:
+                return len(t1 & t2) >= 1
+            # Aucun signal de désambiguïsation disponible → conservateur : pas de merge
+            return False
+
         def _merge_keys(p):
             """Generate all possible merge keys for a property.
             Returns a list of keys — a property matches if ANY key overlaps with another property's keys.
@@ -799,25 +854,31 @@ def get_properties():
             src = p.get('source') or 'unknown'
 
             # Find if any of this property's keys already belong to a group
+            # AND verify the group representative passes _can_merge (second-pass disambiguation)
             group_id = None
             for k in keys:
                 if k in key_to_group:
-                    group_id = key_to_group[k]
-                    break
+                    candidate = key_to_group[k]
+                    if candidate in merged and _can_merge(merged[candidate], p):
+                        group_id = candidate
+                        break
 
             if group_id is None:
-                # New group
+                # New group — n'enregistrer que les keys pas encore mappées
+                # pour qu'une future propriété puisse encore tester les groupes précédents
                 group_id = p['id']
                 merged[group_id] = p
                 merged[group_id]['_all_sources'] = [{'source': p['source'] or '', 'url': p['source_url'] or ''}]
                 merged[group_id]['_best_images'] = p['images'] or []
                 for k in keys:
-                    key_to_group[k] = group_id
+                    if k not in key_to_group:
+                        key_to_group[k] = group_id
                 merge_debug[group_id] = [f"{src}(id={p['id']},price={p.get('price')},rooms={p.get('rooms')},postal={p.get('postal_code')},city={p.get('city')})"]
             else:
-                # Merge into existing group — register all keys
+                # Merge into existing group — enregistrer les nouvelles keys (conservatrices)
                 for k in keys:
-                    key_to_group[k] = group_id
+                    if k not in key_to_group:
+                        key_to_group[k] = group_id
                 merge_debug[group_id].append(f"{src}(id={p['id']},price={p.get('price')},rooms={p.get('rooms')},postal={p.get('postal_code')},city={p.get('city')})")
                 # Merge: add source link (skip if same portal already listed)
                 new_src = p['source'] or ''

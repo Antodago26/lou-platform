@@ -27,7 +27,7 @@ services:
     name: lou-scraper
     runtime: python
     buildCommand: pip install -r requirements.txt
-    schedule: "0 */2 * * *"  # Every 2 hours
+    schedule: "0 16 * * *"  # Every day at 16h UTC = 18h CEST (summer) / 17h CET (winter)
     startCommand: python cron_job.py
     envVars:
       - key: DATABASE_URL

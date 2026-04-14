@@ -1914,15 +1914,6 @@
         '<div class="prop-title">' + escapeHtml(cleanTitle(p.title) || p.city || 'Bien immobilier') + '</div>' +
         '<div class="prop-address">' + escapeHtml((p.address || '').replace(/\bTravel time\s+\d+\s*min\b/gi, '').replace(/\btemps de trajet\s+\d+\s*min\b/gi, '').trim() || p.city || '') + '</div>' +
         '<div class="prop-details">' + details.join(' &middot; ') + '</div>' +
-        '<div class="prop-scores-mini">' +
-          (p.score_detail ? (
-            scoreBar('Zone', p.score_detail.zone || 0) +
-            scoreBar('Budget', p.score_detail.budget || 0) +
-            scoreBar('Type', p.score_detail.type || 0) +
-            scoreBar('Surface', p.score_detail.surface || 0) +
-            scoreBar('Equip.', p.score_detail.equipment || 0)
-          ) : '') +
-        '</div>' +
         '<div class="prop-footer">' +
           (function() {
             var sources = p.all_sources || [{ source: p.source || '', url: p.source_url || '' }];
@@ -2545,7 +2536,7 @@
       '.prop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:20px}',
       '.prop-card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;transition:all .2s}',
       '.prop-card:hover{box-shadow:0 8px 24px rgba(0,0,0,.08);border-color:#cbd5e1;transform:translateY(-2px)}',
-      '.prop-card-top{position:relative;height:180px;background:#e2e8f0;overflow:hidden}',
+      '.prop-card-top{position:relative;height:280px;background:#e2e8f0;overflow:hidden}',
       '.prop-carousel{position:relative;width:100%;height:100%}',
       '.prop-img{width:100%;height:100%;object-fit:cover;display:none}',
       '.prop-img.active{display:block}',
@@ -2796,7 +2787,7 @@
         '.dash-user-email{display:none}',
         '.dash-logout-btn{padding:5px 10px;font-size:12px}',
         '.dash-admin-btn{padding:5px 10px;font-size:12px}',
-        '.prop-card-top{height:160px}',
+        '.prop-card-top{height:240px}',
         '.chat-panel{width:calc(100vw - 24px);right:12px;bottom:88px;height:50vh;max-height:380px;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,.25)}',
         '.chat-input{padding:10px;padding-bottom:max(10px,env(safe-area-inset-bottom))}',
         '.chat-input input{font-size:16px}',
@@ -2841,7 +2832,7 @@
         '.dash-wrap{padding:12px 10px}',
         // Cards
         '.prop-grid{gap:12px}',
-        '.prop-card-top{height:140px}',
+        '.prop-card-top{height:220px}',
         '.prop-card-body{padding:12px}',
         '.prop-price{font-size:16px}',
         '.prop-title{font-size:13px}',
