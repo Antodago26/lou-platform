@@ -1766,18 +1766,28 @@
     })
     .then(function (r) { return r.json(); })
     .then(function (data) {
-      if (data.ok) {
-        $('profile-edit-form').style.display = 'none';
-        loadProfileBar();
-        _mapAllProps = null; // Force map to reload all properties
-        // Re-score and reload properties
-        apiFetch(API + '/api/score', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
-          .then(function () { loadProperties(1, 'score', 0); })
-          .catch(function () { loadProperties(1, 'score', 0); });
-      } else {
+      if (!data.ok) {
         btn.textContent = 'Erreur — reessayez';
         btn.disabled = false;
+        return;
       }
+      // Profile saved — now re-run Lou (score + reload list + stats).
+      // Keep the form visible with a loader so the user sees "it's working".
+      btn.innerHTML = 'Lou analyse vos nouveaux critères ' + ICO.search;
+      loadProfileBar();
+      _mapAllProps = null; // Force map to reload all properties
+
+      apiFetch(API + '/api/score', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+        .catch(function () {})
+        .then(function () {
+          // Refresh list + stats in parallel, then close the form and scroll up
+          loadProperties(1, 'score', 0);
+          loadStats();
+          $('profile-edit-form').style.display = 'none';
+          btn.disabled = false;
+          btn.innerHTML = 'Sauvegarder & relancer Lou ' + ICO.search;
+          try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
+        });
     })
     .catch(function () {
       btn.textContent = 'Erreur reseau';
