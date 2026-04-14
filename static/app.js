@@ -1781,20 +1781,22 @@
         return;
       }
       // Profile saved — now re-run Lou (score + reload list + stats).
-      // Keep the form visible with a loader so the user sees "it's working".
+      // Show "analyzing" state on the button BEFORE we kick off anything that
+      // could re-render the profile bar (loadProfileBar regenerates
+      // #profile-edit-form, which would visually close the form mid-flight
+      // and detach this btn reference).
       btn.innerHTML = 'Lou analyse vos nouveaux critères ' + ICO.search;
-      loadProfileBar();
       _mapAllProps = null; // Force map to reload all properties
 
-      apiFetch(API + '/api/score', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      // Re-score, then refresh everything in one wave. loadProfileBar() runs
+      // LAST so the form disappearance acts as the visible "done" signal —
+      // the user sees Lou's badge update and the new results in one paint.
+      return apiFetch(API + '/api/score', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
         .catch(function () {})
         .then(function () {
-          // Refresh list + stats in parallel, then close the form and scroll up
           loadProperties(1, 'score', 0);
           loadStats();
-          $('profile-edit-form').style.display = 'none';
-          btn.disabled = false;
-          btn.innerHTML = 'Sauvegarder & relancer Lou ' + ICO.search;
+          loadProfileBar(); // regenerates #profile-edit-form as a hidden empty div → form closes
           try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
         });
     })
