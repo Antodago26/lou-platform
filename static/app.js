@@ -296,6 +296,13 @@
       }
     }
 
+    // If URL carries ?login=1, open auth modal (used by /pricing, /faq "Connexion" links)
+    if (window.location.search.indexOf('login=1') !== -1 && !(isJWT(TOKEN) && USER)) {
+      // Clean URL so a refresh doesn't re-trigger
+      try { history.replaceState(null, '', window.location.pathname); } catch(e) {}
+      setTimeout(showAuthModal, 50);
+    }
+
     // Chat bubble on landing page
     injectChatCSS();
     initChat();
@@ -594,7 +601,9 @@
 
   function showDashboard() {
     if (!isJWT(TOKEN) || !USER) {
-      window.location.reload();
+      // Not authenticated — redirect to landing with auth modal trigger
+      // (don't reload current URL or we'd loop on /dashboard)
+      window.location.replace('/?login=1');
       return;
     }
 

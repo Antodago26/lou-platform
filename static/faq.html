@@ -43,9 +43,24 @@
     </a>
     <div style="display:flex;gap:24px;align-items:center">
       <a href="/pricing" style="color:#334155;font-weight:500;font-size:15px;text-decoration:none">Tarifs</a>
-      <a href="/dashboard" style="color:#334155;font-weight:500;font-size:15px;text-decoration:none">Mon espace</a>
+      <a href="/?login=1" id="nav-auth-link" style="color:#334155;font-weight:500;font-size:15px;text-decoration:none">Connexion</a>
     </div>
   </nav>
+  <script>
+    (function(){
+      // Conditional auth link: swap "Connexion" → "Mon espace" when logged in.
+      // Unauthenticated visitors must NEVER be sent to /dashboard directly (blank screen bug).
+      var token = localStorage.getItem('lou_token');
+      var user = null;
+      try { user = JSON.parse(localStorage.getItem('lou_user') || 'null'); } catch(e) {}
+      var isJwt = token && token.split('.').length === 3;
+      var authLink = document.getElementById('nav-auth-link');
+      if (authLink && isJwt && user) {
+        authLink.textContent = 'Mon espace';
+        authLink.setAttribute('href', '/dashboard');
+      }
+    })();
+  </script>
 
   <main class="content">
     <h1>Foire aux questions</h1>

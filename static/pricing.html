@@ -79,9 +79,24 @@
     <div class="nav-links">
       <a href="/faq">FAQ</a>
       <a href="/pricing" class="active">Tarifs</a>
-      <a href="/dashboard">Mon espace</a>
+      <a href="/?login=1" id="nav-auth-link">Connexion</a>
     </div>
   </nav>
+  <script>
+    (function(){
+      // Conditional auth link: swap "Connexion" → "Mon espace" when logged in.
+      // Unauthenticated visitors must NEVER be sent to /dashboard directly (blank screen bug).
+      var token = localStorage.getItem('lou_token');
+      var user = null;
+      try { user = JSON.parse(localStorage.getItem('lou_user') || 'null'); } catch(e) {}
+      var isJwt = token && token.split('.').length === 3;
+      var authLink = document.getElementById('nav-auth-link');
+      if (authLink && isJwt && user) {
+        authLink.textContent = 'Mon espace';
+        authLink.setAttribute('href', '/dashboard');
+      }
+    })();
+  </script>
 
   <section class="hero">
     <h1>Des tarifs simples, transparents</h1>
