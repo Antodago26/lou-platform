@@ -376,6 +376,18 @@ def update_profile():
     if _err:
         return _err
     data = request.json or {}
+    # C3.3 — custom_weights is a premium feature. If the payload ships weights
+    # and the user isn't on a plan that allows it, strip them and use defaults.
+    # No-op while PRICING_ENABLED is False (is_feature_allowed returns True).
+    if data.get('weights'):
+        try:
+            from plans import is_feature_allowed
+            user_plan = _get_user_plan(request.user_id)
+            if not is_feature_allowed(user_plan, 'custom_weights'):
+                data = dict(data)
+                data.pop('weights', None)
+        except Exception:
+            pass
     conn = get_db()
     cur = conn.cursor()
     try:

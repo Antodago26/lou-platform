@@ -1,6 +1,8 @@
 """Bon Home — Static pages + health endpoint Blueprint."""
 from flask import Blueprint, jsonify, send_from_directory
 
+from plans import public_catalog
+
 pages_bp = Blueprint('pages', __name__)
 
 
@@ -47,3 +49,9 @@ def pricing():
 @pages_bp.route('/health')
 def health():
     return jsonify({"status": "ok"})
+
+
+@pages_bp.route('/api/plans')
+def api_plans():
+    """Public pricing catalog (C3.4)."""
+    return jsonify(public_catalog())
