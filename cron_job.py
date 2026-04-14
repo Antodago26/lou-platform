@@ -293,11 +293,13 @@ def run():
     log.info(f"Scraping {len(scrape_targets)} city/transaction combos (canton NE)")
 
     # Step 3: Scrape all targets (commit after each city to avoid losing data)
+    # skip_nearby=True: cron already includes all NE main cities explicitly,
+    # so don't re-scrape Neuchâtel 12× via NEARBY_MAIN_CITY expansion.
     total_scraped = 0
     for city, transaction in scrape_targets:
         log.info(f"--- Scraping: {city} ({transaction}) ---")
         try:
-            listings = scrape_all(city=city, transaction=transaction)
+            listings = scrape_all(city=city, transaction=transaction, skip_nearby=True)
             if listings:
                 saved = save_to_db(db, listings)
                 total_scraped += saved

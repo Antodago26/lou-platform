@@ -57,6 +57,37 @@ CITY_CANTONS = {
 }
 
 
+def _direct_get(url, timeout=20):
+    """Fetch a URL directly (no ScrapingBee, no credits used).
+    Returns (status_code, html_text). Use only on portals that don't block scrapers.
+    """
+    try:
+        r = requests.get(url, headers={
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'fr-CH,fr;q=0.9,en;q=0.8',
+        }, timeout=timeout)
+        r.encoding = 'utf-8'
+        log.info(f"[Direct] {url[:60]}... → HTTP {r.status_code} ({len(r.text)} bytes)")
+        return r.status_code, r.text
+    except Exception as e:
+        log.error(f"[Direct] Error fetching {url}: {e}")
+        return 0, ''
+
+
+def _smart_get(url, render_js=False, try_direct=False):
+    """Try direct request first (0 credits). Fall back to ScrapingBee if direct fails.
+    Use this on portals where direct sometimes works (saves credits).
+    """
+    if try_direct:
+        status, html = _direct_get(url)
+        # Accept if status 200 AND content looks like a real page (not a bot-block redirect)
+        if status == 200 and len(html) > 3000 and 'captcha' not in html.lower()[:5000]:
+            return status, html
+        log.info(f"[Direct] Fallback to ScrapingBee for {url[:60]}...")
+    return _sb_get(url, render_js=render_js)
+
+
 def _sb_get(url, render_js=False):
     """Fetch a URL via ScrapingBee. Returns (status_code, html_text)."""
     if not SCRAPINGBEE_KEY:
@@ -292,7 +323,7 @@ def _clean_surface(text):
 # HOMEGATE — via ScrapingBee + __NEXT_DATA__
 # ============================================================
 
-def scrape_homegate(city="Lausanne", transaction="location", max_pages=2):
+def scrape_homegate(city="Lausanne", transaction="location", max_pages=4):
     log.info(f"[Homegate] Searching {city} ({transaction})")
     results = []
     tx = "rent" if transaction == "location" else "buy"
@@ -304,7 +335,8 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=2):
 
     for page in range(1, max_pages + 1):
         url = f"https://www.homegate.ch/{tx}/real-estate/city-{slug}/matching-list?ep={page}"
-        status, html = _sb_get(url, render_js=True)
+        # render_js=False → 1 credit instead of 5. Homegate's SSR payload contains all listings.
+        status, html = _sb_get(url, render_js=False)
 
         if status != 200:
             log.warning(f"[Homegate] Page {page}: HTTP {status}")
@@ -426,7 +458,7 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=2):
 # IMMOSCOUT24 — via ScrapingBee
 # ============================================================
 
-def scrape_immoscout(city="Lausanne", transaction="location", max_pages=2):
+def scrape_immoscout(city="Lausanne", transaction="location", max_pages=4):
     log.info(f"[ImmoScout24] Searching {city} ({transaction})")
     results = []
     tx = "rent" if transaction == "location" else "buy"
@@ -773,7 +805,8 @@ def scrape_immobilier_ch(city="Lausanne", transaction="location", max_pages=2):
         html = ''
         status = 0
         for try_url in urls:
-            status, html = _sb_get(try_url, render_js=True)
+            # Try direct first (0 credits) — immobilier.ch is SSR-friendly
+            status, html = _smart_get(try_url, render_js=True, try_direct=True)
             if status == 200 and len(html) > 5000:
                 # Check if the page actually has results (data-count > 0)
                 count_match = re.search(r'data-count="(\d+)"', html)
@@ -1116,7 +1149,8 @@ def scrape_acheter_louer(city="Lausanne", transaction="location", max_pages=1):
         ]
 
     for url in url_patterns:
-        status, html = _sb_get(url, render_js=True)
+        # Try direct first (0 credits) — SSR-friendly, Cloudflare sometimes lets through
+        status, html = _smart_get(url, render_js=True, try_direct=True)
         if status != 200 or len(html) < 2000:
             continue
 
@@ -1573,7 +1607,8 @@ def scrape_properstar(city="Lausanne", transaction="location", max_pages=1):
     all_html = []
     for prop_type in ['appartement', 'maison']:
         url = f"https://www.properstar.ch/suisse/{slug}/{tx_fr}/{prop_type}"
-        status, html = _sb_get(url, render_js=True)
+        # Try direct first (0 credits), fall back to ScrapingBee if blocked
+        status, html = _smart_get(url, render_js=True, try_direct=True)
         if status == 200 and len(html) > 2000:
             all_html.append(html)
 
@@ -1731,25 +1766,31 @@ NEARBY_MAIN_CITY = {
 }
 
 
-def scrape_all(city="Lausanne", transaction="location"):
+def scrape_all(city="Lausanne", transaction="location", skip_nearby=False):
     """Scrape all portals for a given city and transaction type.
     For small towns, also scrapes the nearest large city to catch listings
-    that portals list under the main city name."""
+    that portals list under the main city name.
+
+    skip_nearby=True disables the NEARBY_MAIN_CITY expansion. Use it from the
+    cron job when all relevant main cities are already in the scrape_targets
+    list (avoids scraping Neuchâtel 12× — once per small NE town).
+    """
     all_results = []
 
     # Determine cities to scrape
     cities_to_scrape = [city]
-    nearby = NEARBY_MAIN_CITY.get(city.lower())
-    if nearby and nearby.lower() != city.lower():
-        cities_to_scrape.append(nearby)
-        log.info(f"[scrape_all] Also scraping nearby city: {nearby}")
+    if not skip_nearby:
+        nearby = NEARBY_MAIN_CITY.get(city.lower())
+        if nearby and nearby.lower() != city.lower():
+            cities_to_scrape.append(nearby)
+            log.info(f"[scrape_all] Also scraping nearby city: {nearby}")
 
     scrapers = [
         ('Flatfox', scrape_flatfox),
         ('Homegate', scrape_homegate),
         ('ImmoScout24', scrape_immoscout),
         ('Immobilier.ch', scrape_immobilier_ch),
-        ('Anibis', scrape_anibis),
+        # ('Anibis', scrape_anibis),  # DISABLED: __NEXT_DATA__ returns 0 items — wastes credits. To re-enable, fix the parser.
         ('Acheter-Louer', scrape_acheter_louer),
         ('Comparis', scrape_comparis),
         ('Properstar', scrape_properstar),
