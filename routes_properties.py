@@ -82,6 +82,10 @@ def get_properties():
         # if not check_limit(user_plan, 'properties_visible', offset):
         #     return jsonify({"limited": True, "total": total, "upgrade_url": "/pricing"}), 200
 
+        # Strict zone filter: only properties within the user's requested radius.
+        # score_zone >= 80 corresponds to "inside target_radius" in score_zone()
+        # (progressive scoring 100→80 within radius; outside tops out at 70).
+        # Also keeps exact city matches with no GPS (score=90) and city+city_match bonus.
         cur.execute(f"""
             SELECT p.*, sp.total_score, sp.grade, sp.distance_km,
                    sp.score_zone, sp.score_budget, sp.score_type,
@@ -92,6 +96,7 @@ def get_properties():
             FROM scored_properties sp
             JOIN properties p ON p.id = sp.property_id
             WHERE sp.user_id = %s AND sp.total_score >= %s AND p.is_active = TRUE
+                  AND sp.score_zone >= 80
                   AND {price_filter}{tx_filter}
             ORDER BY {order}
         """, tx_params)
@@ -325,6 +330,8 @@ def get_stats():
             tx_filter += " AND p.transaction = %s"
             extra_params.append(user_tx)
 
+        # Same strict zone filter as /api/properties so stats stay coherent
+        # with the list shown on the dashboard.
         cur.execute(f"""
             SELECT
                 COUNT(*) as total,
@@ -332,7 +339,8 @@ def get_stats():
                 (SELECT COUNT(*) FROM favorites WHERE user_id = %s) as favorites
             FROM scored_properties sp
             JOIN properties p ON p.id = sp.property_id AND p.price > 1000
-            WHERE sp.user_id = %s AND p.is_active = TRUE{tx_filter}
+            WHERE sp.user_id = %s AND p.is_active = TRUE
+                  AND sp.score_zone >= 80{tx_filter}
         """, [user_id, user_id] + extra_params)
         stats = dict(cur.fetchone())
         return jsonify(stats)
