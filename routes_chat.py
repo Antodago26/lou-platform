@@ -266,7 +266,7 @@ def api_chat():
     messages.append({"role": "user", "content": enriched_message})
 
     try:
-        chat_model = os.environ.get('CLAUDE_CHAT_MODEL', 'claude-opus-4-5-20250929')
+        chat_model = os.environ.get('CLAUDE_CHAT_MODEL', 'claude-sonnet-4-6')
         response = anthropic_client.messages.create(
             model=chat_model,
             max_tokens=800,
@@ -294,8 +294,8 @@ def api_chat():
 
         return jsonify(result)
 
-    except Exception as e:
-        log.error(f"Chat error for user {user_id}: {e}")
+    except Exception:
+        log.exception(f"Chat error for user {user_id} (model={chat_model})")
         return jsonify({
             "message": "Problème technique, réessaie dans quelques secondes.",
             "suggestions": ["Réessayer"], "criteria": {},
