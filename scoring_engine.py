@@ -192,7 +192,10 @@ def score_zone(prop, zones):
             d = haversine(prop_lat, prop_lng, zone_lat, zone_lng)
             if d < min_distance:
                 min_distance = d
-                target_radius = zone.get('radius_km', 3.0) or 3.0
+                # radius_km comes from a NUMERIC column → psycopg2 returns Decimal,
+                # which can't be multiplied with float (the * 1.5 / * 3 below).
+                # Coerce to float at the source so all downstream maths works.
+                target_radius = float(zone.get('radius_km') or 3.0)
 
     # If we have GPS data
     if min_distance != float('inf'):

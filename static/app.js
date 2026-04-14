@@ -1773,12 +1773,8 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     })
-    .then(function (r) {
-      console.log('[saveProfile] PUT /api/profile status', r.status);
-      return r.json();
-    })
+    .then(function (r) { return r.json(); })
     .then(function (data) {
-      console.log('[saveProfile] PUT response', data);
       if (!data || !data.ok) {
         btn.textContent = 'Erreur — reessayez';
         btn.disabled = false;
@@ -1792,24 +1788,19 @@
       btn.innerHTML = 'Lou analyse vos nouveaux critères ' + ICO.search;
       _mapAllProps = null; // Force map to reload all properties
 
-      console.log('[saveProfile] firing POST /api/score');
       // Re-score, then refresh everything in one wave. loadProfileBar() runs
       // LAST so the form disappearance acts as the visible "done" signal.
       return apiFetch(API + '/api/score', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
-        .catch(function (e) { console.warn('[saveProfile] /api/score failed (continuing anyway)', e); })
+        .catch(function () {})
         .then(function () {
-          console.log('[saveProfile] refreshing dashboard');
-          try { loadProperties(1, 'score', 0); } catch (e) { console.error('[saveProfile] loadProperties threw', e); }
-          try { loadStats(); } catch (e) { console.error('[saveProfile] loadStats threw', e); }
-          try { loadProfileBar(); } catch (e) { console.error('[saveProfile] loadProfileBar threw', e); }
+          loadProperties(1, 'score', 0);
+          loadStats();
+          loadProfileBar();
           try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
         });
     })
-    .catch(function (e) {
-      // Surface the real error on the button so we can diagnose without DevTools.
-      console.error('[saveProfile] outer catch fired', e);
-      var msg = (e && e.message) ? e.message : 'erreur inconnue';
-      btn.textContent = 'Err: ' + msg.slice(0, 60);
+    .catch(function () {
+      btn.textContent = 'Erreur reseau';
       btn.disabled = false;
     });
   }
