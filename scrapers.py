@@ -2013,6 +2013,143 @@ def scrape_muller_christe(city=None, transaction="location", max_pages=15):
 
 
 # ============================================================
+# FIDIMMOBIL — Agence Neuchâtel (PHP SSR, /fr/louer.php)
+# ============================================================
+
+def scrape_fidimmobil(city=None, transaction="location", max_pages=1):
+    """Scrape fidimmobil.ch (Fidimmobil SA, Neuchâtel & La Chaux-de-Fonds).
+    All listings are NE — city param is ignored (returns all NE biens).
+    Direct requests, no ScrapingBee. Single-page listing (~23 biens on /fr/louer.php).
+
+    LOUER only for now: ACHAT is on vente.fidimmobil.ch (WordPress Nectar with ~11
+    promotional projects, not individual units — different data model).
+    """
+    # Only scrape LOUER — ACHAT subdomain is a different tech stack
+    if transaction != 'location':
+        log.info(f"[Fidimmobil] transaction={transaction} not supported (LOUER only) — skip")
+        return []
+
+    log.info(f"[Fidimmobil] Fetching all listings (transaction={transaction})")
+    results = []
+    seen_ids = set()
+    base = "https://www.fidimmobil.ch"
+    url = f"{base}/fr/louer.php"
+
+    status, html = _direct_get(url)
+    if status != 200 or len(html) < 5000:
+        log.warning(f"[Fidimmobil] HTTP {status} (len={len(html)}) — abort")
+        return []
+
+    soup = BeautifulSoup(html, 'html.parser')
+    # Cards: <a href="/fr/location.php?id=XXX"><div class="immeuble-bloc">...</div></a>
+    links = soup.select('a[href^="/fr/location.php?id="]')
+
+    for link in links:
+        try:
+            href = link.get('href', '').strip()
+            # Extract ID from ?id=XXX
+            m = re.search(r'id=([A-Za-z0-9]+)', href)
+            if not m:
+                continue
+            ext_id = m.group(1)
+            if ext_id in seen_ids:
+                continue
+            seen_ids.add(ext_id)
+
+            source_url = href if href.startswith('http') else f"{base}{href}"
+
+            # NOTE: the site uses invalid self-closing <div ... /> which makes
+            # BeautifulSoup close div.immeuble-bloc too early. Query the <a>
+            # directly — h3 and p.titre end up as siblings of the card div.
+            if not link.select_one('div.immeuble-bloc'):
+                continue
+
+            # City: <h3>Neuchâtel</h3>
+            city_el = link.select_one('h3')
+            location_city = (city_el.get_text(strip=True) if city_el else '') or 'Neuchâtel'
+
+            # Title block: <p class="titre">5.5 pièces<br>CHF 2'950.-/mois</p>
+            # or                          "Local<br>CHF 1'900.-/mois"
+            titre_el = link.select_one('p.titre')
+            raw_titre = ''
+            if titre_el:
+                # Replace <br> with newlines before extracting text
+                for br in titre_el.find_all('br'):
+                    br.replace_with('\n')
+                raw_titre = titre_el.get_text('\n', strip=True)
+
+            lines = [l.strip() for l in raw_titre.split('\n') if l.strip()]
+            type_line = lines[0] if lines else ''
+            price_line = lines[1] if len(lines) > 1 else ''
+
+            # Rooms from type_line ("5.5 pièces", "2 pièces", "Local", "Studio", etc.)
+            rooms = None
+            rm = re.search(r'(\d+(?:[.,]\d+)?)\s*pi[eè]ce', type_line, re.IGNORECASE)
+            if rm:
+                try:
+                    rooms = float(rm.group(1).replace(',', '.'))
+                except ValueError:
+                    pass
+
+            # Property type
+            prop_type = 'appartement'
+            t_lower = type_line.lower()
+            if 'local' in t_lower or 'commerc' in t_lower or 'bureau' in t_lower or 'arcade' in t_lower:
+                prop_type = 'commerce'
+            elif 'parking' in t_lower or 'garage' in t_lower or 'place' in t_lower:
+                prop_type = 'parking'
+            elif 'maison' in t_lower or 'villa' in t_lower:
+                prop_type = 'maison'
+            elif 'studio' in t_lower:
+                prop_type = 'appartement'
+
+            # Price: "CHF 2'950.-/mois"
+            price = None
+            digits = re.sub(r"[^\d]", '', price_line)
+            if digits:
+                price = int(digits)
+
+            # Image: <div class="img-list" style="background-image:url('/files/.../003525_1.jpg');">
+            img_url = ''
+            img_el = link.select_one('div.img-list')
+            if img_el:
+                style = img_el.get('style', '')
+                m_bg = re.search(r"url\(['\"]?([^'\")]+)['\"]?\)", style)
+                if m_bg:
+                    src = m_bg.group(1).strip()
+                    img_url = src if src.startswith('http') else f"{base}{src.lstrip('/')}"
+                    # Fidimmobil uses relative paths starting with /
+                    if not img_url.startswith('http'):
+                        img_url = f"{base}/{img_url.lstrip('/')}"
+
+            # Title: composite. Don't start with a digit — _make_property
+            # strips leading-digit prefixes as a price-cleanup heuristic.
+            if type_line:
+                title = f"À louer à {location_city} — {type_line}"
+            else:
+                title = f"À louer à {location_city}"
+
+            results.append(_make_property(
+                external_id=ext_id, source='fidimmobil', source_url=source_url,
+                title=title, description='',
+                property_type=prop_type, transaction=transaction,
+                price=price, rooms=rooms, surface=None,
+                floor=None, address=location_city, city=location_city,
+                canton=CITY_CANTONS.get(location_city.lower(), 'NE'),
+                postal_code=None,
+                latitude=None, longitude=None,
+                features=[], images=[img_url] if img_url else [],
+                published_at=None,
+            ))
+        except Exception as e:
+            log.debug(f"[Fidimmobil] Card parse error: {e}")
+
+    results = [r for r in results if r is not None]
+    log.info(f"[Fidimmobil] Total: {len(results)} listings")
+    return results
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
@@ -2074,6 +2211,7 @@ def scrape_all(city="Lausanne", transaction="location", skip_nearby=False):
     ne_agency_scrapers = [
         ('Jouval', scrape_jouval),
         ('Muller&Christe', scrape_muller_christe),
+        ('Fidimmobil', scrape_fidimmobil),
     ]
 
     for scrape_city in cities_to_scrape:
