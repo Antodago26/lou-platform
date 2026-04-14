@@ -1744,8 +1744,142 @@ def scrape_properstar(city="Lausanne", transaction="location", max_pages=1):
 
 
 # ============================================================
+# JOUVAL — Régie locale Neuchâtel (WordPress + Estatik plugin)
+# ============================================================
+
+def scrape_jouval(city=None, transaction="location", max_pages=30):
+    """Scrape jouval.ch (Régie Jouval, Neuchâtel).
+    All listings are NE — city param is ignored (returns all NE biens).
+    Direct requests, no ScrapingBee. Site has ~159 properties total.
+    Estatik plugin: /property-category/{slug}/page/N/ (6 per page).
+    """
+    log.info(f"[Jouval] Fetching all listings (transaction={transaction})")
+    results = []
+    seen_ids = set()
+
+    # Use the proper category URL slug (visible in card "terms")
+    cat_slug = 'location' if transaction == 'location' else 'vente'
+    base_url = f"https://jouval.ch/property-category/{cat_slug}/"
+
+    for page in range(1, max_pages + 1):
+        if page == 1:
+            url = base_url
+        else:
+            url = f"{base_url}page/{page}/"
+
+        status, html = _direct_get(url)
+        if status != 200 or len(html) < 5000:
+            log.warning(f"[Jouval] Page {page}: HTTP {status} — stop pagination")
+            break
+
+        soup = BeautifulSoup(html, 'html.parser')
+        cards = soup.select('div.js-es-listing.es-listing[data-post-id]')
+        if not cards:
+            log.info(f"[Jouval] Page {page}: no cards found — stop")
+            break
+
+        page_count = 0
+        for card in cards:
+            try:
+                ext_id = card.get('data-post-id', '').strip()
+                if not ext_id or ext_id in seen_ids:
+                    continue
+                seen_ids.add(ext_id)
+
+                # Title + URL
+                title_link = card.select_one('h3.es-listing__title a')
+                if not title_link:
+                    continue
+                title = (title_link.get_text() or '').strip()
+                source_url = title_link.get('href', '').strip()
+
+                # Price: "CHF 950" or "CHF 1'250" or "CHF 580'000.-"
+                price_el = card.select_one('span.es-price')
+                price = None
+                if price_el:
+                    price_txt = price_el.get_text(strip=True)
+                    digits = re.sub(r"[^\d]", '', price_txt)
+                    if digits:
+                        price = int(digits)
+
+                # Address: "Rue X, 2034 Peseux, Suisse"
+                addr_el = card.select_one('div.es-address')
+                address = ''
+                postal = None
+                location_city = ''
+                if addr_el:
+                    address = addr_el.get_text(strip=True)
+                    pc_match = re.search(r'\b(\d{4})\b', address)
+                    if pc_match:
+                        postal = pc_match.group(1)
+                        # City after postal: "2034 Peseux, Suisse"
+                        after = address.split(postal, 1)[-1].strip()
+                        location_city = after.split(',')[0].strip()
+
+                # Rooms (Chambres à coucher)
+                rooms = None
+                rooms_el = card.select_one('li.es-listing__meta-bedrooms b')
+                if rooms_el:
+                    try:
+                        rooms = float(rooms_el.get_text(strip=True))
+                    except ValueError:
+                        pass
+
+                # Property type from CSS class on outer wrapper
+                outer = card.parent if card.parent else card
+                outer_classes = ' '.join(outer.get('class', []) if hasattr(outer, 'get') else [])
+                prop_type = 'appartement'
+                if 'es_type-place-de-parc' in outer_classes:
+                    prop_type = 'parking'
+                elif 'es_type-maison' in outer_classes or 'es_type-villa' in outer_classes:
+                    prop_type = 'maison'
+                elif 'es_type-commerce' in outer_classes or 'es_type-locaux' in outer_classes:
+                    prop_type = 'commerce'
+
+                # Image from data-bg-image
+                img_url = ''
+                img_el = card.select_one('div.es-listing__image__background[data-bg-image]')
+                if img_el:
+                    bg = img_el.get('data-bg-image', '')
+                    m = re.search(r"url\(['\"]?([^'\")]+)['\"]?\)", bg)
+                    if m:
+                        img_url = m.group(1).replace('&#039;', '').replace("'", '')
+
+                results.append(_make_property(
+                    external_id=ext_id, source='jouval', source_url=source_url,
+                    title=title, description='',
+                    property_type=prop_type, transaction=transaction,
+                    price=price, rooms=rooms, surface=None,
+                    floor=None, address=address, city=location_city or 'Neuchâtel',
+                    canton='NE', postal_code=postal,
+                    latitude=None, longitude=None,
+                    features=[], images=[img_url] if img_url else [],
+                    published_at=None,
+                ))
+                page_count += 1
+            except Exception as e:
+                log.debug(f"[Jouval] Card parse error: {e}")
+
+        log.info(f"[Jouval] Page {page}: {page_count} new listings")
+        if page_count == 0:
+            break  # End of pagination
+
+        time.sleep(0.5)  # Polite throttling
+
+    # Filter out None entries (language filter rejects)
+    results = [r for r in results if r is not None]
+    log.info(f"[Jouval] Total: {len(results)} listings")
+    return results
+
+
+# ============================================================
 # MAIN
 # ============================================================
+
+# Process-level cache: prevents NE agency scrapers from running 16× per cron
+# (cron calls scrape_all once per NE city). Cleared at process exit.
+_NE_AGENCY_CACHE = set()
+
 
 # For small towns, also scrape the nearest large city to find listings
 # that portals list under the main city name (e.g., Peseux listings under "Neuchâtel")
@@ -1796,6 +1930,11 @@ def scrape_all(city="Lausanne", transaction="location", skip_nearby=False):
         ('Properstar', scrape_properstar),
     ]
 
+    # NE-only agency scrapers (single-fetch, ignores city loop) — only run for Neuchâtel main
+    ne_agency_scrapers = [
+        ('Jouval', scrape_jouval),
+    ]
+
     for scrape_city in cities_to_scrape:
         log.info(f"[scrape_all] Scraping city: {scrape_city}")
         for name, scraper in scrapers:
@@ -1805,6 +1944,27 @@ def scrape_all(city="Lausanne", transaction="location", skip_nearby=False):
                 log.info(f"[{name}][{scrape_city}] {len(results)} results")
             except Exception as e:
                 log.error(f"[{name}][{scrape_city}] FAILED: {e}")
+            time.sleep(1)
+
+    # NE agencies: only run when scraping a NE city (avoid duplication for VD/GE cities)
+    # AND only once per transaction per process (cron loops 16 NE cities — don't scrape Jouval 16x)
+    is_ne_scrape = any(
+        (sc.lower() == 'neuchâtel') or (sc.lower() == 'neuchatel') or
+        CITY_CANTONS.get(sc.lower(), '') == 'NE'
+        for sc in cities_to_scrape
+    )
+    if is_ne_scrape:
+        for name, scraper in ne_agency_scrapers:
+            cache_key = f"{name}:{transaction}"
+            if cache_key in _NE_AGENCY_CACHE:
+                continue  # Already scraped this run
+            try:
+                results = [r for r in scraper(transaction=transaction) if r is not None]
+                all_results.extend(results)
+                _NE_AGENCY_CACHE.add(cache_key)
+                log.info(f"[{name}][NE-all] {len(results)} results")
+            except Exception as e:
+                log.error(f"[{name}][NE-all] FAILED: {e}")
             time.sleep(1)
 
     # Deduplicate
