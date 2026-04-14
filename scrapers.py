@@ -21,6 +21,7 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 from urllib.parse import quote
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import unicodedata
 
@@ -34,8 +35,162 @@ def _normalize_city(name):
     s = unicodedata.normalize('NFD', (name or '').lower().strip())
     return ''.join(c for c in s if unicodedata.category(c) != 'Mn')
 
+
+# --- C2.2 — helpers to clean noisy city strings coming from portals ----------
+_POSTAL_PREFIX_RE = re.compile(r'^\s*\d{4}\s*')
+_CANTON_SUFFIX_RE = re.compile(r'\s*\(\s*[A-Z]{2}\s*\)\s*$')
+
+def _clean_city(city, fallback_city=None):
+    """Normalize a portal-provided city string.
+    - strip leading 4-digit postal code ("2016 Cortaillod" → "Cortaillod")
+    - strip trailing canton suffix ("Cortaillod (NE)" → "Cortaillod")
+    - collapse whitespace
+    - if the result is too short (<2 chars), use fallback_city (search term)
+    """
+    if not city:
+        return (fallback_city or '').strip() or None
+    s = _POSTAL_PREFIX_RE.sub('', str(city))
+    s = _CANTON_SUFFIX_RE.sub('', s)
+    s = re.sub(r'\s+', ' ', s).strip(' ,;-')
+    if len(s) < 2:
+        return (fallback_city or '').strip() or None
+    return s
+
+
+# --- C2.1 — source_url validation --------------------------------------------
+# Domain(s) each source must resolve to. The check is "any domain in the list
+# appears in the URL host" (accepts www., m., api., subdomains, etc.).
+SOURCE_DOMAINS = {
+    'Homegate':       ['homegate.ch'],
+    'ImmoScout24':    ['immoscout24.ch'],
+    'Immobilier.ch':  ['immobilier.ch'],
+    'Anibis':         ['anibis.ch'],
+    'Acheter-Louer':  ['acheter-louer.ch'],
+    'Flatfox':        ['flatfox.ch'],
+    'Comparis':       ['comparis.ch'],
+    'Properstar':     ['properstar.com', 'properstar.ch'],
+    'jouval':         ['jouval.ch'],
+    'muller-christe': ['muller-christe.ch', 'mullerchriste.ch'],
+    'fidimmobil':     ['fidimmobil.ch'],
+}
+
+_INVALID_URL_TOKENS = ('undefined', 'null', 'javascript:', '#', 'about:blank')
+
+def _is_valid_source_url(url, source):
+    """Reject empty / garbage URLs, non-http(s) schemes, and domain mismatches."""
+    if not url or not isinstance(url, str):
+        return False
+    u = url.strip()
+    if not u:
+        return False
+    low = u.lower()
+    if low in ('#', '/'):
+        return False
+    if any(low.startswith(tok) or low == tok for tok in _INVALID_URL_TOKENS):
+        return False
+    if not (low.startswith('http://') or low.startswith('https://')):
+        return False
+    expected = SOURCE_DOMAINS.get(source)
+    if expected:
+        # Extract host from the URL
+        try:
+            from urllib.parse import urlparse
+            host = (urlparse(u).hostname or '').lower()
+        except Exception:
+            return False
+        if not any(host == d or host.endswith('.' + d) for d in expected):
+            return False
+    return True
+
 SCRAPINGBEE_KEY = os.environ.get('SCRAPINGBEE_API_KEY', '')
 SCRAPINGBEE_URL = 'https://app.scrapingbee.com/api/v1'
+
+# --- Scrape cache ----------------------------------------------------------
+# DB-backed TTL cache to skip ScrapingBee calls for URLs fetched recently.
+# If an URL was scraped successfully < SCRAPE_CACHE_TTL_HOURS ago, _sb_get
+# returns (304, '') and the caller treats it as an empty/terminal page.
+# The listings from the previous run are still in `properties`, so no data
+# is lost — we just save credits.
+SCRAPE_CACHE_TTL_HOURS = int(os.environ.get('SCRAPE_CACHE_TTL_HOURS', '12'))
+SCRAPE_CACHE_DISABLED = os.environ.get('SCRAPE_CACHE_DISABLE', '').lower() in ('1', 'true', 'yes')
+
+_CACHE_CONN = None
+_CACHE_CONN_FAILED = False
+
+
+def _cache_conn():
+    """Return a dedicated (autocommit) psycopg2 conn for the scrape cache.
+    None if DATABASE_URL isn't set or the last init failed (best-effort)."""
+    global _CACHE_CONN, _CACHE_CONN_FAILED
+    if SCRAPE_CACHE_DISABLED or _CACHE_CONN_FAILED:
+        return None
+    if _CACHE_CONN is not None:
+        return _CACHE_CONN
+    dsn = os.environ.get('DATABASE_URL')
+    if not dsn:
+        _CACHE_CONN_FAILED = True
+        return None
+    try:
+        import psycopg2 as _pg
+        conn = _pg.connect(dsn)
+        conn.autocommit = True
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS scrape_cache (
+                url_hash VARCHAR(64) PRIMARY KEY,
+                content_hash VARCHAR(64),
+                scraped_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        cur.close()
+        _CACHE_CONN = conn
+        return _CACHE_CONN
+    except Exception as e:
+        log.warning(f"scrape_cache init failed, caching disabled: {e}")
+        _CACHE_CONN_FAILED = True
+        return None
+
+
+def _url_hash(url):
+    return hashlib.sha256((url or '').encode('utf-8')).hexdigest()
+
+
+def _cache_is_fresh(url):
+    """True if we scraped this URL successfully less than TTL hours ago."""
+    conn = _cache_conn()
+    if not conn:
+        return False
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT 1 FROM scrape_cache WHERE url_hash = %s AND scraped_at > NOW() - (%s || ' hours')::interval",
+            (_url_hash(url), str(SCRAPE_CACHE_TTL_HOURS))
+        )
+        hit = cur.fetchone() is not None
+        cur.close()
+        return hit
+    except Exception as e:
+        log.debug(f"scrape_cache read failed: {e}")
+        return False
+
+
+def _cache_mark(url, html):
+    """Upsert a cache entry after a successful scrape."""
+    conn = _cache_conn()
+    if not conn:
+        return
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO scrape_cache (url_hash, content_hash, scraped_at)
+            VALUES (%s, %s, NOW())
+            ON CONFLICT (url_hash) DO UPDATE SET
+                content_hash = EXCLUDED.content_hash,
+                scraped_at = NOW()
+        """, (_url_hash(url), hashlib.sha256((html or '').encode('utf-8', errors='ignore')).hexdigest()))
+        cur.close()
+    except Exception as e:
+        log.debug(f"scrape_cache write failed: {e}")
 
 # Swiss city → canton mapping
 CITY_CANTONS = {
@@ -89,13 +244,23 @@ def _smart_get(url, render_js=False, try_direct=False):
 
 
 def _sb_get(url, render_js=False):
-    """Fetch a URL via ScrapingBee. Returns (status_code, html_text)."""
+    """Fetch a URL via ScrapingBee. Returns (status_code, html_text).
+    If the URL was scraped successfully less than SCRAPE_CACHE_TTL_HOURS ago,
+    returns (304, '') without spending a credit — callers treat it as an
+    empty/terminal page."""
+    # Cache short-circuit — save credits on URLs we already hit recently
+    if _cache_is_fresh(url):
+        log.info(f"[cache-hit] skip {url[:80]}... (< {SCRAPE_CACHE_TTL_HOURS}h)")
+        return 304, ''
+
     if not SCRAPINGBEE_KEY:
         log.warning("SCRAPINGBEE_API_KEY not set — falling back to direct request")
         try:
             r = requests.get(url, headers={
                 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
             }, timeout=15)
+            if r.status_code == 200 and r.text:
+                _cache_mark(url, r.text)
             return r.status_code, r.text
         except Exception as e:
             log.error(f"Direct request failed: {e}")
@@ -121,6 +286,8 @@ def _sb_get(url, render_js=False):
                 log.warning(f"[ScrapingBee] Server error {r.status_code}, retrying in 3s...")
                 time.sleep(3)
                 continue
+            if r.status_code == 200 and r.text:
+                _cache_mark(url, r.text)
             return r.status_code, r.text
         except requests.exceptions.Timeout:
             log.error(f"[ScrapingBee] TIMEOUT fetching {url} (attempt {attempt+1})")
@@ -137,8 +304,12 @@ def _sb_get(url, render_js=False):
 def _make_property(external_id, source, source_url, title, description,
                    property_type, transaction, price, rooms, surface,
                    floor, address, city, canton, postal_code,
-                   latitude, longitude, features, images, published_at):
-    """Create a standardized property dict."""
+                   latitude, longitude, features, images, published_at,
+                   search_city=None):
+    """Create a standardized property dict. `search_city` is used as fallback
+    when the portal-provided city is empty or garbage (C2.2)."""
+    # C2.2: clean portal-provided city
+    city = _clean_city(city, fallback_city=search_city)
     # Fix truncated sale prices: no property in Switzerland sells for < 10'000 CHF
     # Portals like Properstar sometimes display "965" meaning 965'000
     if transaction == 'achat' and price and price < 10000:
@@ -444,7 +615,8 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=4):
                     postal_code=_extract_postal(address),
                     latitude=None, longitude=None,
                     features=[], images=images, published_at=None,
-                ))
+                                    search_city=city,
+))
             except Exception as e:
                 log.debug(f"[Homegate] Card parse error: {e}")
 
@@ -638,7 +810,8 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=4):
                                 longitude=listing.get('longitude') or (addr.get('longitude') if isinstance(addr, dict) else None),
                                 features=[], images=img_list[:5],
                                 published_at=listing.get('publishDate') or listing.get('created'),
-                            ))
+                                                            search_city=city,
+))
                     else:
                         log.warning(f"[ImmoScout24] __INITIAL_STATE__ parsed but no listings found. Top keys: {list(state.keys())}")
                 except json.JSONDecodeError as e:
@@ -736,7 +909,8 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=4):
                         address=addr_text, city=city, canton=canton,
                         postal_code=_extract_postal(addr_text), latitude=None, longitude=None,
                         features=[], images=images, published_at=None,
-                    ))
+                                            search_city=city,
+))
                 except Exception as e:
                     log.debug(f"[ImmoScout24] Card parse error: {e}")
 
@@ -957,7 +1131,8 @@ def scrape_immobilier_ch(city="Lausanne", transaction="location", max_pages=2):
                         postal_code=_extract_postal(address),
                         latitude=lat, longitude=lng,
                         features=[], images=images, published_at=None,
-                    ))
+                                            search_city=city,
+))
             except Exception as e:
                 log.debug(f"[Immobilier.ch] Card parse error: {e}")
 
@@ -1114,7 +1289,8 @@ def scrape_anibis(city="Lausanne", transaction="location", max_pages=2):
                     postal_code=str(postcode) if postcode else None,
                     latitude=None, longitude=None,
                     features=[], images=images, published_at=item.get('timestamp'),
-                ))
+                                    search_city=city,
+))
 
         except Exception as e:
             log.error(f"[Anibis] __NEXT_DATA__ parse error: {e}")
@@ -1247,7 +1423,8 @@ def scrape_acheter_louer(city="Lausanne", transaction="location", max_pages=1):
                         postal_code=postal or _extract_postal(title),
                         latitude=None, longitude=None,
                         features=[], images=images, published_at=None,
-                    ))
+                                            search_city=city,
+))
             except Exception as e:
                 log.debug(f"[Acheter-Louer] Card parse error: {e}")
 
@@ -1440,7 +1617,8 @@ def scrape_flatfox(city="Lausanne", transaction="location", limit=50):
                     features=features,
                     images=images,
                     published_at=item.get('published') or item.get('created'),
-                )
+                                    search_city=city,
+)
                 if prop:
                     results.append(prop)
 
@@ -1519,7 +1697,8 @@ def scrape_comparis(city="Lausanne", transaction="location", max_pages=2):
                             postal_code=_extract_postal(item.get('address', '')),
                             latitude=None, longitude=None,
                             features=[], images=img_list, published_at=None,
-                        ))
+                                                    search_city=city,
+))
             except Exception as e:
                 log.error(f"[Comparis] __NEXT_DATA__ parse error: {e}")
 
@@ -1583,7 +1762,8 @@ def scrape_comparis(city="Lausanne", transaction="location", max_pages=2):
                             postal_code=_extract_postal(address),
                             latitude=None, longitude=None,
                             features=[], images=images, published_at=None,
-                        ))
+                                                    search_city=city,
+))
                 except Exception:
                     pass
 
@@ -1650,7 +1830,8 @@ def scrape_properstar(city="Lausanne", transaction="location", max_pages=1):
                         canton=CITY_CANTONS.get(city.lower(), ''),
                         postal_code=None, latitude=None, longitude=None,
                         features=[], images=[], published_at=obj.get('datePosted'),
-                    ))
+                                            search_city=city,
+))
             except Exception as e:
                 log.debug(f"[Properstar] JSON-LD error: {e}")
 
@@ -1735,7 +1916,8 @@ def scrape_properstar(city="Lausanne", transaction="location", max_pages=1):
                         postal_code=_extract_postal(address),
                         latitude=None, longitude=None,
                         features=[], images=images, published_at=None,
-                    ))
+                                            search_city=city,
+))
             except Exception as e:
                 log.debug(f"[Properstar] Card parse error: {e}")
 
@@ -1855,7 +2037,8 @@ def scrape_jouval(city=None, transaction="location", max_pages=30):
                     latitude=None, longitude=None,
                     features=[], images=[img_url] if img_url else [],
                     published_at=None,
-                ))
+                                    search_city=city,
+))
                 page_count += 1
             except Exception as e:
                 log.debug(f"[Jouval] Card parse error: {e}")
@@ -1996,7 +2179,8 @@ def scrape_muller_christe(city=None, transaction="location", max_pages=15):
                     latitude=None, longitude=None,
                     features=[], images=[img_url] if img_url else [],
                     published_at=None,
-                ))
+                                    search_city=city,
+))
                 page_count += 1
             except Exception as e:
                 log.debug(f"[Muller&Christe] Card parse error: {e}")
@@ -2140,7 +2324,8 @@ def scrape_fidimmobil(city=None, transaction="location", max_pages=1):
                 latitude=None, longitude=None,
                 features=[], images=[img_url] if img_url else [],
                 published_at=None,
-            ))
+                            search_city=city,
+))
         except Exception as e:
             log.debug(f"[Fidimmobil] Card parse error: {e}")
 
@@ -2156,6 +2341,23 @@ def scrape_fidimmobil(city=None, transaction="location", max_pages=1):
 # Process-level cache: prevents NE agency scrapers from running 16× per cron
 # (cron calls scrape_all once per NE city). Cleared at process exit.
 _NE_AGENCY_CACHE = set()
+
+# Per-run scraper stats: tracks how many listings each scraper produced across
+# all cities of the current run. Used by cron_job.py to detect scrapers returning
+# 0 results everywhere (→ portal layout changed, credits exhausted, etc.).
+_SCRAPER_STATS = {}
+
+
+def reset_scraper_stats():
+    """Reset per-scraper counters. Call once at the start of a cron run."""
+    global _SCRAPER_STATS, _NE_AGENCY_CACHE
+    _SCRAPER_STATS = {}
+    _NE_AGENCY_CACHE = set()
+
+
+def get_scraper_stats():
+    """Return a snapshot of {scraper_name: total_listings_across_cities}."""
+    return dict(_SCRAPER_STATS)
 
 
 # For small towns, also scrape the nearest large city to find listings
@@ -2214,16 +2416,26 @@ def scrape_all(city="Lausanne", transaction="location", skip_nearby=False):
         ('Fidimmobil', scrape_fidimmobil),
     ]
 
+    # Parallelize BY PORTAL (not by city) to respect per-site rate limits.
+    # Each scraper keeps its own time.sleep(1) between pages of the same portal.
+    # max_workers=4 → at most 4 portals hit simultaneously for a given city.
     for scrape_city in cities_to_scrape:
         log.info(f"[scrape_all] Scraping city: {scrape_city}")
-        for name, scraper in scrapers:
-            try:
-                results = [r for r in scraper(city=scrape_city, transaction=transaction) if r is not None]
-                all_results.extend(results)
-                log.info(f"[{name}][{scrape_city}] {len(results)} results")
-            except Exception as e:
-                log.error(f"[{name}][{scrape_city}] FAILED: {e}")
-            time.sleep(1)
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {
+                executor.submit(scraper, city=scrape_city, transaction=transaction): name
+                for name, scraper in scrapers
+            }
+            for future in as_completed(futures):
+                name = futures[future]
+                _SCRAPER_STATS.setdefault(name, 0)
+                try:
+                    results = [r for r in future.result() if r is not None]
+                    all_results.extend(results)
+                    _SCRAPER_STATS[name] += len(results)
+                    log.info(f"[{name}][{scrape_city}] {len(results)} results")
+                except Exception as e:
+                    log.error(f"[{name}][{scrape_city}] FAILED: {e}")
 
     # NE agencies: only run when scraping a NE city (avoid duplication for VD/GE cities)
     # AND only once per transaction per process (cron loops 16 NE cities — don't scrape Jouval 16x)
@@ -2233,18 +2445,27 @@ def scrape_all(city="Lausanne", transaction="location", skip_nearby=False):
         for sc in cities_to_scrape
     )
     if is_ne_scrape:
-        for name, scraper in ne_agency_scrapers:
-            cache_key = f"{name}:{transaction}"
-            if cache_key in _NE_AGENCY_CACHE:
-                continue  # Already scraped this run
-            try:
-                results = [r for r in scraper(transaction=transaction) if r is not None]
-                all_results.extend(results)
-                _NE_AGENCY_CACHE.add(cache_key)
-                log.info(f"[{name}][NE-all] {len(results)} results")
-            except Exception as e:
-                log.error(f"[{name}][NE-all] FAILED: {e}")
-            time.sleep(1)
+        pending_ne = [
+            (name, scraper) for name, scraper in ne_agency_scrapers
+            if f"{name}:{transaction}" not in _NE_AGENCY_CACHE
+        ]
+        if pending_ne:
+            with ThreadPoolExecutor(max_workers=min(4, len(pending_ne))) as executor:
+                futures = {
+                    executor.submit(scraper, transaction=transaction): name
+                    for name, scraper in pending_ne
+                }
+                for future in as_completed(futures):
+                    name = futures[future]
+                    _SCRAPER_STATS.setdefault(name, 0)
+                    try:
+                        results = [r for r in future.result() if r is not None]
+                        all_results.extend(results)
+                        _SCRAPER_STATS[name] += len(results)
+                        _NE_AGENCY_CACHE.add(f"{name}:{transaction}")
+                        log.info(f"[{name}][NE-all] {len(results)} results")
+                    except Exception as e:
+                        log.error(f"[{name}][NE-all] FAILED: {e}")
 
     # Deduplicate
     seen = set()
@@ -2259,12 +2480,119 @@ def scrape_all(city="Lausanne", transaction="location", skip_nearby=False):
     return unique
 
 
+def _ensure_property_sources_table(db):
+    """Create the property_sources table if missing. Idempotent."""
+    cur = db.cursor()
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS property_sources (
+                id SERIAL PRIMARY KEY,
+                property_id INTEGER NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+                source VARCHAR(50) NOT NULL,
+                source_url VARCHAR(500),
+                external_id VARCHAR(255),
+                created_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(property_id, source)
+            )
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_property_sources_property ON property_sources(property_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_property_sources_source ON property_sources(source, external_id)")
+        db.commit()
+    except Exception as e:
+        log.warning(f"property_sources table ensure failed: {e}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    finally:
+        cur.close()
+
+
+def _find_cross_portal_duplicate(cur, p):
+    """Look for an existing active property (from a different source) that
+    matches this listing on city + price (±5%) + rooms + surface (±10%).
+    Returns the existing property_id or None."""
+    city = (p.get('city') or '').strip()
+    price = p.get('price')
+    rooms = p.get('rooms')
+    surface = p.get('surface')
+    if not (city and price and rooms):
+        return None
+    price_min = price * 0.95
+    price_max = price * 1.05
+    try:
+        if surface:
+            cur.execute("""
+                SELECT id FROM properties
+                WHERE LOWER(city) = LOWER(%s)
+                  AND source != %s
+                  AND is_active = TRUE
+                  AND price BETWEEN %s AND %s
+                  AND rooms = %s
+                  AND surface IS NOT NULL
+                  AND surface BETWEEN %s AND %s
+                ORDER BY id ASC
+                LIMIT 1
+            """, (city, p['source'], price_min, price_max, rooms, surface * 0.9, surface * 1.1))
+        else:
+            cur.execute("""
+                SELECT id FROM properties
+                WHERE LOWER(city) = LOWER(%s)
+                  AND source != %s
+                  AND is_active = TRUE
+                  AND price BETWEEN %s AND %s
+                  AND rooms = %s
+                ORDER BY id ASC
+                LIMIT 1
+            """, (city, p['source'], price_min, price_max, rooms))
+        row = cur.fetchone()
+        if not row:
+            return None
+        # RealDictRow supports both integer and key access
+        try:
+            return row[0]
+        except (KeyError, TypeError):
+            return row.get('id')
+    except Exception as e:
+        log.debug(f"cross-portal dedup query error: {e}")
+        return None
+
+
 def save_to_db(db, listings):
-    """Save scraped listings to the properties table."""
+    """Save scraped listings to the properties table.
+    Detects cross-portal duplicates (same bien listed on multiple sites) and
+    records the extra sources in property_sources instead of duplicating the row."""
+    _ensure_property_sources_table(db)
+
     cur = db.cursor()
     saved = 0
+    deduped = 0
     price_changes = 0
+    skipped_invalid_url = 0
     for p in listings:
+        # C2.1 — reject listings with empty / garbage / wrong-domain URLs so
+        # we never store a row the frontend can't link to.
+        if not _is_valid_source_url(p.get('source_url'), p.get('source', '')):
+            log.debug(
+                "[save_to_db] skip %s/%s — invalid source_url: %r",
+                p.get('source'), p.get('external_id'), p.get('source_url')
+            )
+            skipped_invalid_url += 1
+            continue
+        # Isolate each listing in a SAVEPOINT so one bad row doesn't abort
+        # the whole batch (otherwise any error poisons the transaction).
+        try:
+            cur.execute("SAVEPOINT sp_listing")
+        except Exception:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            cur = db.cursor()
+            try:
+                cur.execute("SAVEPOINT sp_listing")
+            except Exception:
+                pass
         try:
             # Check if property exists with different price (for price history tracking)
             cur.execute("""
@@ -2282,6 +2610,31 @@ def save_to_db(db, listings):
                     VALUES (%s, %s, %s, %s)
                 """, (existing[0], old_price, new_price, change_pct))
                 price_changes += 1
+
+            prop_id = None
+
+            if not existing:
+                # First time we see this (source, external_id). Check if another
+                # portal already lists the same bien → link sources, skip insert.
+                dup_id = _find_cross_portal_duplicate(cur, p)
+                if dup_id:
+                    cur.execute("""
+                        INSERT INTO property_sources (property_id, source, source_url, external_id)
+                        VALUES (%s, %s, %s, %s)
+                        ON CONFLICT (property_id, source) DO UPDATE SET
+                            source_url = EXCLUDED.source_url,
+                            external_id = EXCLUDED.external_id
+                    """, (dup_id, p['source'], p.get('source_url'), p['external_id']))
+                    # Keep the existing property fresh so the dedup/scoring pipeline
+                    # continues to consider it.
+                    cur.execute("""
+                        UPDATE properties
+                           SET is_active = TRUE, scraped_at = NOW()
+                         WHERE id = %s
+                    """, (dup_id,))
+                    deduped += 1
+                    cur.execute("RELEASE SAVEPOINT sp_listing")
+                    continue
 
             cur.execute("""
                 INSERT INTO properties (
@@ -2309,6 +2662,7 @@ def save_to_db(db, listings):
                     source_url = EXCLUDED.source_url,
                     is_active = TRUE,
                     scraped_at = NOW()
+                RETURNING id
             """, (
                 p['external_id'], p['source'], p['source_url'],
                 p['title'], p.get('description', ''),
@@ -2321,11 +2675,48 @@ def save_to_db(db, listings):
                 p.get('contact_name'), p.get('contact_phone'), p.get('contact_email'),
                 p.get('published_at')
             ))
+            row = cur.fetchone()
+            if row:
+                try:
+                    prop_id = row[0]
+                except (KeyError, TypeError):
+                    prop_id = row.get('id')
+
+            # Record this source in property_sources (even for primary source) so
+            # we have a uniform view of "where is this bien listed".
+            if prop_id:
+                cur.execute("""
+                    INSERT INTO property_sources (property_id, source, source_url, external_id)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (property_id, source) DO UPDATE SET
+                        source_url = EXCLUDED.source_url,
+                        external_id = EXCLUDED.external_id
+                """, (prop_id, p['source'], p.get('source_url'), p['external_id']))
+
+            cur.execute("RELEASE SAVEPOINT sp_listing")
             saved += 1
         except Exception as e:
             log.debug(f"Save error for {p.get('external_id')}: {e}")
+            try:
+                cur.execute("ROLLBACK TO SAVEPOINT sp_listing")
+            except Exception:
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        log.error(f"save_to_db commit failed: {e}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
     cur.close()
-    log.info(f"Saved {saved}/{len(listings)} to database ({price_changes} price changes detected)")
+    log.info(
+        f"Saved {saved}/{len(listings)} to database "
+        f"({deduped} cross-portal duplicates linked, {price_changes} price changes detected, "
+        f"{skipped_invalid_url} rejected for invalid source_url)"
+    )
     return saved

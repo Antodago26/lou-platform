@@ -157,7 +157,9 @@ def score_zone(prop, zones):
     Retourne (score, distance_km).
     """
     if not zones:
-        return 50, None
+        # C2.5 — no location signal at all → near-zero, not neutral.
+        # Prevents random faraway listings from inheriting a 50 baseline.
+        return 10, None
 
     min_distance = float('inf')
     target_radius = 3.0
@@ -346,6 +348,8 @@ def score_freshness(prop):
     now = datetime.now(published.tzinfo) if published.tzinfo else datetime.now()
     days_old = (now - published).days
 
+    # C2.6 — tightened thresholds so stale listings drop faster.
+    # Aligned with the 21-day deactivation window in cron_job.py.
     if days_old <= 1:
         return 100
     elif days_old <= 3:
@@ -354,10 +358,10 @@ def score_freshness(prop):
         return 75
     elif days_old <= 14:
         return 50
-    elif days_old <= 30:
-        return 25
+    elif days_old <= 21:
+        return 15
     else:
-        return 10
+        return 5
 
 
 def score_property(prop, profile, zones):

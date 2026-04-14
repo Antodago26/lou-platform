@@ -16,7 +16,7 @@ import psycopg2
 import psycopg2.extras
 import requests as http_requests
 
-from scrapers import scrape_all, save_to_db
+from scrapers import scrape_all, save_to_db, reset_scraper_stats, get_scraper_stats
 from scoring_engine import score_all_for_profile
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(name)s] %(message)s')
@@ -24,6 +24,7 @@ log = logging.getLogger('lou-cron')
 
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
+ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', '')
 
 
 def get_db():
@@ -121,24 +122,75 @@ def _build_alert_email(properties, count_total):
     </div>
     <!-- Body -->
     <div style="background:#ffffff;padding:24px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">
-      <h2 style="margin:0 0 8px;color:#0f172a;font-size:18px">{count_total} nouveau{"x" if count_total > 1 else ""} bien{"s" if count_total > 1 else ""} correspond{"ent" if count_total > 1 else ""} a vos criteres</h2>
-      <p style="margin:0 0 20px;color:#64748b;font-size:14px">Voici les meilleurs resultats depuis notre derniere alerte :</p>
+      <h2 style="margin:0 0 8px;color:#0f172a;font-size:18px">{count_total} nouveau{"x" if count_total > 1 else ""} bien{"s" if count_total > 1 else ""} correspond{"ent" if count_total > 1 else ""} à vos critères</h2>
+      <p style="margin:0 0 20px;color:#64748b;font-size:14px">Voici les meilleurs résultats depuis notre dernière alerte :</p>
       <table style="width:100%;border-collapse:collapse">
         {rows_html}
       </table>
     </div>
     <!-- CTA -->
     <div style="background:#ffffff;padding:0 24px 24px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;text-align:center">
-      <a href="https://www.bonhome.ch" style="display:inline-block;background:#0369a1;color:#ffffff;text-decoration:none;padding:12px 32px;border-radius:8px;font-weight:600;font-size:15px;margin-top:16px">Voir tous mes resultats</a>
+      <a href="https://www.bonhome.ch" style="display:inline-block;background:#0369a1;color:#ffffff;text-decoration:none;padding:12px 32px;border-radius:8px;font-weight:600;font-size:15px;margin-top:16px">Voir tous mes résultats</a>
     </div>
     <!-- Footer -->
     <div style="background:#f8fafc;border-radius:0 0 12px 12px;padding:20px 24px;text-align:center;border:1px solid #e2e8f0;border-top:none">
-      <p style="margin:0;color:#94a3b8;font-size:12px">Vous recevez cet email car vous avez active les alertes sur Bon Home.</p>
-      <p style="margin:8px 0 0;color:#94a3b8;font-size:12px">Pour modifier la frequence ou desactiver les alertes, rendez-vous dans vos <a href="https://www.bonhome.ch" style="color:#0369a1">parametres</a>.</p>
+      <p style="margin:0;color:#94a3b8;font-size:12px">Vous recevez cet email car vous avez activé les alertes sur Bon Home.</p>
+      <p style="margin:8px 0 0;color:#94a3b8;font-size:12px">Pour modifier la fréquence ou désactiver les alertes, rendez-vous dans vos <a href="https://www.bonhome.ch" style="color:#0369a1">paramètres</a>.</p>
     </div>
   </div>
 </body>
 </html>'''
+
+
+def _send_scraper_alert(failed_scrapers, stats):
+    """Send a monitoring email to ADMIN_EMAIL when one or more scrapers
+    returned 0 results across every city of the run."""
+    if not ADMIN_EMAIL:
+        log.warning("ADMIN_EMAIL not set, skipping scraper alert")
+        return False
+    if not RESEND_API_KEY:
+        log.warning("RESEND_API_KEY not set, skipping scraper alert")
+        return False
+    try:
+        rows = ''.join(
+            f'<tr><td style="padding:6px 12px;border-bottom:1px solid #e2e8f0">{name}</td>'
+            f'<td style="padding:6px 12px;border-bottom:1px solid #e2e8f0;text-align:right;color:#dc2626;font-weight:600">{stats.get(name, 0)}</td></tr>'
+            for name in failed_scrapers
+        )
+        other_rows = ''.join(
+            f'<tr><td style="padding:4px 12px;color:#64748b">{name}</td>'
+            f'<td style="padding:4px 12px;text-align:right;color:#64748b">{count}</td></tr>'
+            for name, count in sorted(stats.items(), key=lambda kv: kv[1], reverse=True)
+            if name not in failed_scrapers
+        )
+        html = f'''<!DOCTYPE html><html><body style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px">
+            <h2 style="color:#dc2626;margin:0 0 8px">⚠️ Scrapers en échec</h2>
+            <p style="color:#64748b;margin:0 0 16px">Le cron du {datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M UTC")} a retourné 0 résultat pour ces scrapers sur TOUTES les villes. À investiguer :</p>
+            <table style="width:100%;border-collapse:collapse;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;overflow:hidden">
+              <thead><tr style="background:#fecaca"><th style="padding:8px 12px;text-align:left">Scraper</th><th style="padding:8px 12px;text-align:right">Résultats</th></tr></thead>
+              <tbody>{rows}</tbody>
+            </table>
+            <h3 style="color:#0f172a;margin:24px 0 8px;font-size:14px">Autres scrapers (OK)</h3>
+            <table style="width:100%;border-collapse:collapse;font-size:13px">{other_rows}</table>
+            <p style="color:#94a3b8;font-size:12px;margin-top:24px">Bon Home — monitoring cron</p>
+        </body></html>'''
+        resp = http_requests.post('https://api.resend.com/emails', json={
+            'from': 'Bon Home Monitoring <noreply@bonhome.ch>',
+            'to': [ADMIN_EMAIL],
+            'subject': f"[Bon Home] {len(failed_scrapers)} scraper(s) en échec",
+            'html': html,
+        }, headers={
+            'Authorization': f'Bearer {RESEND_API_KEY}',
+            'Content-Type': 'application/json',
+        }, timeout=10)
+        if resp.status_code >= 400:
+            log.error(f"Scraper alert Resend error ({resp.status_code}): {resp.text}")
+            return False
+        log.info(f"Scraper alert email sent to {ADMIN_EMAIL} for: {failed_scrapers}")
+        return True
+    except Exception as e:
+        log.error(f"Failed to send scraper alert: {e}")
+        return False
 
 
 def _send_alert_email(email, html, count):
@@ -295,6 +347,8 @@ def run():
     # Step 3: Scrape all targets (commit after each city to avoid losing data)
     # skip_nearby=True: cron already includes all NE main cities explicitly,
     # so don't re-scrape Neuchâtel 12× via NEARBY_MAIN_CITY expansion.
+    # Reset per-scraper counters so we can detect scrapers returning 0 everywhere.
+    reset_scraper_stats()
     total_scraped = 0
     for city, transaction in scrape_targets:
         log.info(f"--- Scraping: {city} ({transaction}) ---")
@@ -313,11 +367,21 @@ def run():
 
     log.info(f"Total scraped and saved: {total_scraped}")
 
-    # Step 4: Deactivate old listings (> 30 days without update)
+    # Step 3bis: Monitor — alert admin if any scraper returned 0 across ALL cities
+    stats = get_scraper_stats()
+    if stats:
+        log.info(f"Scraper totals across all cities: {stats}")
+        failed_scrapers = sorted([name for name, count in stats.items() if count == 0])
+        if failed_scrapers:
+            log.warning(f"Scrapers with 0 results on all cities: {failed_scrapers}")
+            _send_scraper_alert(failed_scrapers, stats)
+
+    # Step 4: Deactivate stale listings (> 21 days without update)
+    # C2.6 — tightened from 30d to 21d so the catalog purges sooner.
     cur = db.cursor()
     cur.execute("""
         UPDATE properties SET is_active = FALSE
-        WHERE scraped_at < NOW() - INTERVAL '30 days' AND is_active = TRUE
+        WHERE scraped_at < NOW() - INTERVAL '21 days' AND is_active = TRUE
     """)
     deactivated = cur.rowcount
     db.commit()
