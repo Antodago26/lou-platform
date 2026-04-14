@@ -14,6 +14,13 @@
   // Accumulated chatbot criteria (persists across messages)
   var chatCriteria = {};
 
+  // Map cache — must live at IIFE scope because saveProfileForm() invalidates
+  // it from outside showDashboard() (where the map code lives). Previously
+  // declared as `var _mapAllProps` inside showDashboard, which made the
+  // assignment in saveProfileForm throw ReferenceError under 'use strict' and
+  // silently rejected the whole save chain.
+  var _mapAllProps = null;
+
   // Favorites compare state (shared between showDashboard and helper functions)
   var compareMode = false;
   var compareSet = {};
@@ -969,7 +976,8 @@
 
     var _mapHighlightedCard = null;
 
-    var _mapAllProps = null; // All properties for map (loaded separately)
+    // _mapAllProps is hoisted to the IIFE top-level scope (see top of file)
+    // so saveProfileForm() can invalidate it from outside showDashboard().
     var _mapCurrentSort = 'score'; // Current sort for map sidebar
     var _mapPageSize = 50; // Progressive loading size
     var _mapVisibleCount = 50; // Number of cards currently visible
