@@ -1873,6 +1873,146 @@ def scrape_jouval(city=None, transaction="location", max_pages=30):
 
 
 # ============================================================
+# MULLER & CHRISTE — Régie Neuchâtel (custom CMS, /biens/{louer|acheter}/)
+# ============================================================
+
+def scrape_muller_christe(city=None, transaction="location", max_pages=15):
+    """Scrape mulleretchriste.ch. URL pattern:
+      /biens/louer/page/N/ + /biens/acheter/page/N/
+    ~9 listings/page, ~10 pages total. Direct requests, no ScrapingBee.
+    Listing pages don't expose rooms+surface for all biens — fields may be None.
+    """
+    log.info(f"[Muller&Christe] Fetching all listings (transaction={transaction})")
+    results = []
+    seen_ids = set()
+    base = "https://www.mulleretchriste.ch"
+    tx_path = 'louer' if transaction == 'location' else 'acheter'
+
+    for page in range(1, max_pages + 1):
+        if page == 1:
+            url = f"{base}/biens/{tx_path}/"
+        else:
+            url = f"{base}/biens/{tx_path}/page/{page}/"
+
+        status, html = _direct_get(url)
+        if status != 200 or len(html) < 5000:
+            log.warning(f"[Muller&Christe] Page {page}: HTTP {status} — stop")
+            break
+
+        soup = BeautifulSoup(html, 'html.parser')
+        cards = soup.select('div.real-estate-item')
+        if not cards:
+            log.info(f"[Muller&Christe] Page {page}: no cards — stop")
+            break
+
+        page_count = 0
+        for card in cards:
+            try:
+                # The card is wrapped by an <a> — find the closest ancestor link
+                link = card.find_parent('a')
+                if not link or not link.get('href'):
+                    continue
+                href = link.get('href', '').strip()
+                source_url = href if href.startswith('http') else f"{base}{href}"
+
+                # URL pattern: /biens/{louer|acheter}/{type}/{city}/{slug}/
+                parts = [p for p in href.strip('/').split('/') if p]
+                if len(parts) < 5:
+                    continue
+                # parts: [biens, louer, type, city, slug]
+                tx_url = parts[1]
+                prop_type_slug = parts[2]
+                city_slug = parts[3]
+                title_slug = parts[4]
+
+                # Skip mismatched transaction (defensive — pagination should already filter)
+                expected_tx = 'louer' if transaction == 'location' else 'acheter'
+                if tx_url != expected_tx:
+                    continue
+
+                # Use full URL as external_id (stable, unique)
+                ext_id = title_slug
+                if ext_id in seen_ids:
+                    continue
+                seen_ids.add(ext_id)
+
+                # Title from slug (capitalize, replace dashes)
+                title = title_slug.replace('-', ' ').strip().capitalize()
+
+                # Property type from URL slug
+                pt_map = {
+                    'appartement': 'appartement', 'maison': 'maison', 'villa': 'villa',
+                    'place-de-parc': 'parking', 'parking': 'parking', 'garage': 'parking',
+                    'local-commercial': 'commerce', 'commerce': 'commerce', 'bureau': 'commerce',
+                    'terrain': 'terrain', 'immeuble': 'immeuble',
+                }
+                prop_type = pt_map.get(prop_type_slug, 'appartement')
+
+                # City: deslugify
+                location_city = city_slug.replace('-', ' ').strip().title()
+
+                # Price: "1'120.- CHF" or "40.- CHF" or "750'000.- CHF"
+                price = None
+                price_el = card.select_one('span.price')
+                if price_el:
+                    digits = re.sub(r"[^\d]", '', price_el.get_text())
+                    if digits:
+                        price = int(digits)
+
+                # Rooms: "4 pièce(s)" — only when present
+                rooms = None
+                rooms_el = card.select_one('span.rooms')
+                if rooms_el:
+                    m = re.search(r'(\d+(?:[.,]\d+)?)', rooms_el.get_text())
+                    if m:
+                        try:
+                            rooms = float(m.group(1).replace(',', '.'))
+                        except ValueError:
+                            pass
+
+                # First image
+                img_url = ''
+                img_el = card.select_one('div.item-images img')
+                if img_el:
+                    src = img_el.get('src', '') or img_el.get('data-src', '')
+                    if src:
+                        img_url = src if src.startswith('http') else f"{base}{src}"
+
+                # Skip placeholder images
+                if 'placholder' in img_url or 'placeholder' in img_url:
+                    img_url = ''
+
+                # Address: not in listing — derived from city only
+                address = location_city
+
+                results.append(_make_property(
+                    external_id=ext_id, source='muller-christe', source_url=source_url,
+                    title=title, description='',
+                    property_type=prop_type, transaction=transaction,
+                    price=price, rooms=rooms, surface=None,
+                    floor=None, address=address, city=location_city,
+                    canton=CITY_CANTONS.get(location_city.lower(), 'NE'),
+                    postal_code=None,
+                    latitude=None, longitude=None,
+                    features=[], images=[img_url] if img_url else [],
+                    published_at=None,
+                ))
+                page_count += 1
+            except Exception as e:
+                log.debug(f"[Muller&Christe] Card parse error: {e}")
+
+        log.info(f"[Muller&Christe] Page {page}: {page_count} new listings")
+        if page_count == 0:
+            break
+
+        time.sleep(0.5)
+
+    results = [r for r in results if r is not None]
+    log.info(f"[Muller&Christe] Total: {len(results)} listings")
+    return results
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
@@ -1933,6 +2073,7 @@ def scrape_all(city="Lausanne", transaction="location", skip_nearby=False):
     # NE-only agency scrapers (single-fetch, ignores city loop) — only run for Neuchâtel main
     ne_agency_scrapers = [
         ('Jouval', scrape_jouval),
+        ('Muller&Christe', scrape_muller_christe),
     ]
 
     for scrape_city in cities_to_scrape:
