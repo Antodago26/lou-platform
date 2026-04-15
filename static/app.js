@@ -1655,13 +1655,30 @@
     'Fraîcheur': 'Correspond à la date de publication de l\'annonce. Une annonce récente obtient un meilleur score.'
   };
 
+  // Default weights used in scoring_engine.score_property (w_zone, w_budget, …).
+  // Shown next to each criterion in the detail modal so users understand why
+  // e.g. a perfect Equip. (10%) barely moves the total vs Zone (30%).
+  // If weight customization is ever exposed in the UI, replace this with the
+  // values returned by /api/profile.
+  var SCORE_WEIGHTS = {
+    'Zone': 30,
+    'Budget': 25,
+    'Type': 20,
+    'Surface': 10,
+    'Equip.': 10,
+    'Equipements': 10,
+    'Fraicheur': 5,
+    'Fraîcheur': 5
+  };
+
   function _detailBar(label, val) {
     val = val || 0;
     var color = val >= 80 ? '#059669' : val >= 60 ? '#0369a1' : val >= 40 ? '#d97706' : '#dc2626';
     var tip = SCORE_TOOLTIPS[label] || '';
     var tipAttr = tip ? ' title="' + escapeHtml(tip) + '"' : '';
-    var helpIcon = tip ? ' <span class="dsb-help" title="' + escapeHtml(tip) + '">?</span>' : '';
-    return '<div class="dsb-row"' + tipAttr + '><span>' + label + helpIcon + '</span><div class="dsb-track"><div class="dsb-fill" style="width:' + val + '%;background:' + color + '"></div></div><strong>' + val + '</strong></div>';
+    var weight = SCORE_WEIGHTS[label];
+    var weightHtml = (typeof weight === 'number') ? ' <span class="dsb-weight">· ' + weight + '%</span>' : '';
+    return '<div class="dsb-row"' + tipAttr + '><span>' + label + weightHtml + '</span><div class="dsb-track"><div class="dsb-fill" style="width:' + val + '%;background:' + color + '"></div></div><strong>' + val + '</strong></div>';
   }
 
   function toggleProfileForm() {
@@ -2764,8 +2781,7 @@
       '.detail-score-bars{flex:1;display:flex;flex-direction:column;gap:6px}',
       '.dsb-row{display:flex;align-items:center;gap:10px;font-size:13px;cursor:help}',
       '.dsb-row span{min-width:90px;color:#64748b;display:flex;align-items:center;gap:4px}',
-      '.dsb-help{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;font-size:10px;font-weight:700;background:#e2e8f0;color:#475569;border-radius:50%;cursor:help;line-height:1}',
-      '.dsb-help:hover{background:#0369a1;color:#fff}',
+      '.dsb-weight{font-size:11px;font-weight:600;color:#94a3b8;letter-spacing:.2px}',
       '.dsb-track{flex:1;height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden}',
       '.dsb-fill{height:100%;border-radius:3px;transition:width .3s}',
       '.dsb-row strong{min-width:24px;text-align:right;font-size:13px;color:#334155}',
