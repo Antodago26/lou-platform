@@ -776,13 +776,31 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=4):
                             rooms_raw = chars.get('numberOfRooms') or listing.get('numberOfRooms') or item.get('rooms')
                             surface_raw = chars.get('livingSpace') or chars.get('surfaceLiving') or listing.get('surfaceLiving') or item.get('surface')
 
-                            # Images
+                            # Images.
+                            # ImmoScout24's payload shape for image entries has
+                            # shifted a few times (sometimes {url}, sometimes
+                            # {src}, sometimes {originalUrl}/{imageUrl}/…).
+                            # When we only looked at 'url'/'src' we silently
+                            # produced empty strings for dicts with any other
+                            # schema, which then leaked into the DB and made
+                            # the frontend show "Pas d'image". Try all known
+                            # keys and hard-filter to valid http URLs.
+                            _IMG_KEYS = ('url', 'src', 'originalUrl',
+                                         'imageUrl', 'fullSizeUrl',
+                                         'thumbUrl', 'uri')
                             img_list = []
                             for img in (listing.get('images', []) or item.get('images', []) or []):
+                                src = None
                                 if isinstance(img, dict):
-                                    img_list.append(img.get('url', img.get('src', '')))
+                                    for k in _IMG_KEYS:
+                                        v = img.get(k)
+                                        if v:
+                                            src = v
+                                            break
                                 elif isinstance(img, str):
-                                    img_list.append(img)
+                                    src = img
+                                if src and isinstance(src, str) and src.startswith('http') and src not in img_list:
+                                    img_list.append(src)
 
                             # Address
                             addr_str = ''
