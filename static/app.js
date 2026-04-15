@@ -1790,8 +1790,26 @@
     };
 
     var btn = $('pf-save');
-    btn.textContent = 'Sauvegarde...';
+    var formWrap = $('profile-edit-form');
+    var actions = btn.parentNode;
+
+    // Clean visual loading state: spinner in the button, grayed-out fields,
+    // explanatory hint next to the buttons. Everything is torn down on error
+    // or on success (loadProfileBar wipes the wrapper on success).
+    btn.innerHTML = '<span class="pf-spinner"></span>Sauvegarde...';
     btn.disabled = true;
+    if (formWrap) formWrap.classList.add('pf-loading');
+    var hint = document.createElement('div');
+    hint.className = 'pf-hint';
+    hint.id = 'pf-hint';
+    hint.textContent = 'Cela peut prendre quelques secondes…';
+    if (actions && !$('pf-hint')) actions.insertBefore(hint, actions.firstChild);
+
+    function clearLoading() {
+      btn.disabled = false;
+      if (formWrap) formWrap.classList.remove('pf-loading');
+      var h = $('pf-hint'); if (h) h.remove();
+    }
 
     apiFetch(API + '/api/profile', {
       method: 'PUT',
@@ -1801,8 +1819,8 @@
     .then(function (r) { return r.json(); })
     .then(function (data) {
       if (!data || !data.ok) {
-        btn.textContent = 'Erreur — reessayez';
-        btn.disabled = false;
+        btn.innerHTML = 'Erreur — reessayez';
+        clearLoading();
         return;
       }
       // Profile saved — now re-run Lou (score + reload list + stats).
@@ -1810,7 +1828,7 @@
       // could re-render the profile bar (loadProfileBar regenerates
       // #profile-edit-form, which would visually close the form mid-flight
       // and detach this btn reference).
-      btn.innerHTML = 'Lou analyse vos nouveaux critères ' + ICO.search;
+      btn.innerHTML = '<span class="pf-spinner"></span>Lou analyse vos nouveaux critères…';
       _mapAllProps = null; // Force map to reload all properties
 
       // Re-score, then refresh everything in one wave. loadProfileBar() runs
@@ -1832,7 +1850,7 @@
       console.error('[saveProfile] outer catch fired', e);
       var msg = (e && (e.message || e.name)) || 'inconnu';
       btn.textContent = 'Err: ' + String(msg).slice(0, 60);
-      btn.disabled = false;
+      clearLoading();
     });
   }
 
@@ -2645,9 +2663,17 @@
       '.pf-zone-add select{padding:9px 8px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px}',
       '.pf-add-btn{padding:8px 14px;background:#0369a1;color:#fff;border:none;border-radius:8px;font-size:16px;cursor:pointer;font-weight:700}',
       '.pf-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:8px;padding:16px 24px;border-top:1px solid #e2e8f0;position:sticky;bottom:0;background:#fff;border-radius:0 0 16px 16px;z-index:2}',
-      '.pf-save-btn{padding:11px 24px;background:#0369a1;color:#fff;border:none;border-radius:10px;font-size:14px;cursor:pointer;font-weight:600;transition:all .2s}',
-      '.pf-save-btn:hover{background:#024e7a;transform:translateY(-1px);box-shadow:0 4px 12px rgba(3,105,161,.3)}',
+      '.pf-save-btn{padding:11px 24px;background:#0369a1;color:#fff;border:none;border-radius:10px;font-size:14px;cursor:pointer;font-weight:600;transition:all .2s;display:inline-flex;align-items:center;gap:8px}',
+      '.pf-save-btn:hover:not(:disabled){background:#024e7a;transform:translateY(-1px);box-shadow:0 4px 12px rgba(3,105,161,.3)}',
+      '.pf-save-btn:disabled{cursor:wait;opacity:.85}',
       '.pf-cancel-btn{padding:11px 24px;background:#f1f5f9;color:#64748b;border:none;border-radius:10px;font-size:14px;cursor:pointer}',
+      // Spinner shown in the save button during PUT/POST/refresh
+      '.pf-spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:pf-spin .7s linear infinite;flex-shrink:0}',
+      '@keyframes pf-spin{to{transform:rotate(360deg)}}',
+      // Loading state: gray out the whole form + disable interactions
+      '.pf-loading .pf-chip,.pf-loading input,.pf-loading select,.pf-loading button:not(#pf-save){pointer-events:none;opacity:.55}',
+      '.pf-loading{position:relative}',
+      '.pf-hint{font-size:12px;color:#64748b;margin-right:auto;align-self:center;font-style:italic}',
       '@media(max-width:768px){.pf-grid{grid-template-columns:1fr}.pf-budget-grid{grid-template-columns:1fr}.pf-row{flex-direction:column}.dash-profile-row{flex-direction:column;align-items:stretch}.pf-zone-add{flex-wrap:wrap}}',
 
       // Properties grid
