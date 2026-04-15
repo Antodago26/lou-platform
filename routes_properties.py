@@ -108,8 +108,11 @@ def get_properties():
 
         # Count "nearby" properties (just outside radius) so the frontend can
         # offer an "élargir la zone" action when the strict count is small.
+        # tx_params starts with [user_id(favorites), user_id(WHERE), min_score, ...]
+        # but this query has no favorites sub-select, so we skip the first element.
         nearby_available = 0
         if not include_nearby:
+            nearby_params = tx_params[1:]  # drop the favorites user_id
             cur.execute(f"""
                 SELECT COUNT(*) AS n
                 FROM scored_properties sp
@@ -117,7 +120,7 @@ def get_properties():
                 WHERE sp.user_id = %s AND sp.total_score >= %s AND p.is_active = TRUE
                       AND sp.score_zone >= 40 AND sp.score_zone < 80
                       AND {price_filter}{tx_filter}
-            """, tx_params)
+            """, nearby_params)
             row = cur.fetchone()
             nearby_available = int(row['n']) if row and row.get('n') is not None else 0
 
