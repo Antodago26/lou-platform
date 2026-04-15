@@ -33,10 +33,14 @@ def get_properties():
         "CASE WHEN sp.score_zone >= 80 THEN 0 ELSE 1 END, "
         "sp.distance_km ASC NULLS LAST, sp.total_score DESC"
     )
+    # Default sort: zone-in first, then by grade band (A before B before C...),
+    # then by distance within same grade. This ensures that at equal quality
+    # (e.g. two A's), the property closer to the user's chosen city appears
+    # first — fixing the Cortaillod-before-Boudry expectation.
     order_map = {
         'score': (
             "CASE WHEN sp.score_zone >= 80 THEN 0 ELSE 1 END, "
-            "sp.total_score DESC, sp.distance_km ASC NULLS LAST"
+            "sp.grade ASC, sp.distance_km ASC NULLS LAST, sp.total_score DESC"
         ),
         'proximity': proximity_order,
         'price_asc': 'p.price ASC',

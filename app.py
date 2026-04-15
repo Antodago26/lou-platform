@@ -71,6 +71,31 @@ def _run_migrations():
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS chat_messages_today INTEGER DEFAULT 0")
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS chat_messages_date DATE")
 
+        # Fix ImmoScout24 broken source_urls that used the old /real-estate/.../detail/ pattern
+        # which 404s. Rewrite them to /en/d/{id} which redirects correctly.
+        cur.execute("""
+            UPDATE properties
+            SET source_url = regexp_replace(
+                source_url,
+                '^https://www\\.immoscout24\\.ch/en/real-estate/(?:buy|rent)/detail/(\\d+)$',
+                'https://www.immoscout24.ch/en/d/\\1'
+            )
+            WHERE source = 'ImmoScout24'
+              AND source_url LIKE '%/real-estate/%/detail/%'
+        """)
+
+        # Also fix source_urls in property_sources table
+        cur.execute("""
+            UPDATE property_sources
+            SET source_url = regexp_replace(
+                source_url,
+                '^https://www\\.immoscout24\\.ch/en/real-estate/(?:buy|rent)/detail/(\\d+)$',
+                'https://www.immoscout24.ch/en/d/\\1'
+            )
+            WHERE source = 'ImmoScout24'
+              AND source_url LIKE '%/real-estate/%/detail/%'
+        """)
+
         # Auto-create alert rows for active profiles without alerts
         cur.execute("""
             INSERT INTO alerts (user_id, profile_id, channel, frequency, min_score, is_active)

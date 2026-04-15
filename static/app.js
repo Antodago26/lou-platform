@@ -106,10 +106,17 @@
   // fall back to city name than show English copy on a French UI.
   var EN_TITLE_RE = /\b(bedroom|bathroom|living\s*room|ground\s*floor|top\s*floor|fully\s*furnished|for\s*rent|for\s*sale|available\s*(from|now)|walking\s*distance|close\s*to|in\s*the\s*heart|stunning|spacious|charming|beautiful|apartment|\bflat\b|\d+\s*(bed|bath)rooms?)\b/i;
 
+  // German real-estate titles from Comparis/ImmoScout DE ads.
+  // "Zimmer" is the safest anchor — "3.5 Zimmer" or "Zimmer, 100 m²" are
+  // unambiguously German. We also catch standalone descriptors (wohnung,
+  // erdgeschoss, etc.) and floor abbreviations (EG/OG/UG/DG when preceded
+  // by a comma or digit, to avoid false positives on short strings).
+  var DE_TITLE_RE = /\b(zimmer|wohnung|erdgeschoss|obergeschoss|untergeschoss|dachgeschoss|stockwerk|mietwohnung|eigentumswohnung|möbliert|renoviert|(?:\d[.,]?\d?\s*|\,\s*)(?:EG|OG|UG|DG)\b)\b/i;
+
   function cleanTitle(t) {
     if (!t) return '';
-    // Drop English titles entirely — renderPropertyCard will fall back to city name.
-    if (EN_TITLE_RE.test(t)) return '';
+    // Drop English/German titles entirely — renderPropertyCard will fall back to city name.
+    if (EN_TITLE_RE.test(t) || DE_TITLE_RE.test(t)) return '';
     // Remove price prefixes left in DB: "CHF 1,630.–", "CHF 2,200.–Plus", "1'590.–"
     t = t.replace(/^CHF\s*[\d\s'',.\u2019]+[.\u2013\u2014\-]*\w*\s*/i, '').trim();
     // Require a price terminator (en-dash/em-dash) OR a currency marker — otherwise
