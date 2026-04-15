@@ -37,10 +37,34 @@
     s.async = true;
     document.head.appendChild(s);
   }
+  // Helper: log a fetch failure with context instead of swallowing silently.
+  // Use for catches that shouldn't surface UI but we still want visible in console/Sentry.
+  function _logErr(ctx) {
+    return function (err) {
+      try { console.warn('[lou] ' + ctx + ':', err && err.message ? err.message : err); } catch (_) {}
+    };
+  }
+
+  // Minimal inline toast — auto-dismisses after 3.5s. Used for transient errors
+  // where a full modal would be overkill.
+  function showToast(msg, kind) {
+    try {
+      var el = document.createElement('div');
+      el.className = 'lou-toast' + (kind === 'success' ? ' lou-toast-ok' : '');
+      el.textContent = msg;
+      document.body.appendChild(el);
+      setTimeout(function () { el.classList.add('lou-toast-show'); }, 10);
+      setTimeout(function () {
+        el.classList.remove('lou-toast-show');
+        setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 300);
+      }, 3500);
+    } catch (_) {}
+  }
+
   // Fetch captcha config from backend
   fetch(API + '/api/config').then(function(r){ return r.json(); }).then(function(d){
     if (d.hcaptcha_sitekey) { HCAPTCHA_SITEKEY = d.hcaptcha_sitekey; loadHCaptcha(); }
-  }).catch(function(){});
+  }).catch(_logErr('config fetch'));
 
   // Stable anonymous session ID (persists in localStorage so chat history works)
   var ANON_SESSION = localStorage.getItem('lou_anon_session');
@@ -223,13 +247,13 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + data.token },
                 body: '{}'
-              }).catch(function () {});
+              }).catch(_logErr('signup scrape trigger'));
               // Also trigger scoring for any existing properties in DB
               fetch(API + '/api/score', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + data.token },
                 body: '{}'
-              }).catch(function () {});
+              }).catch(_logErr('signup score trigger'));
             }
             // On external hosts (Webflow), render dashboard in place
             var isRenderHost = window.location.hostname === 'lou-platform.onrender.com' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -641,7 +665,8 @@
       '</div>';
     document.body.appendChild(nav);
 
-    // Check if user is admin and show button
+    // Check if user is admin and show button — 401/403 is expected for non-admins,
+    // so we stay silent here (no logging).
     fetch(API + '/api/admin/check', { headers: { 'Authorization': 'Bearer ' + TOKEN } })
       .then(function(r){ return r.json(); })
       .then(function(d){
@@ -1274,7 +1299,7 @@
       .then(function (data) {
         $('stat-grade-a').textContent = data.total || 0;
       })
-      .catch(function () {});
+      .catch(_logErr('grade-A count'));
   }
 
   // ============================================================
@@ -1323,7 +1348,7 @@
 
         $('edit-profile-btn').onclick = function () { toggleProfileForm(); };
       })
-      .catch(function () {});
+      .catch(_logErr('profile bar load'));
   }
 
   // Profile form state
@@ -1870,6 +1895,13 @@
   var currentMinScore = 0;
   var currentNewOnly = false;
   var currentIncludeNearby = false;
+  // Track first-login auto-refresh timers so they can be cleared when results
+  // arrive (or the user navigates away) — otherwise they re-trigger a full
+  // load long after the user has moved on.
+  var _firstLoginTimers = [];
+  function _clearFirstLoginTimers() {
+    while (_firstLoginTimers.length) { clearTimeout(_firstLoginTimers.pop()); }
+  }
 
   function loadProperties(page, sort, minScore, newOnly, includeNearby) {
     currentPage = page;
@@ -1911,17 +1943,19 @@
               '<p style="margin-top:12px;color:#64748b;font-size:13px">Actualisez la page dans un instant, ou <a href="#" class="open-chat-link" style="color:#0369a1;cursor:pointer">discutez avec Lou</a> en attendant.</p>' +
               '<button class="dash-btn" id="first-login-refresh" style="margin-top:16px;padding:10px 24px;background:#0369a1;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600">↻ Actualiser les résultats</button>' +
             '</div>';
-            // Auto-refresh after 30 seconds
-            setTimeout(function () {
+            // Auto-refresh after 30s and 90s. Clear any prior timers first so a
+            // re-render doesn't stack them, and track ids so we can cancel once
+            // results arrive.
+            _clearFirstLoginTimers();
+            _firstLoginTimers.push(setTimeout(function () {
               loadProperties(1, 'score', 0);
               loadStats();
-            }, 30000);
-            // Another refresh at 90 seconds
-            setTimeout(function () {
+            }, 30000));
+            _firstLoginTimers.push(setTimeout(function () {
               loadProperties(1, 'score', 0);
               loadStats();
               localStorage.removeItem('lou_first_login');
-            }, 90000);
+            }, 90000));
           } else {
             list.innerHTML = '<div class="dash-empty">' +
               '<h3 style="margin-bottom:8px;font-family:Playfair Display,serif">Pas encore de résultats</h3>' +
@@ -1944,8 +1978,11 @@
           return;
         }
 
-        // Clear first login flag once we have results
+        // Clear first login flag once we have results + cancel any pending
+        // first-login auto-refresh timers so they don't fire later on top of
+        // a fully-loaded dashboard.
         localStorage.removeItem('lou_first_login');
+        _clearFirstLoginTimers();
 
         // Store property data for detail view
         window._propData = window._propData || {};
@@ -2136,8 +2173,14 @@
   // FAVORITES
   // ============================================================
   function toggleFavorite(propertyId, btn) {
+    // Remember previous state so we can revert if the request fails.
+    var wasActive = btn.classList.contains('active');
+    var wasHtml = btn.innerHTML;
     apiFetch(API + '/api/favorite/' + propertyId, { method: 'POST' })
-      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
       .then(function (data) {
         if (data.action === 'added') {
           btn.classList.add('active');
@@ -2149,7 +2192,15 @@
         // Refresh fav count
         loadStats();
       })
-      .catch(function () {});
+      .catch(function (err) {
+        _logErr('toggle favorite')(err);
+        // Revert optimistic state if any + surface a hint to the user.
+        if (wasActive) { btn.classList.add('active'); } else { btn.classList.remove('active'); }
+        btn.innerHTML = wasHtml;
+        if (typeof showToast === 'function') {
+          showToast('Impossible d\'enregistrer le favori — réessayez.');
+        }
+      });
   }
 
   // ============================================================
@@ -2586,8 +2637,8 @@
             if (typeof loadProperties === 'function') loadProperties(1, 'score', 0);
             if (typeof loadStats === 'function') loadStats();
           })
-          .catch(function () {});
-      }).catch(function () {});
+          .catch(_logErr('chat post-profile score'));
+      }).catch(_logErr('chat profile update'));
     }
 
     $('chat-send').onclick = sendMsg;
@@ -2660,6 +2711,9 @@
       '.nearby-banner-active{background:#f0f9ff;border-color:#bae6fd;color:#0369a1}',
       '.nearby-expand{padding:7px 14px;background:#0369a1;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s}',
       '.nearby-expand:hover{background:#024e7a}',
+      '.lou-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:#1e293b;color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:500;box-shadow:0 10px 25px rgba(0,0,0,.25);opacity:0;transition:opacity .25s ease,transform .25s ease;z-index:9999;max-width:90vw}',
+      '.lou-toast-show{opacity:1;transform:translateX(-50%) translateY(0)}',
+      '.lou-toast-ok{background:#059669}',
       '.new-filter-clear{background:none;border:1px solid #0369a1;color:#0369a1;border-radius:6px;padding:4px 12px;cursor:pointer;font-size:13px;font-weight:500;transition:all .2s}',
       '.new-filter-clear:hover{background:#0369a1;color:#fff}',
 
@@ -3096,6 +3150,7 @@
   }
 
   if ('serviceWorker' in navigator) {
+    // SW registration failures on unsupported browsers / dev are expected — stay silent.
     navigator.serviceWorker.register('/static/sw.js').catch(function(){});
   }
 

@@ -254,12 +254,18 @@ def score_zone(prop, zones):
 
 def score_budget(prop, profile):
     """Score la correspondance budget (0-100)."""
+    # Both come from NUMERIC columns → psycopg2 returns Decimal, which can't be
+    # multiplied with a float literal (the * 0.7 below would raise TypeError).
     price = prop.get('price')
     budget_max = profile.get('budget_max')
     budget_min = profile.get('budget_min')
 
     if not price or not budget_max or budget_max <= 0:
         return 50  # Pas assez d'info → neutre
+
+    price = float(price)
+    budget_max = float(budget_max)
+    budget_min = float(budget_min) if budget_min else None
 
     ratio = price / budget_max
 
@@ -320,12 +326,16 @@ def score_type_rooms(prop, profile):
 
 def score_surface(prop, profile):
     """Score surface (0-100)."""
+    # Cast to float defensively — NUMERIC columns return Decimal which breaks
+    # any future `* 0.x` literal (same bug class as budget/radius).
     surface = prop.get('surface')
     surface_min = profile.get('surface_min')
 
     if not surface or not surface_min:
         return 50
 
+    surface = float(surface)
+    surface_min = float(surface_min)
     ratio = surface / surface_min
     if ratio >= 1.0:
         return 100
@@ -478,10 +488,11 @@ def score_all_for_profile(db, profile_id):
         """
         params = [profile['transaction']]
 
-        # Budget filter with 30% margin
+        # Budget filter with 30% margin (cast: budget_max is Decimal from NUMERIC,
+        # Decimal * float literal raises TypeError)
         if profile.get('budget_max'):
             query += " AND (price IS NULL OR price <= %s)"
-            params.append(int(profile['budget_max'] * 1.3))
+            params.append(int(float(profile['budget_max']) * 1.3))
 
         # Zone pre-filter: if we have zones, limit to matching cantons to reduce scope
         zone_cantons = [z.get('canton', '').upper() for z in zones if z.get('canton')]
