@@ -226,9 +226,27 @@ def score_zone(prop, zones):
             score = 10
         min_distance = None
 
-    # Bonus for exact city match (stacks with GPS proximity)
+    # Bonus for exact city match (stacks with GPS proximity).
+    # Main purpose: salvage the no-GPS branch (score=90) up to 100.
     if city_match and score < 100:
         score = min(100, score + 10)
+
+    # City-first ranking: when the user picked specific cities, the user's
+    # cities should rank above nearby neighbours within the same radius.
+    # Without this cap, a listing 1 km outside Cortaillod in a different city
+    # would score 92 on zone (100 - 1/3*20), beating a Cortaillod listing
+    # whose other criteria (price, surface, …) are weaker. Feedback: users
+    # expect "if I picked Cortaillod, I want Cortaillod first."
+    # Empirically, capping non-matching cities at 80 gives same-city listings
+    # a ~12-point zone edge (≈3.6 total-score points at weight 30), enough
+    # to flip typical adjacent-city cases without flattening the distance
+    # curve for listings further out.
+    CITY_MISMATCH_CEILING = 80
+    if (not city_match
+            and min_distance is not None
+            and min_distance != float('inf')
+            and score > CITY_MISMATCH_CEILING):
+        score = CITY_MISMATCH_CEILING
 
     dist = round(min_distance, 1) if min_distance and min_distance != float('inf') else None
     return score, dist
