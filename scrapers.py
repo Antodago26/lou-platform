@@ -1604,14 +1604,29 @@ def scrape_flatfox(city="Lausanne", transaction="location", limit=50):
                 else:
                     price = item.get('price_display')
 
-                # Build image URLs
+                # Build image URLs (defensive: skip missing/non-http values)
                 images = []
                 cover = item.get('cover_image')
-                if isinstance(cover, dict) and cover.get('url'):
-                    img_url = cover['url']
-                    if img_url.startswith('/'):
-                        img_url = 'https://flatfox.ch' + img_url
-                    images.append(img_url)
+                if isinstance(cover, dict):
+                    img_url = cover.get('url') or cover.get('src') or ''
+                    if img_url:
+                        if img_url.startswith('/'):
+                            img_url = 'https://flatfox.ch' + img_url
+                        if img_url.startswith('http'):
+                            images.append(img_url)
+                # Pick up additional images if API returns a list
+                extra = item.get('images') or item.get('gallery') or []
+                if isinstance(extra, list):
+                    for ex in extra[:4]:
+                        u = ''
+                        if isinstance(ex, dict):
+                            u = ex.get('url') or ex.get('src') or ''
+                        elif isinstance(ex, str):
+                            u = ex
+                        if u and u.startswith('/'):
+                            u = 'https://flatfox.ch' + u
+                        if u and u.startswith('http') and u not in images:
+                            images.append(u)
 
                 # Extract features from attributes
                 features = [a.get('name', '') for a in (item.get('attributes') or []) if a.get('name')]

@@ -23,6 +23,7 @@ def get_properties():
     min_score = int(request.args.get('min_score', 0))
     new_only = request.args.get('new_only', '').lower() in ('true', '1', 'yes')
     include_no_price = request.args.get('include_no_price', '').lower() in ('true', '1', 'yes')
+    include_nearby = request.args.get('include_nearby', '').lower() in ('true', '1', 'yes')
     page = int(request.args.get('page', 1))
     per_page = min(int(request.args.get('per_page', 20)), 50)
     offset = (page - 1) * per_page
@@ -86,6 +87,9 @@ def get_properties():
         # score_zone >= 80 corresponds to "inside target_radius" in score_zone()
         # (progressive scoring 100→80 within radius; outside tops out at 70).
         # Also keeps exact city matches with no GPS (score=90) and city+city_match bonus.
+        # When include_nearby=true, relax to score_zone >= 40 to surface properties
+        # just outside the radius (scored 40–79 by score_zone).
+        zone_threshold = 40 if include_nearby else 80
         cur.execute(f"""
             SELECT p.*, sp.total_score, sp.grade, sp.distance_km,
                    sp.score_zone, sp.score_budget, sp.score_type,
@@ -96,11 +100,26 @@ def get_properties():
             FROM scored_properties sp
             JOIN properties p ON p.id = sp.property_id
             WHERE sp.user_id = %s AND sp.total_score >= %s AND p.is_active = TRUE
-                  AND sp.score_zone >= 80
+                  AND sp.score_zone >= {zone_threshold}
                   AND {price_filter}{tx_filter}
             ORDER BY {order}
         """, tx_params)
         properties = [dict(r) for r in cur.fetchall()]
+
+        # Count "nearby" properties (just outside radius) so the frontend can
+        # offer an "élargir la zone" action when the strict count is small.
+        nearby_available = 0
+        if not include_nearby:
+            cur.execute(f"""
+                SELECT COUNT(*) AS n
+                FROM scored_properties sp
+                JOIN properties p ON p.id = sp.property_id
+                WHERE sp.user_id = %s AND sp.total_score >= %s AND p.is_active = TRUE
+                      AND sp.score_zone >= 40 AND sp.score_zone < 80
+                      AND {price_filter}{tx_filter}
+            """, tx_params)
+            row = cur.fetchone()
+            nearby_available = int(row['n']) if row and row.get('n') is not None else 0
 
         # Cross-portal merge (kept identical to legacy logic)
         def _street_tokens(addr):
@@ -299,7 +318,14 @@ def get_properties():
 
         total = len(results)
         page_results = results[offset:offset + per_page]
-        return jsonify({"properties": page_results, "total": total, "page": page, "per_page": per_page})
+        return jsonify({
+            "properties": page_results,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "nearby_available": nearby_available,
+            "include_nearby": include_nearby,
+        })
     finally:
         cur.close()
         return_db(conn)

@@ -78,11 +78,19 @@
     check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><polyline points="20 6 9 17 4 12"/></svg>',
   };
 
+  // Detect English-language titles (scraped from international ads) — we'd rather
+  // fall back to city name than show English copy on a French UI.
+  var EN_TITLE_RE = /\b(bedroom|bathroom|living\s*room|ground\s*floor|top\s*floor|fully\s*furnished|for\s*rent|for\s*sale|available\s*(from|now)|walking\s*distance|close\s*to|in\s*the\s*heart|stunning|spacious|charming|beautiful|apartment|\bflat\b|\d+\s*(bed|bath)rooms?)\b/i;
+
   function cleanTitle(t) {
     if (!t) return '';
+    // Drop English titles entirely — renderPropertyCard will fall back to city name.
+    if (EN_TITLE_RE.test(t)) return '';
     // Remove price prefixes left in DB: "CHF 1,630.–", "CHF 2,200.–Plus", "1'590.–"
     t = t.replace(/^CHF\s*[\d\s'',.\u2019]+[.\u2013\u2014\-]*\w*\s*/i, '').trim();
-    t = t.replace(/^[\d\s'',.\u2019]+[.\u2013\u2014\-]*(?:CHF|Fr\.?)?\s*/i, '').trim();
+    // Require a price terminator (en-dash/em-dash) OR a currency marker — otherwise
+    // "5.5 pcs, 109 m²" would be greedy-stripped down to "pcs, 109 m²".
+    t = t.replace(/^[\d\s'',.\u2019]+(?:[\u2013\u2014]|\s*(?:CHF|Fr\.?))[\u2013\u2014\-.]*\s*/i, '').trim();
     // Remove leading postal codes "2034 "
     t = t.replace(/^\d{4}\s+/, '').trim();
     // Remove "Travel time X min" residuals from Homegate
@@ -1861,12 +1869,14 @@
   var currentSort = 'score';
   var currentMinScore = 0;
   var currentNewOnly = false;
+  var currentIncludeNearby = false;
 
-  function loadProperties(page, sort, minScore, newOnly) {
+  function loadProperties(page, sort, minScore, newOnly, includeNearby) {
     currentPage = page;
     currentSort = sort || currentSort;
     currentMinScore = minScore !== undefined ? minScore : currentMinScore;
     currentNewOnly = newOnly !== undefined ? newOnly : currentNewOnly;
+    currentIncludeNearby = includeNearby !== undefined ? includeNearby : currentIncludeNearby;
 
     var list = $('properties-list');
     list.innerHTML = '<div class="dash-loading">Chargement...</div>';
@@ -1876,7 +1886,8 @@
       '&per_page=12' +
       '&sort=' + currentSort +
       '&min_score=' + currentMinScore +
-      (currentNewOnly ? '&new_only=true' : '');
+      (currentNewOnly ? '&new_only=true' : '') +
+      (currentIncludeNearby ? '&include_nearby=true' : '');
 
     apiFetch(url)
       .then(function (r) { return r.json(); })
@@ -1947,6 +1958,20 @@
             '<button class="new-filter-clear" id="clear-new-filter">✕ Voir tous les biens</button>' +
           '</div>';
         }
+        // Low-result banner: offer to widen search when strict zone is sparse
+        var nearby = parseInt(data.nearby_available || 0, 10);
+        if (!currentIncludeNearby && !currentNewOnly && data.total < 5 && nearby > 0) {
+          html += '<div class="nearby-banner">' +
+            '<span><strong>' + data.total + ' bien' + (data.total > 1 ? 's' : '') + '</strong> dans votre zone — ' +
+            nearby + ' autre' + (nearby > 1 ? 's' : '') + ' disponible' + (nearby > 1 ? 's' : '') + ' à proximité.</span>' +
+            '<button class="nearby-expand" id="nearby-expand-btn">Élargir la recherche</button>' +
+          '</div>';
+        } else if (currentIncludeNearby) {
+          html += '<div class="nearby-banner nearby-banner-active">' +
+            '<span>Zone élargie — inclut les biens proches hors zone stricte.</span>' +
+            '<button class="nearby-expand" id="nearby-collapse-btn">Retour à la zone stricte</button>' +
+          '</div>';
+        }
         html += '<div class="prop-grid">';
         data.properties.forEach(function (p) {
           html += renderPropertyCard(p);
@@ -1962,6 +1987,14 @@
             document.querySelectorAll('.dash-stat').forEach(function(s) { s.classList.remove('stat-active'); });
             loadProperties(1, 'score', 0, false);
           };
+        }
+        var expandBtn = $('nearby-expand-btn');
+        if (expandBtn) {
+          expandBtn.onclick = function () { loadProperties(1, currentSort, currentMinScore, currentNewOnly, true); };
+        }
+        var collapseBtn = $('nearby-collapse-btn');
+        if (collapseBtn) {
+          collapseBtn.onclick = function () { loadProperties(1, currentSort, currentMinScore, currentNewOnly, false); };
         }
 
         // Pagination
@@ -2623,6 +2656,10 @@
       '.dash-stat.stat-active .dash-stat-num{color:#0369a1}',
       '.dash-stat.stat-active .dash-stat-lbl{color:#0369a1;font-weight:600}',
       '.new-filter-banner{display:flex;align-items:center;justify-content:space-between;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:14px;color:#0369a1;font-weight:600}',
+      '.nearby-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:14px;color:#78350f;flex-wrap:wrap}',
+      '.nearby-banner-active{background:#f0f9ff;border-color:#bae6fd;color:#0369a1}',
+      '.nearby-expand{padding:7px 14px;background:#0369a1;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s}',
+      '.nearby-expand:hover{background:#024e7a}',
       '.new-filter-clear{background:none;border:1px solid #0369a1;color:#0369a1;border-radius:6px;padding:4px 12px;cursor:pointer;font-size:13px;font-weight:500;transition:all .2s}',
       '.new-filter-clear:hover{background:#0369a1;color:#fff}',
 
