@@ -115,52 +115,51 @@
 
   function cleanTitle(t, prop) {
     if (!t) return '';
-    // Drop English/German titles entirely — renderPropertyCard will fall back to city name.
+    t = t.trim();
+
+    // Pattern B: ANY title with a middle-dot/bullet separator is structured data
+    // ("Appartement · 4.5 pièces · 116 m²", "Appartement · 340 m²")
+    // Covers U+00B7 (·), U+2022 (•), U+2027 (‧), and other bullet-like chars.
+    // No real estate listing title ever uses these characters.
+    if (/[\u00B7\u2022\u2027\u2219\u22C5\u25CF]/.test(t)) return '';
+
+    // Drop English/German titles entirely
     if (EN_TITLE_RE.test(t) || DE_TITLE_RE.test(t)) return '';
 
-    // Pattern E: metadata garbage ("Travel time -", "CH 2016 Cortaillod")
-    if (/^(travel time|ch\s+\d{4})/i.test(t.trim())) return '';
+    // Pattern E: metadata garbage ("Travel time -", "Travel time", "CH 2016 Cortaillod")
+    if (/^travel\s+time/i.test(t)) return '';
+    if (/^ch\s+\d{4}/i.test(t)) return '';
 
     // Remove price prefixes left in DB: "CHF 1,630.–", "CHF 2,200.–Plus", "1'590.–"
     t = t.replace(/^CHF\s*[\d\s'',.\u2019]+[.\u2013\u2014\-]*\w*\s*/i, '').trim();
-    // Require a price terminator (en-dash/em-dash) OR a currency marker — otherwise
-    // "5.5 pcs, 109 m²" would be greedy-stripped down to "pcs, 109 m²".
     t = t.replace(/^[\d\s'',.\u2019]+(?:[\u2013\u2014]|\s*(?:CHF|Fr\.?))[\u2013\u2014\-.]*\s*/i, '').trim();
 
     // Pattern C: prefix "NPA Ville Canton" e.g. "2013 Colombier NE ..."
-    t = t.replace(/^\d{4}\s+[A-ZÀ-Ü][a-zà-ü]+(\s+[A-Z]{2})?\s+/, '').trim();
+    t = t.replace(/^\d{4}\s+[A-ZÀ-Ü][a-zà-ü]+(?:\s+[A-Z]{2})?\s+/, '').trim();
     // Fallback: remove bare leading postal codes "2034 "
     t = t.replace(/^\d{4}\s+/, '').trim();
 
-    // Remove "Travel time X min" residuals from Homegate
-    t = t.replace(/\bTravel time\s+\d+\s*min\b/gi, '').trim();
+    // Remove "Travel time" residuals from Homegate (with or without minutes)
+    t = t.replace(/\bTravel time\s*(\d+\s*min)?\s*-?\s*/gi, '').trim();
     t = t.replace(/\btemps de trajet\s+\d+\s*min\b/gi, '').trim();
 
     // Pattern D: trailing "NPA Ville" e.g. "Appartement à vendre 1114 Colombier"
     t = t.replace(/\s+\d{4}\s+[A-ZÀ-Ü][a-zà-ü]+\s*$/, '').trim();
 
-    // Re-check for garbage after NPA strip (e.g. "2013 Colombier NE Travel time -" → "Travel time -")
+    // Re-check for garbage after NPA/travel-time strip
     if (/^travel\s+time/i.test(t)) return '';
 
-    // Remove leading city name if it's the only content
-    t = t.replace(/^[A-ZÀ-Ü][a-zà-ü\-]+\s*$/i, '').trim();
-    // If result is empty or just punctuation, return empty
+    // If result is empty, just punctuation, or just a single word that's a city name
     if (/^[\s.\u2013\u2014\-]*$/.test(t)) return '';
-
-    // Mojibake — title is too short or has no real letters (e.g. "â", "ï»¿")
     if (t.length <= 2 || !/[a-zA-ZÀ-ÿ]{2,}/.test(t)) return '';
-
-    // Title is just the city name → not informative, let fallback handle it
     if (prop && prop.city && t.toLowerCase() === prop.city.toLowerCase()) return '';
 
-    // Pattern B: structured data "Appartement · 4.5 pièces · 116 m²"
-    if (/·/.test(t) && /\d+\.?\d*\s*(pièces|pcs|m²|m2)\b/i.test(t)) return '';
-    // Also catch comma-separated: "4.5 pcs, 109 m²" or "3.5 pièces, 125 m2"
+    // Comma-separated structured data: "4.5 pcs, 109 m²" or "3.5 pièces, 125 m2"
     if (/^\d+[.,]?\d*\s*(pcs|pi[èe]ces?)\b/i.test(t)) return '';
 
-    // Re-check after all cleaning
+    // Final length check
     t = t.trim();
-    if (t.length <= 2) return '';
+    if (t.length <= 3) return '';
 
     return t;
   }

@@ -335,6 +335,8 @@ def get_properties():
                 'latitude': p.get('latitude'),
                 'longitude': p.get('longitude'),
                 'city': p.get('city'),
+                'property_type': p.get('property_type') or '',
+                'transaction': p.get('transaction') or '',
                 'distance_km': float(p['distance_km']) if p['distance_km'] else None,
                 'score_detail': {
                     'zone': p['score_zone'],

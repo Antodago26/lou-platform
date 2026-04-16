@@ -242,7 +242,11 @@ def score_zone(prop, zones):
     # a ~12-point zone edge (≈3.6 total-score points at weight 30), enough
     # to flip typical adjacent-city cases without flattening the distance
     # curve for listings further out.
-    CITY_MISMATCH_CEILING = 80
+    # Cap non-matching cities so they DON'T pass the >= 80 zone filter.
+    # Previously 80, which meant a city 0.5km away with radius=3km would
+    # score exactly 80 and pass the filter — showing Peseux/Auvernier
+    # when the user searched for Colombier (1km).
+    CITY_MISMATCH_CEILING = 75
     if (not city_match
             and min_distance is not None
             and min_distance != float('inf')
