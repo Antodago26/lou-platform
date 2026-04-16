@@ -71,29 +71,49 @@ def _run_migrations():
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS chat_messages_today INTEGER DEFAULT 0")
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS chat_messages_date DATE")
 
-        # Fix ImmoScout24 broken source_urls: both /real-estate/.../detail/{id}
-        # and /en/d/{id} patterns 404 on IS24 (they require a full SEO slug).
-        # Replace all broken patterns with a search page URL that always works.
-        # The city is extracted from the property row to build the search URL.
+        # v6.1 Bug 3 fix: rewrite IS24 URLs to /fr/d/{listingId}.
+        # Previously we fell back to /real-estate/buy/city-X?pn=1 (a SEARCH page),
+        # which was bad UX — the user had to find the listing again manually.
+        # /fr/d/{id} redirects to the canonical SEO URL when the id is valid.
+        # external_id format in our DB is "is24-{lid}" (scrapers.py line 819/929),
+        # so we strip the "is24-" prefix to get the raw listing id.
         cur.execute("""
             UPDATE properties p
-            SET source_url = 'https://www.immoscout24.ch/en/real-estate/buy/city-' ||
-                LOWER(REPLACE(COALESCE(p.city, 'schweiz'), ' ', '-')) || '?pn=1'
+            SET source_url = 'https://www.immoscout24.ch/fr/d/' ||
+                REPLACE(p.external_id, 'is24-', '')
             WHERE p.source = 'ImmoScout24'
+              AND p.external_id LIKE 'is24-%'
               AND (p.source_url LIKE '%/en/d/%'
-                   OR p.source_url LIKE '%/real-estate/%/detail/%')
-              AND p.source_url NOT LIKE '%/city-%'
+                   OR p.source_url LIKE '%/real-estate/%/detail/%'
+                   OR p.source_url LIKE '%/city-%'
+                   OR p.source_url LIKE '%?pn=%')
         """)
         cur.execute("""
             UPDATE property_sources ps
-            SET source_url = 'https://www.immoscout24.ch/en/real-estate/buy/city-' ||
-                LOWER(REPLACE(COALESCE(
-                    (SELECT city FROM properties WHERE id = ps.property_id), 'schweiz'
-                ), ' ', '-')) || '?pn=1'
+            SET source_url = 'https://www.immoscout24.ch/fr/d/' ||
+                REPLACE(
+                    (SELECT external_id FROM properties WHERE id = ps.property_id),
+                    'is24-', ''
+                )
             WHERE ps.source = 'ImmoScout24'
+              AND EXISTS (
+                  SELECT 1 FROM properties p
+                  WHERE p.id = ps.property_id
+                    AND p.external_id LIKE 'is24-%'
+              )
               AND (ps.source_url LIKE '%/en/d/%'
-                   OR ps.source_url LIKE '%/real-estate/%/detail/%')
-              AND ps.source_url NOT LIKE '%/city-%'
+                   OR ps.source_url LIKE '%/real-estate/%/detail/%'
+                   OR ps.source_url LIKE '%/city-%'
+                   OR ps.source_url LIKE '%?pn=%')
+        """)
+        # Normalize any remaining /en/d/{id} to /fr/d/{id}
+        cur.execute("""
+            UPDATE properties SET source_url = REPLACE(source_url, '/en/d/', '/fr/d/')
+            WHERE source = 'ImmoScout24' AND source_url LIKE '%/en/d/%'
+        """)
+        cur.execute("""
+            UPDATE property_sources SET source_url = REPLACE(source_url, '/en/d/', '/fr/d/')
+            WHERE source = 'ImmoScout24' AND source_url LIKE '%/en/d/%'
         """)
 
         # Auto-create alert rows for active profiles without alerts

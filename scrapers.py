@@ -755,11 +755,13 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=4):
                             if listing_url and listing_url.startswith('/'):
                                 listing_url = 'https://www.immoscout24.ch' + listing_url
                             if not listing_url or 'immoscout24' not in listing_url:
-                                # No SEO URL available — /en/d/{id} pattern 404s on IS24.
-                                # Fallback: link to the city search page which always works
-                                # and lets the user find the listing manually.
-                                listing_url = f"https://www.immoscout24.ch/en/real-estate/{tx}/city-{slug}?pn=1"
-                                log.debug(f"[ImmoScout24] No seoUrl for listing {lid}, falling back to search URL")
+                                # No SEO URL available. Use /fr/d/{id} — IS24 redirects
+                                # this to the canonical slug URL when the ID is valid.
+                                # Previously fell back to /en/real-estate/.../city-{slug}
+                                # which is a SEARCH page (bad UX — user had to find the
+                                # listing again manually).
+                                listing_url = f"https://www.immoscout24.ch/fr/d/{lid}"
+                                log.debug(f"[ImmoScout24] No seoUrl for listing {lid}, using /fr/d/{lid}")
 
                             # Price — check multiple known field names
                             addr = listing.get('address', {}) or {}

@@ -165,18 +165,67 @@
   }
 
   // Build a descriptive fallback title when cleanTitle returns empty.
-  // Avoids showing just the city name (which is already displayed below the title).
+  // v6.1 fix: no · separator (cleanTitle REJECTS titles with ·, and if we
+  // rebuild with · the fix destroys itself). Also drop surface — it's already
+  // shown on the details line below the title ("4.5 pcs · 114 m²").
   function _fallbackTitle(p) {
-    var parts = [];
+    var type = 'Appartement';
     var pt = (p.property_type || '').toLowerCase();
-    if (/maison|house|villa|chalet/.test(pt)) { parts.push('Maison'); }
-    else if (/terrain|land/.test(pt)) { parts.push('Terrain'); }
-    else if (/commercial|bureau|office/.test(pt)) { parts.push('Local commercial'); }
-    else if (/parking|garage/.test(pt)) { parts.push('Parking'); }
-    else { parts.push('Appartement'); }
-    if (p.rooms && p.rooms > 0 && p.rooms < 20) parts.push(p.rooms + ' pièces');
-    if (p.surface && p.surface > 0) parts.push(p.surface + ' m\u00B2');
-    return parts.join(' · ') || 'Bien immobilier';
+    if (/maison|house|villa|chalet/.test(pt)) type = 'Maison';
+    else if (/terrain|land/.test(pt)) type = 'Terrain';
+    else if (/commercial|bureau|office/.test(pt)) type = 'Local commercial';
+    else if (/parking|garage/.test(pt)) type = 'Parking';
+    if (p.rooms && p.rooms > 0 && p.rooms < 20) {
+      return type + ' ' + p.rooms + ' pièces';
+    }
+    return type;
+  }
+
+  // v6.1 Bug 2 fix: clean a raw city field from DB.
+  // Handles "CH 2016 Cortaillod", ". 2016 Cortaillod", "Cortaillod 2016",
+  // "Neuchâtel NE", bare NPAs ("2074"), etc.
+  function cleanCity(raw) {
+    if (!raw) return '';
+    var c = String(raw).trim();
+    // Remove "CH " / "ch " / leading "." prefix (common scraper garbage)
+    c = c.replace(/^(CH|ch)\s+/, '');
+    c = c.replace(/^[.,;:]\s*/, '');
+    // Remove leading NPA: "2016 Cortaillod" → "Cortaillod"
+    c = c.replace(/^\d{4}\s+/, '');
+    // Remove trailing NPA: "Cortaillod 2016" → "Cortaillod"
+    c = c.replace(/\s+\d{4}\s*$/, '');
+    // Remove trailing canton abbreviation: "Neuchâtel NE" → "Neuchâtel"
+    c = c.replace(/\s+[A-Z]{2}\s*$/, '');
+    c = c.trim();
+    // Bare NPA ("2074") — nothing useful, return empty
+    if (/^\d{4}$/.test(c)) return '';
+    // Two characters or less → probably garbage
+    if (c.length <= 2) return '';
+    return c;
+  }
+
+  // v6.1 Bug 2 fix: clean a raw address field.
+  // When the address is a full street address ("Rue des Chavannes 57 2016 Cortaillod"),
+  // we only want the city — strip the street portion and return just the locality.
+  function cleanAddress(raw, city) {
+    if (!raw) return cleanCity(city || '');
+    var a = String(raw).trim()
+      .replace(/\bTravel time\s+\d+\s*min\b/gi, '')
+      .replace(/\btemps de trajet\s+\d+\s*min\b/gi, '')
+      .trim();
+    // Full street address? Look for "NPA + city" at the end and keep only that.
+    var m = a.match(/\d{4}\s+([A-ZÀ-Ÿa-zà-ÿ][\w'\-\s]*?)\s*$/);
+    if (m) {
+      // Heuristic: if the string has digits near the start (street number), it's a full address
+      if (/^\d+,?\s*(rue|chemin|route|avenue|place|impasse|boulevard|quai|allée|all\u00e9e)\b/i.test(a) ||
+          /(rue|chemin|route|avenue|place|impasse|boulevard|quai|allée|all\u00e9e)\s+.+\d/i.test(a) ||
+          a.length > 30) {
+        return m[1].trim();
+      }
+    }
+    // Otherwise treat as a city/locality string and clean it
+    var cleaned = cleanCity(a);
+    return cleaned || cleanCity(city || '');
   }
 
   // Wrapper for authenticated API calls — handles 401 (expired token)
@@ -1193,10 +1242,10 @@
 
         var cardTitle = cleanTitle(p.title, p);
         // For map card: show city as main title, cleaned title or fallback as description
-        var mapMainTitle = p.city || 'Bien';
+        var mapMainTitle = cleanCity(p.city) || 'Bien';
         var mapDesc = cardTitle || _fallbackTitle(p);
-        // Clean address too — remove "Travel time" residuals
-        var cleanAddr = (p.address || '').replace(/\bTravel time\s+\d+\s*min\b/gi, '').replace(/\btemps de trajet\s+\d+\s*min\b/gi, '').trim();
+        // Clean address (removes street, keeps only city)
+        var cleanAddr = cleanAddress(p.address, p.city);
 
         html += '<div class="map-card" data-id="' + p.id + '" onclick="openPropertyDetail(' + p.id + ')">' +
           (img ? '<img class="map-card-img" src="' + escapeHtml(img) + '" onerror="this.style.display=\'none\'">' : '<div class="map-card-img-ph"></div>') +
@@ -1302,7 +1351,7 @@
           (p.images && p.images[0] ? '<img src="' + escapeHtml(p.images[0]) + '" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px" onerror="this.style.display=\'none\'">' : '') +
           '<div style="font-weight:700;font-size:14px;margin-bottom:4px">' + escapeHtml(cleanTitle(p.title, p) || _fallbackTitle(p)) + '</div>' +
           '<div style="font-size:16px;font-weight:800;color:#0f172a;margin-bottom:4px">' + priceStr + ' CHF</div>' +
-          '<div style="font-size:13px;color:#64748b;margin-bottom:6px">' + escapeHtml(p.address || '') + '</div>' +
+          '<div style="font-size:13px;color:#64748b;margin-bottom:6px">' + escapeHtml(cleanAddress(p.address, p.city)) + '</div>' +
           '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">' +
             '<span style="background:' + color + ';color:#fff;padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700">' + (p.grade || '?') + ' ' + (p.score || 0) + '/100</span>' +
             (p.rooms ? '<span style="font-size:12px;color:#64748b">' + p.rooms + ' pcs</span>' : '') +
@@ -1893,7 +1942,7 @@
         '<div class="detail-body">' +
           '<div class="detail-price">' + priceHtml + '</div>' +
           '<h2 class="detail-title">' + escapeHtml(cleanTitle(p.title, p) || _fallbackTitle(p)) + '</h2>' +
-          '<div class="detail-address">' + ICO.pin + ' ' + escapeHtml((p.address || '').replace(/\bTravel time\s+\d+\s*min\b/gi, '').replace(/^\d{4}\s+/, '').trim() || p.city || '') + '</div>' +
+          '<div class="detail-address">' + ICO.pin + ' ' + escapeHtml(cleanAddress(p.address, p.city)) + '</div>' +
           '<div class="detail-section"><h3>Caractéristiques</h3><div class="detail-table">' + tableHtml + '</div></div>' +
           (p.description ? '<div class="detail-section"><h3>Description</h3><p class="detail-description">' + escapeHtml(p.description) + ((p.description.length >= 490 || /\.\.\.\s*$/.test(p.description)) && sources.length > 0 && sources[0].url ? ' <a href="' + escapeHtml(sources[0].url) + '" target="_blank" rel="noopener" class="read-more-link" onclick="event.stopPropagation()">Lire la suite sur le portail ↗</a>' : '') + '</p></div>' : '') +
           scoreHtml +
@@ -2359,7 +2408,7 @@
       '<div class="prop-card-body">' +
         '<div class="prop-price">' + priceText + '</div>' +
         '<div class="prop-title">' + escapeHtml(cleanTitle(p.title, p) || _fallbackTitle(p)) + '</div>' +
-        '<div class="prop-address">' + escapeHtml((p.address || '').replace(/\bTravel time\s+\d+\s*min\b/gi, '').replace(/\btemps de trajet\s+\d+\s*min\b/gi, '').trim() || p.city || '') + '</div>' +
+        '<div class="prop-address">' + escapeHtml(cleanAddress(p.address, p.city)) + '</div>' +
         '<div class="prop-details">' + details.join(' &middot; ') + '</div>' +
         '<div class="prop-footer">' +
           (function() {
@@ -2594,7 +2643,7 @@
       '<div class="prop-card-body">' +
         '<div class="prop-price">' + priceText + '</div>' +
         '<div class="prop-title">' + escapeHtml(cleanTitle(p.title, p) || _fallbackTitle(p)) + '</div>' +
-        '<div class="prop-address">' + escapeHtml((p.address || '').replace(/\bTravel time\s+\d+\s*min\b/gi, '').replace(/\btemps de trajet\s+\d+\s*min\b/gi, '').trim() || p.city || '') + '</div>' +
+        '<div class="prop-address">' + escapeHtml(cleanAddress(p.address, p.city)) + '</div>' +
         '<div class="prop-details">' + details.join(' &middot; ') + '</div>' +
         noteSnippet +
         '<div class="fav-card-footer">' +
