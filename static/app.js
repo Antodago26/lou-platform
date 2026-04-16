@@ -139,6 +139,9 @@
     // Pattern D: trailing "NPA Ville" e.g. "Appartement à vendre 1114 Colombier"
     t = t.replace(/\s+\d{4}\s+[A-ZÀ-Ü][a-zà-ü]+\s*$/, '').trim();
 
+    // Re-check for garbage after NPA strip (e.g. "2013 Colombier NE Travel time -" → "Travel time -")
+    if (/^travel\s+time/i.test(t)) return '';
+
     // Remove leading city name if it's the only content
     t = t.replace(/^[A-ZÀ-Ü][a-zà-ü\-]+\s*$/i, '').trim();
     // If result is empty or just punctuation, return empty
@@ -151,7 +154,7 @@
     if (prop && prop.city && t.toLowerCase() === prop.city.toLowerCase()) return '';
 
     // Pattern B: structured data "Appartement · 4.5 pièces · 116 m²"
-    if (/·.*\d+\.?\d*\s*(pièces|pcs)/i.test(t)) return '';
+    if (/·/.test(t) && /\d+\.?\d*\s*(pièces|pcs|m²|m2)\b/i.test(t)) return '';
     // Also catch comma-separated: "4.5 pcs, 109 m²" or "3.5 pièces, 125 m2"
     if (/^\d+[.,]?\d*\s*(pcs|pi[èe]ces?)\b/i.test(t)) return '';
 
@@ -1126,8 +1129,12 @@
     function _refreshMapSidebar() {
       var sidebar = $('map-sidebar');
       if (!sidebar) return;
-      var data = _mapAllProps || window._propData || {};
-      var props = Object.keys(data).map(function(id) { return data[id]; });
+      var data = _mapAllProps || {};
+      var props = Object.keys(data).map(function(id) { return data[id]; })
+        .filter(function(p) {
+          // Safety net: only show zone-matching properties on the map
+          return !p.score_detail || !p.score_detail.zone || p.score_detail.zone >= 80;
+        });
 
       // Sort according to current sort choice (sync with main sort dropdown if available)
       var sortSel = $('sort-select');
@@ -1162,9 +1169,9 @@
         if (p.surface && p.surface > 0) details.push(p.surface + ' m²');
 
         var cardTitle = cleanTitle(p.title, p);
-        // For map card: show city as main title, cleaned title as description
+        // For map card: show city as main title, cleaned title or fallback as description
         var mapMainTitle = p.city || 'Bien';
-        var mapDesc = cardTitle || '';
+        var mapDesc = cardTitle || _fallbackTitle(p);
         // Clean address too — remove "Travel time" residuals
         var cleanAddr = (p.address || '').replace(/\bTravel time\s+\d+\s*min\b/gi, '').replace(/\btemps de trajet\s+\d+\s*min\b/gi, '').trim();
 
@@ -1229,11 +1236,14 @@
       _mapMarkers = L.markerClusterGroup({ maxClusterRadius: 40 });
 
       var gradeColors = { A: '#059669', B: '#0369a1', C: '#d97706', D: '#dc2626' };
-      var data = _mapAllProps || window._propData || {};
+      var data = _mapAllProps || {};
       var bounds = [];
 
       Object.keys(data).forEach(function (id) {
         var p = data[id];
+        // Safety net: skip out-of-zone properties
+        if (p.score_detail && p.score_detail.zone && p.score_detail.zone < 80) return;
+
         var lat = p.latitude;
         var lng = p.longitude;
 
