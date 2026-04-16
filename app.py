@@ -166,13 +166,18 @@ def _run_migrations():
 def create_app():
     flask_app = Flask(__name__, static_folder='static')
 
-    # CORS: restrict to known domains
-    allowed_origins = os.environ.get(
-        'ALLOWED_ORIGINS',
+    # CORS: restrict to known domains.
+    # v6.3 security: in production, require ALLOWED_ORIGINS to be explicitly set
+    # so a missing env var can't silently whitelist http://localhost:5000.
+    _is_prod = os.environ.get('FLASK_ENV') == 'production'
+    _default_origins = '' if _is_prod else (
         'https://bonhome.ch,https://www.bonhome.ch,'
         'https://garou.ch,https://www.garou.ch,'
         'https://lou-platform.onrender.com,http://localhost:5000'
-    ).split(',')
+    )
+    allowed_origins = [o.strip() for o in os.environ.get('ALLOWED_ORIGINS', _default_origins).split(',') if o.strip()]
+    if _is_prod and not allowed_origins:
+        raise RuntimeError("ALLOWED_ORIGINS env var is required in production")
     CORS(flask_app, resources={r"/api/*": {"origins": allowed_origins}})
 
     # Security headers on every response

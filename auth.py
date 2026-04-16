@@ -39,6 +39,19 @@ HCAPTCHA_SITEKEY = os.environ.get('HCAPTCHA_SITEKEY', '')
 RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
 ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', '')
 
+# v6.3 security fix: bcrypt silently truncates passwords to 72 bytes.
+# Without this guard, two passwords that share the first 72 UTF-8 bytes
+# collide — anyone knowing a 72-byte prefix authenticates as the user.
+MAX_PASSWORD_BYTES = 72
+
+
+def _password_too_long(password: str) -> bool:
+    """Return True iff the password (UTF-8 encoded) exceeds bcrypt's 72-byte ceiling."""
+    try:
+        return len((password or '').encode('utf-8')) > MAX_PASSWORD_BYTES
+    except Exception:
+        return True
+
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -227,6 +240,8 @@ def signup():
             return jsonify({"error": "Email invalide"}), 400
         if len(password) < 8:
             return jsonify({"error": "Mot de passe trop court (8 car. min)"}), 400
+        if _password_too_long(password):
+            return jsonify({"error": f"Mot de passe trop long (max {MAX_PASSWORD_BYTES} octets UTF-8)"}), 400
 
     if HCAPTCHA_SECRET and not verify_hcaptcha(captcha_token):
         return jsonify({"error": "Vérification CAPTCHA échouée"}), 400
@@ -324,7 +339,9 @@ def login():
     try:
         cur.execute("SELECT * FROM users WHERE email = %s AND is_active = TRUE", (email,))
         user = cur.fetchone()
-        if not user or not bcrypt.checkpw(password.encode(), user['password_hash'].encode()):
+        # v6.3: reject > 72 bytes with the generic auth error (no oracle) — bcrypt
+        # would otherwise truncate and potentially accept a crafted prefix.
+        if _password_too_long(password) or not user or not bcrypt.checkpw(password.encode(), user['password_hash'].encode()):
             return jsonify({"error": "Identifiants incorrects"}), 401
 
         cur.execute("UPDATE users SET last_login = NOW() WHERE id = %s", (user['id'],))
