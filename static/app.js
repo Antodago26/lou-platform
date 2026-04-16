@@ -117,30 +117,47 @@
     if (!t) return '';
     // Drop English/German titles entirely — renderPropertyCard will fall back to city name.
     if (EN_TITLE_RE.test(t) || DE_TITLE_RE.test(t)) return '';
+
+    // Pattern E: metadata garbage ("Travel time -", "CH 2016 Cortaillod")
+    if (/^(travel time|ch\s+\d{4})/i.test(t.trim())) return '';
+
     // Remove price prefixes left in DB: "CHF 1,630.–", "CHF 2,200.–Plus", "1'590.–"
     t = t.replace(/^CHF\s*[\d\s'',.\u2019]+[.\u2013\u2014\-]*\w*\s*/i, '').trim();
     // Require a price terminator (en-dash/em-dash) OR a currency marker — otherwise
     // "5.5 pcs, 109 m²" would be greedy-stripped down to "pcs, 109 m²".
     t = t.replace(/^[\d\s'',.\u2019]+(?:[\u2013\u2014]|\s*(?:CHF|Fr\.?))[\u2013\u2014\-.]*\s*/i, '').trim();
-    // Remove leading postal codes "2034 "
+
+    // Pattern C: prefix "NPA Ville Canton" e.g. "2013 Colombier NE ..."
+    t = t.replace(/^\d{4}\s+[A-ZÀ-Ü][a-zà-ü]+(\s+[A-Z]{2})?\s+/, '').trim();
+    // Fallback: remove bare leading postal codes "2034 "
     t = t.replace(/^\d{4}\s+/, '').trim();
+
     // Remove "Travel time X min" residuals from Homegate
     t = t.replace(/\bTravel time\s+\d+\s*min\b/gi, '').trim();
     t = t.replace(/\btemps de trajet\s+\d+\s*min\b/gi, '').trim();
-    // Remove leading city name if it's the only content before description
-    // e.g. "Peseux " at start when followed by nothing useful
+
+    // Pattern D: trailing "NPA Ville" e.g. "Appartement à vendre 1114 Colombier"
+    t = t.replace(/\s+\d{4}\s+[A-ZÀ-Ü][a-zà-ü]+\s*$/, '').trim();
+
+    // Remove leading city name if it's the only content
     t = t.replace(/^[A-ZÀ-Ü][a-zà-ü\-]+\s*$/i, '').trim();
     // If result is empty or just punctuation, return empty
     if (/^[\s.\u2013\u2014\-]*$/.test(t)) return '';
 
-    // Bug #5: mojibake — title is too short or has no real letters (e.g. "â", "ï»¿")
+    // Mojibake — title is too short or has no real letters (e.g. "â", "ï»¿")
     if (t.length <= 2 || !/[a-zA-ZÀ-ÿ]{2,}/.test(t)) return '';
 
-    // Bug #6: title is just the city name → not informative, let fallback handle it
+    // Title is just the city name → not informative, let fallback handle it
     if (prop && prop.city && t.toLowerCase() === prop.city.toLowerCase()) return '';
 
-    // Bug #6: title is structured data only ("4.5 pcs, 109 m²" or "3.5 pièces, 125 m2")
+    // Pattern B: structured data "Appartement · 4.5 pièces · 116 m²"
+    if (/·.*\d+\.?\d*\s*(pièces|pcs)/i.test(t)) return '';
+    // Also catch comma-separated: "4.5 pcs, 109 m²" or "3.5 pièces, 125 m2"
     if (/^\d+[.,]?\d*\s*(pcs|pi[èe]ces?)\b/i.test(t)) return '';
+
+    // Re-check after all cleaning
+    t = t.trim();
+    if (t.length <= 2) return '';
 
     return t;
   }
@@ -1087,10 +1104,11 @@
     function _loadAllMapProperties(cb) {
       // Always reload: apply the same filters the main list uses so
       // the map doesn't show properties outside the zone / score_zone < 80.
+      // Map always uses strict zone filter (no include_nearby) so only
+      // properties within the user's configured radius appear on the map.
       var mapUrl = API + '/api/properties?page=1&per_page=500&view=map' +
         '&sort=' + (currentSort || 'score') +
-        '&min_score=' + (currentMinScore || 0) +
-        (currentIncludeNearby ? '&include_nearby=true' : '');
+        '&min_score=' + (currentMinScore || 0);
       apiFetch(mapUrl)
       .then(function(r) { return r.json(); })
       .then(function(data) {
@@ -2503,6 +2521,10 @@
   // ============================================================
   function renderCompare() {
     var panel = $('compare-panel');
+    // Filter out stale/undefined entries (e.g. after a favorite was removed)
+    Object.keys(compareSet).forEach(function (id) {
+      if (!compareSet[id]) delete compareSet[id];
+    });
     var ids = Object.keys(compareSet);
     if (ids.length < 2) {
       panel.style.display = 'none';
@@ -2523,7 +2545,7 @@
       var gc = gradeColors[p.grade] || '#94a3b8';
       html += '<th>' +
         '<div class="compare-th-score" style="background:' + gc + '">' + p.score + ' ' + p.grade + '</div>' +
-        '<div class="compare-th-title">' + escapeHtml((cleanTitle(p.title, p) || '').substring(0, 40)) + '</div>' +
+        '<div class="compare-th-title">' + escapeHtml((cleanTitle(p.title, p) || _fallbackTitle(p)).substring(0, 40)) + '</div>' +
       '</th>';
     });
     html += '</tr></thead><tbody>';
