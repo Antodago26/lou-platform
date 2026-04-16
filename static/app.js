@@ -113,7 +113,7 @@
   // by a comma or digit, to avoid false positives on short strings).
   var DE_TITLE_RE = /\b(zimmer|wohnung|erdgeschoss|obergeschoss|untergeschoss|dachgeschoss|stockwerk|mietwohnung|eigentumswohnung|möbliert|renoviert|(?:\d[.,]?\d?\s*|\,\s*)(?:EG|OG|UG|DG)\b)\b/i;
 
-  function cleanTitle(t) {
+  function cleanTitle(t, prop) {
     if (!t) return '';
     // Drop English/German titles entirely — renderPropertyCard will fall back to city name.
     if (EN_TITLE_RE.test(t) || DE_TITLE_RE.test(t)) return '';
@@ -132,6 +132,16 @@
     t = t.replace(/^[A-ZÀ-Ü][a-zà-ü\-]+\s*$/i, '').trim();
     // If result is empty or just punctuation, return empty
     if (/^[\s.\u2013\u2014\-]*$/.test(t)) return '';
+
+    // Bug #5: mojibake — title is too short or has no real letters (e.g. "â", "ï»¿")
+    if (t.length <= 2 || !/[a-zA-ZÀ-ÿ]{2,}/.test(t)) return '';
+
+    // Bug #6: title is just the city name → not informative, let fallback handle it
+    if (prop && prop.city && t.toLowerCase() === prop.city.toLowerCase()) return '';
+
+    // Bug #6: title is structured data only ("4.5 pcs, 109 m²" or "3.5 pièces, 125 m2")
+    if (/^\d+[.,]?\d*\s*(pcs|pi[èe]ces?)\b/i.test(t)) return '';
+
     return t;
   }
 
@@ -1118,7 +1128,7 @@
         if (p.rooms && p.rooms > 0) details.push(p.rooms + ' pcs');
         if (p.surface && p.surface > 0) details.push(p.surface + ' m²');
 
-        var cardTitle = cleanTitle(p.title);
+        var cardTitle = cleanTitle(p.title, p);
         // For map card: show city as main title, cleaned title as description
         var mapMainTitle = p.city || 'Bien';
         var mapDesc = cardTitle || '';
@@ -1224,7 +1234,7 @@
 
         var popup = '<div style="min-width:220px;font-family:Inter,sans-serif">' +
           (p.images && p.images[0] ? '<img src="' + escapeHtml(p.images[0]) + '" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px" onerror="this.style.display=\'none\'">' : '') +
-          '<div style="font-weight:700;font-size:14px;margin-bottom:4px">' + escapeHtml(cleanTitle(p.title) || p.city || 'Bien') + '</div>' +
+          '<div style="font-weight:700;font-size:14px;margin-bottom:4px">' + escapeHtml(cleanTitle(p.title, p) || p.city || 'Bien') + '</div>' +
           '<div style="font-size:16px;font-weight:800;color:#0f172a;margin-bottom:4px">' + priceStr + ' CHF</div>' +
           '<div style="font-size:13px;color:#64748b;margin-bottom:6px">' + escapeHtml(p.address || '') + '</div>' +
           '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">' +
@@ -1705,7 +1715,7 @@
         galleryHtml +
         '<div class="detail-body">' +
           '<div class="detail-price">' + priceHtml + '</div>' +
-          '<h2 class="detail-title">' + escapeHtml(cleanTitle(p.title) || p.city || 'Bien immobilier') + '</h2>' +
+          '<h2 class="detail-title">' + escapeHtml(cleanTitle(p.title, p) || p.city || 'Bien immobilier') + '</h2>' +
           '<div class="detail-address">' + ICO.pin + ' ' + escapeHtml((p.address || '').replace(/\bTravel time\s+\d+\s*min\b/gi, '').replace(/^\d{4}\s+/, '').trim() || p.city || '') + '</div>' +
           '<div class="detail-section"><h3>Caractéristiques</h3><div class="detail-table">' + tableHtml + '</div></div>' +
           (p.description ? '<div class="detail-section"><h3>Description</h3><p class="detail-description">' + escapeHtml(p.description) + (p.description.length >= 490 && sources.length > 0 && sources[0].url ? ' <a href="' + escapeHtml(sources[0].url) + '" target="_blank" rel="noopener" class="read-more-link" onclick="event.stopPropagation()">Lire la suite sur le portail ↗</a>' : '') + '</p></div>' : '') +
@@ -2170,7 +2180,7 @@
       '</div>' +
       '<div class="prop-card-body">' +
         '<div class="prop-price">' + priceText + '</div>' +
-        '<div class="prop-title">' + escapeHtml(cleanTitle(p.title) || p.city || 'Bien immobilier') + '</div>' +
+        '<div class="prop-title">' + escapeHtml(cleanTitle(p.title, p) || p.city || 'Bien immobilier') + '</div>' +
         '<div class="prop-address">' + escapeHtml((p.address || '').replace(/\bTravel time\s+\d+\s*min\b/gi, '').replace(/\btemps de trajet\s+\d+\s*min\b/gi, '').trim() || p.city || '') + '</div>' +
         '<div class="prop-details">' + details.join(' &middot; ') + '</div>' +
         '<div class="prop-footer">' +
@@ -2388,7 +2398,7 @@
       '</div>' +
       '<div class="prop-card-body">' +
         '<div class="prop-price">' + priceText + '</div>' +
-        '<div class="prop-title">' + escapeHtml(cleanTitle(p.title) || p.city || 'Bien immobilier') + '</div>' +
+        '<div class="prop-title">' + escapeHtml(cleanTitle(p.title, p) || p.city || 'Bien immobilier') + '</div>' +
         '<div class="prop-address">' + escapeHtml((p.address || '').replace(/\bTravel time\s+\d+\s*min\b/gi, '').replace(/\btemps de trajet\s+\d+\s*min\b/gi, '').trim() || p.city || '') + '</div>' +
         '<div class="prop-details">' + details.join(' &middot; ') + '</div>' +
         noteSnippet +
@@ -2491,7 +2501,7 @@
       var gc = gradeColors[p.grade] || '#94a3b8';
       html += '<th>' +
         '<div class="compare-th-score" style="background:' + gc + '">' + p.score + ' ' + p.grade + '</div>' +
-        '<div class="compare-th-title">' + escapeHtml((cleanTitle(p.title) || '').substring(0, 40)) + '</div>' +
+        '<div class="compare-th-title">' + escapeHtml((cleanTitle(p.title, p) || '').substring(0, 40)) + '</div>' +
       '</th>';
     });
     html += '</tr></thead><tbody>';
