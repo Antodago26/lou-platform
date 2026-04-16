@@ -62,6 +62,12 @@ def get_properties():
         user_transaction = profile_row['transaction'] if profile_row else None
         active_profile_id = profile_row['id'] if profile_row else None
 
+        # Diagnostic: log the user's search zones so we can debug geo filter issues
+        if active_profile_id:
+            cur.execute("SELECT city, canton, radius_km, latitude, longitude FROM search_zones WHERE profile_id = %s", (active_profile_id,))
+            _debug_zones = [dict(z) for z in cur.fetchall()]
+            log.info(f"User {user_id} profile {active_profile_id} zones: {_debug_zones}")
+
         tx_filter = ""
         tx_params = [user_id, user_id, min_score]
         if active_profile_id:
@@ -109,6 +115,16 @@ def get_properties():
             ORDER BY {order}
         """, tx_params)
         properties = [dict(r) for r in cur.fetchall()]
+
+        # Diagnostic: log cities and their score_zone values
+        _city_zones = {}
+        for _p in properties:
+            _c = _p.get('city', '?')
+            _sz = _p.get('score_zone', 0)
+            if _c not in _city_zones:
+                _city_zones[_c] = []
+            _city_zones[_c].append(_sz)
+        log.info(f"Geo distribution (score_zone): {({c: f'{len(v)} props, zone={min(v)}-{max(v)}' for c, v in sorted(_city_zones.items())})}")
 
         # Count "nearby" properties (just outside radius) so the frontend can
         # offer an "élargir la zone" action when the strict count is small.
