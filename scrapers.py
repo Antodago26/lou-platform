@@ -554,6 +554,15 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=4):
                 if rooms_match and rooms is None:
                     rooms = _clean_rooms(rooms_match.group(1))
 
+                # v6.3 fallback: if card_text regex missed, try URL & (not-yet-set) title.
+                # Homegate URLs often carry "/appartement-3-5-pieces-..." which is reliable.
+                if rooms is None:
+                    try:
+                        from migrations.backfill_v63 import extract_rooms_from_text
+                        rooms = extract_rooms_from_text(href)
+                    except Exception:
+                        pass
+
                 # Surface: look for XX m²
                 surface = None
                 surface_match = re.search(r'(\d+)\s*m[²2]', card_text)
