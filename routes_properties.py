@@ -266,6 +266,29 @@ def get_properties():
                 log.info(f"  Merged group {gid}: {sources}")
         log.info(f"Merge total: {len(properties)} properties -> {len(merged)} unique results")
 
+        # Enrich with cross-portal sources stored in property_sources table.
+        # These are recorded during scraping when a duplicate listing on another
+        # portal is detected.  The in-memory merge above only sees rows in
+        # scored_properties (one per property), so secondary portals would be
+        # missing from all_sources without this step.
+        merged_ids = [pid for pid in merged]
+        if merged_ids:
+            placeholders = ','.join(['%s'] * len(merged_ids))
+            cur.execute(f"""
+                SELECT property_id, source, source_url
+                FROM property_sources
+                WHERE property_id IN ({placeholders})
+            """, merged_ids)
+            for row in cur.fetchall():
+                pid = row['property_id']
+                if pid in merged:
+                    existing = {s['source'] for s in merged[pid].get('_all_sources', [])}
+                    if row['source'] and row['source'] not in existing:
+                        merged[pid]['_all_sources'].append({
+                            'source': row['source'],
+                            'url': row['source_url'] or ''
+                        })
+
         results = []
         for p in merged.values():
             all_sources = p.pop('_all_sources', [])

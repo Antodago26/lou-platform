@@ -333,7 +333,7 @@ def _make_property(external_id, source, source_url, title, description,
     if clean_title and re.match(r'^[\s.\u2013\u2014\-]+$', clean_title):
         clean_title = ''
 
-    desc_clean = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', (description or '')[:500]).strip()
+    desc_clean = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', (description or '')[:1500]).strip()
     # Language filter: skip clearly non-French listings
     if not _is_french_or_neutral(clean_title) and not _is_french_or_neutral(desc_clean):
         return None  # Will be filtered out by caller
@@ -818,7 +818,7 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=4):
                                 external_id=f"is24-{lid}", source='ImmoScout24',
                                 source_url=listing_url,
                                 title=listing.get('title', item.get('title', '')),
-                                description=listing.get('description', '')[:500],
+                                description=listing.get('description', '')[:1500],
                                 property_type=_guess_type(listing.get('propertyType', listing.get('title', ''))),
                                 transaction=transaction,
                                 price=_clean_price(price_val),
@@ -1302,7 +1302,7 @@ def scrape_anibis(city="Lausanne", transaction="location", max_pages=2):
                 results.append(_make_property(
                     external_id=f"anibis-{lid}", source='Anibis',
                     source_url=detail_url,
-                    title=title, description=(item.get('body') or '')[:500],
+                    title=title, description=(item.get('body') or '')[:1500],
                     property_type=_guess_type(title),
                     transaction=transaction,
                     price=price, rooms=rooms, surface=surface, floor=None,

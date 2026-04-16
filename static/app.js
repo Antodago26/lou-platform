@@ -886,6 +886,7 @@
         loadFavorites();
       }
       if (isMap) {
+        _mapAllProps = null; // Force reload so the map reflects current filters
         loadMapView();
       }
     }
@@ -1059,11 +1060,13 @@
     }
 
     function _loadAllMapProperties(cb) {
-      // Fetch all properties (up to 500) for the map view
-      if (_mapAllProps) { cb(); return; }
-      fetch(API + '/api/properties?page=1&per_page=500&sort=score&min_score=0', {
-        headers: { 'Authorization': 'Bearer ' + TOKEN }
-      })
+      // Always reload: apply the same filters the main list uses so
+      // the map doesn't show properties outside the zone / score_zone < 80.
+      var mapUrl = API + '/api/properties?page=1&per_page=500' +
+        '&sort=' + (currentSort || 'score') +
+        '&min_score=' + (currentMinScore || 0) +
+        (currentIncludeNearby ? '&include_nearby=true' : '');
+      apiFetch(mapUrl)
       .then(function(r) { return r.json(); })
       .then(function(data) {
         _mapAllProps = {};
@@ -1337,25 +1340,69 @@
         if (p.surface_min) tags.push(p.surface_min + '+ m²');
 
         var zones = (p.zones || []).filter(function (z) { return z && z.city; });
-        zones.forEach(function (z) {
-          tags.push(z.city + (z.radius_km ? ' (' + z.radius_km + ' km)' : ''));
-        });
 
         var priorities = p.priorities || [];
 
+        // Build chips — zones and priorities get a "×" close button
+        var tagHtml = tags.map(function (t) { return '<span class="ptag">' + escapeHtml(t) + '</span>'; }).join('');
+        var zoneHtml = zones.map(function (z) {
+          var label = z.city + (z.radius_km ? ' (' + z.radius_km + ' km)' : '');
+          return '<span class="ptag ptag-removable" data-kind="zone" data-value="' + escapeHtml(z.city) + '">' +
+            escapeHtml(label) + '<button class="ptag-x" title="Retirer">×</button></span>';
+        }).join('');
+        var prioHtml = priorities.map(function (t) {
+          return '<span class="ptag blue ptag-removable" data-kind="priority" data-value="' + escapeHtml(t) + '">' +
+            escapeHtml(t) + '<button class="ptag-x" title="Retirer">×</button></span>';
+        }).join('');
+
         $('profile-bar').innerHTML =
           '<div class="dash-profile-row">' +
-            '<div class="dash-profile-tags">' +
-              tags.map(function (t) { return '<span class="ptag">' + escapeHtml(t) + '</span>'; }).join('') +
-              priorities.map(function (t) { return '<span class="ptag blue">' + escapeHtml(t) + '</span>'; }).join('') +
-            '</div>' +
+            '<div class="dash-profile-tags">' + tagHtml + zoneHtml + prioHtml + '</div>' +
             '<button class="dash-edit-btn" id="edit-profile-btn">Modifier</button>' +
           '</div>' +
           '<div id="profile-edit-form" style="display:none"></div>';
 
         $('edit-profile-btn').onclick = function () { toggleProfileForm(); };
+
+        // Wire up "×" buttons on removable chips
+        $('profile-bar').querySelectorAll('.ptag-removable .ptag-x').forEach(function (btn) {
+          btn.onclick = function (e) {
+            e.stopPropagation();
+            var chip = this.parentNode;
+            _quickRemoveProfileItem(chip.dataset.kind, chip.dataset.value);
+            chip.style.opacity = '0.5';
+            chip.style.pointerEvents = 'none';
+          };
+        });
       })
       .catch(_logErr('profile bar load'));
+  }
+
+  // Quick-remove a zone or priority chip without opening the full form.
+  function _quickRemoveProfileItem(kind, value) {
+    if (!_currentProfile) return;
+    var p = _currentProfile;
+    if (kind === 'zone') {
+      p.zones = (p.zones || []).filter(function (z) { return z.city !== value; });
+    } else if (kind === 'priority') {
+      p.priorities = (p.priorities || []).filter(function (pr) { return pr !== value; });
+    } else { return; }
+
+    apiFetch(API + '/api/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(p)
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (data && data.ok) {
+        _mapAllProps = null;
+        apiFetch(API + '/api/score', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+          .then(function () { loadProperties(1, 'score', 0); loadStats(); loadProfileBar(); })
+          .catch(_logErr('quick-remove re-score'));
+      }
+    })
+    .catch(_logErr('quick-remove profile'));
   }
 
   // Profile form state
@@ -1661,7 +1708,7 @@
           '<h2 class="detail-title">' + escapeHtml(cleanTitle(p.title) || p.city || 'Bien immobilier') + '</h2>' +
           '<div class="detail-address">' + ICO.pin + ' ' + escapeHtml((p.address || '').replace(/\bTravel time\s+\d+\s*min\b/gi, '').replace(/^\d{4}\s+/, '').trim() || p.city || '') + '</div>' +
           '<div class="detail-section"><h3>Caractéristiques</h3><div class="detail-table">' + tableHtml + '</div></div>' +
-          (p.description ? '<div class="detail-section"><h3>Description</h3><p class="detail-description">' + escapeHtml(p.description) + '</p></div>' : '') +
+          (p.description ? '<div class="detail-section"><h3>Description</h3><p class="detail-description">' + escapeHtml(p.description) + (p.description.length >= 490 && sources.length > 0 && sources[0].url ? ' <a href="' + escapeHtml(sources[0].url) + '" target="_blank" rel="noopener" class="read-more-link" onclick="event.stopPropagation()">Lire la suite sur le portail ↗</a>' : '') + '</p></div>' : '') +
           scoreHtml +
           featHtml +
           contactHtml +
@@ -2729,6 +2776,11 @@
       '.dash-profile-tags{display:flex;flex-wrap:wrap;gap:8px}',
       '.ptag{padding:6px 14px;background:#f1f5f9;border-radius:50px;font-size:13px;color:#64748b}',
       '.ptag.blue{background:rgba(3,105,161,.1);color:#0369a1}',
+      '.ptag-removable{padding-right:6px;display:inline-flex;align-items:center;gap:4px}',
+      '.ptag-x{background:none;border:none;color:inherit;cursor:pointer;font-size:15px;line-height:1;padding:0 2px;opacity:.5;transition:opacity .15s}',
+      '.ptag-x:hover{opacity:1}',
+      '.read-more-link{color:#0369a1;font-weight:600;text-decoration:none;white-space:nowrap}',
+      '.read-more-link:hover{text-decoration:underline}',
       '.dash-profile-empty{background:#fff;border:1px dashed #cbd5e1;border-radius:12px;padding:20px;text-align:center;color:#64748b;font-size:14px}',
       '.dash-profile-empty a{color:#0369a1;cursor:pointer}',
       '.dash-profile-row{display:flex;align-items:center;justify-content:space-between;gap:12px}',
