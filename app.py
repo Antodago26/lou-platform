@@ -213,6 +213,22 @@ if os.environ.get('DATABASE_URL', ''):
     except Exception as e:
         log.warning(f"Migrations error on boot: {e}")
 
+    # v6.3 backfills: rooms (NULL/0), Homegate titles (.â mojibake),
+    # addresses (leading 'CH '/NPA/dots), properties GPS.
+    # Doit tourner APRÈS _run_migrations() (qui backfill les zones GPS) et
+    # AVANT _rescore_all_on_boot (qui a besoin des GPS pour haversine).
+    try:
+        from migrations.backfill_v63 import run_all as run_v63_backfills
+        from scoring_engine import _lookup_city_coords
+        conn = get_db()
+        try:
+            stats = run_v63_backfills(conn, _lookup_city_coords)
+            log.info(f"v6.3 backfill stats: {stats}")
+        finally:
+            return_db(conn)
+    except Exception as e:
+        log.exception(f"v6.3 backfill error: {e}")
+
     # One-time rescore on deploy: the equipment synonyms changed (terrasse ≠ balcon)
     # so all scored_properties rows are stale.  Run in a background thread so boot
     # isn't blocked.
