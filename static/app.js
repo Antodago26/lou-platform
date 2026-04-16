@@ -2319,6 +2319,13 @@
             e.stopPropagation();
             var id = parseInt(this.dataset.id);
             toggleFavorite(id, this);
+            // Clean up compare state for removed item
+            delete compareSet[id];
+            if (Object.keys(compareSet).length >= 2) {
+              renderCompare();
+            } else {
+              $('compare-panel').style.display = 'none';
+            }
             // After removing, reload favorites view after short delay
             var self = this;
             setTimeout(function () { loadFavorites(); loadStats(); }, 400);
@@ -2409,7 +2416,7 @@
         '</div>' +
         '<div class="prop-days" style="background:' + daysColor + '">' + daysText + '</div>' +
         '<button class="fav-btn active" data-id="' + p.id + '" title="Retirer des favoris">&#9829;</button>' +
-        '<input type="checkbox" class="fav-compare-check" data-id="' + p.id + '" title="Selectionner pour comparer" style="display:' + (compareMode ? '' : 'none') + '">' +
+        '<input type="checkbox" class="fav-compare-check" data-id="' + p.id + '" title="Selectionner pour comparer" onclick="event.stopPropagation()" style="display:' + (compareMode ? '' : 'none') + '">' +
       '</div>' +
       '<div class="prop-card-body">' +
         '<div class="prop-price">' + priceText + '</div>' +

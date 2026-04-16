@@ -318,7 +318,8 @@ def score_type_rooms(prop, profile):
                 score -= 15  # Too many rooms
         else:
             diff = rooms_min - rooms
-            score += max(0, int(35 - diff * 15))
+            # Penalize proportionally: 0.5 short → 20, 1 short → 10, 1.5+ → 0
+            score += max(0, int(25 - diff * 30))
     else:
         score += 25
 
