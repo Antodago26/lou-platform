@@ -448,7 +448,11 @@ def update_profile():
             profile_id = cur.fetchone()['id']
 
         zones = data.get('zones', [])
+        # Compare old zones to new zones to avoid unnecessary re-scraping
+        old_zone_cities = set()
         if zones:
+            cur.execute("SELECT city FROM search_zones WHERE profile_id = %s", (profile_id,))
+            old_zone_cities = {r['city'].lower().strip() for r in cur.fetchall() if r['city']}
             cur.execute("DELETE FROM search_zones WHERE profile_id = %s", (profile_id,))
             for z in zones:
                 cur.execute("""
@@ -462,18 +466,26 @@ def update_profile():
 
         conn.commit()
 
-        # Background scrape + score for the user's zones (fire and forget)
-        cities = [z.get('city') for z in zones if z.get('city')] if zones else []
+        # Background scrape + score: only scrape NEW cities (not already in DB).
+        # Re-scoring always runs (it's free), but scraping costs ScrapingBee credits.
+        new_zone_cities = {z.get('city', '').lower().strip() for z in zones if z.get('city')}
+        cities_to_scrape = [z.get('city') for z in zones if z.get('city') and z.get('city', '').lower().strip() not in old_zone_cities]
+        all_cities = [z.get('city') for z in zones if z.get('city')]
         transaction = data.get('transaction', 'location')
-        if cities:
+        if all_cities:
             import threading
-            def _bg_scrape_and_score(city_list, tx, pid, uid):
+            def _bg_scrape_and_score(city_list, scrape_list, tx, pid, uid):
                 from scrapers import scrape_all, save_to_db
                 from scoring_engine import score_property
                 bg_conn = get_db()
                 bg_cur = bg_conn.cursor()
                 try:
-                    for city in city_list:
+                    # Only scrape cities that are genuinely NEW (not already in the profile)
+                    if scrape_list:
+                        log.info(f"Profile update: scraping {len(scrape_list)} NEW cities: {scrape_list}")
+                    else:
+                        log.info(f"Profile update: zones unchanged, skipping scrape (score-only)")
+                    for city in scrape_list:
                         try:
                             listings = scrape_all(city=city, transaction=tx)
                             if listings:
@@ -498,7 +510,7 @@ def update_profile():
                         params.append(profile['transaction'])
                     if profile.get('budget_max'):
                         query += " AND (price IS NULL OR price <= %s)"
-                        params.append(int(profile['budget_max'] * 1.3))
+                        params.append(int(float(profile['budget_max']) * 1.3))
                     bg_cur.execute(query, params)
                     properties = bg_cur.fetchall()
 
@@ -540,7 +552,7 @@ def update_profile():
                     bg_cur.close()
                     return_db(bg_conn)
 
-            thread = threading.Thread(target=_bg_scrape_and_score, args=(cities, transaction, profile_id, request.user_id))
+            thread = threading.Thread(target=_bg_scrape_and_score, args=(all_cities, cities_to_scrape, transaction, profile_id, request.user_id))
             thread.daemon = True
             thread.start()
 
