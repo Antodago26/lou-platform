@@ -103,7 +103,7 @@ def api_scrape():
                         score_params.append(profile['transaction'])
                     if profile.get('budget_max'):
                         score_query += " AND (price IS NULL OR price <= %s)"
-                        score_params.append(int(profile['budget_max'] * 1.3))
+                        score_params.append(int(float(profile['budget_max']) * 1.3))
                     bg_cur.execute(score_query, score_params)
                     properties = bg_cur.fetchall()
 
@@ -227,7 +227,7 @@ def api_score():
             score_params.extend(zone_cantons)
         if profile.get('budget_max'):
             score_query += " AND (price IS NULL OR price <= %s)"
-            score_params.append(int(profile['budget_max'] * 1.3))
+            score_params.append(int(float(profile['budget_max']) * 1.3))
         cur.execute(score_query, score_params)
         properties = cur.fetchall()
 

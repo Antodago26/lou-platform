@@ -71,29 +71,29 @@ def _run_migrations():
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS chat_messages_today INTEGER DEFAULT 0")
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS chat_messages_date DATE")
 
-        # Fix ImmoScout24 broken source_urls that used the old /real-estate/.../detail/ pattern
-        # which 404s. Rewrite them to /en/d/{id} which redirects correctly.
+        # Fix ImmoScout24 broken source_urls: both /real-estate/.../detail/{id}
+        # and /en/d/{id} patterns 404 on IS24 (they require a full SEO slug).
+        # Replace all broken patterns with a search page URL that always works.
+        # The city is extracted from the property row to build the search URL.
         cur.execute("""
-            UPDATE properties
-            SET source_url = regexp_replace(
-                source_url,
-                '^https://www\\.immoscout24\\.ch/en/real-estate/(?:buy|rent)/detail/(\\d+)$',
-                'https://www.immoscout24.ch/en/d/\\1'
-            )
-            WHERE source = 'ImmoScout24'
-              AND source_url LIKE '%/real-estate/%/detail/%'
+            UPDATE properties p
+            SET source_url = 'https://www.immoscout24.ch/en/real-estate/buy/city-' ||
+                LOWER(REPLACE(COALESCE(p.city, 'schweiz'), ' ', '-')) || '?pn=1'
+            WHERE p.source = 'ImmoScout24'
+              AND (p.source_url LIKE '%/en/d/%'
+                   OR p.source_url LIKE '%/real-estate/%/detail/%')
+              AND p.source_url NOT LIKE '%/city-%'
         """)
-
-        # Also fix source_urls in property_sources table
         cur.execute("""
-            UPDATE property_sources
-            SET source_url = regexp_replace(
-                source_url,
-                '^https://www\\.immoscout24\\.ch/en/real-estate/(?:buy|rent)/detail/(\\d+)$',
-                'https://www.immoscout24.ch/en/d/\\1'
-            )
-            WHERE source = 'ImmoScout24'
-              AND source_url LIKE '%/real-estate/%/detail/%'
+            UPDATE property_sources ps
+            SET source_url = 'https://www.immoscout24.ch/en/real-estate/buy/city-' ||
+                LOWER(REPLACE(COALESCE(
+                    (SELECT city FROM properties WHERE id = ps.property_id), 'schweiz'
+                ), ' ', '-')) || '?pn=1'
+            WHERE ps.source = 'ImmoScout24'
+              AND (ps.source_url LIKE '%/en/d/%'
+                   OR ps.source_url LIKE '%/real-estate/%/detail/%')
+              AND ps.source_url NOT LIKE '%/city-%'
         """)
 
         # Auto-create alert rows for active profiles without alerts
@@ -166,6 +166,78 @@ if os.environ.get('DATABASE_URL', ''):
         _run_migrations()
     except Exception as e:
         log.warning(f"Migrations error on boot: {e}")
+
+    # One-time rescore on deploy: the equipment synonyms changed (terrasse ≠ balcon)
+    # so all scored_properties rows are stale.  Run in a background thread so boot
+    # isn't blocked.
+    def _rescore_all_on_boot():
+        import time
+        time.sleep(5)  # let gunicorn finish booting
+        try:
+            from scoring_engine import score_property
+            db = get_db()
+            cur = db.cursor()
+            cur.execute("""
+                SELECT sp.*, sz_agg.zones
+                FROM search_profiles sp
+                LEFT JOIN LATERAL (
+                    SELECT json_agg(row_to_json(sz)) AS zones
+                    FROM search_zones sz WHERE sz.profile_id = sp.id
+                ) sz_agg ON TRUE
+                WHERE sp.is_active = TRUE
+            """)
+            profiles = [dict(r) for r in cur.fetchall()]
+            for prof in profiles:
+                import json as _json
+                zones = prof.pop('zones', None)
+                if isinstance(zones, str):
+                    zones = _json.loads(zones)
+                zones = zones or []
+                zones = [dict(z) if not isinstance(z, dict) else z for z in zones]
+
+                q = "SELECT * FROM properties WHERE is_active = TRUE"
+                params = []
+                if prof.get('transaction'):
+                    q += " AND transaction = %s"
+                    params.append(prof['transaction'])
+                if prof.get('budget_max'):
+                    q += " AND (price IS NULL OR price <= %s)"
+                    params.append(int(float(prof['budget_max']) * 1.3))
+                cur.execute(q, params)
+                props = [dict(r) for r in cur.fetchall()]
+                for prop in props:
+                    result = score_property(prop, prof, zones)
+                    cur.execute("""
+                        INSERT INTO scored_properties
+                            (property_id, profile_id, user_id, total_score, grade,
+                             score_zone, score_budget, score_type, score_surface,
+                             score_equipment, score_freshness, distance_km)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        ON CONFLICT (property_id, profile_id)
+                        DO UPDATE SET
+                            total_score=EXCLUDED.total_score, grade=EXCLUDED.grade,
+                            score_zone=EXCLUDED.score_zone, score_budget=EXCLUDED.score_budget,
+                            score_type=EXCLUDED.score_type, score_surface=EXCLUDED.score_surface,
+                            score_equipment=EXCLUDED.score_equipment, score_freshness=EXCLUDED.score_freshness,
+                            distance_km=EXCLUDED.distance_km, scored_at=NOW()
+                    """, (
+                        prop['id'], prof['id'], prof['user_id'],
+                        result['total_score'], result['grade'],
+                        result['score_zone'], result['score_budget'],
+                        result['score_type'], result['score_surface'],
+                        result['score_equipment'], result['score_freshness'],
+                        result['distance_km']
+                    ))
+                db.commit()
+                log.info(f"Boot rescore: {len(props)} properties for profile {prof['id']}")
+            cur.close()
+            return_db(db)
+            log.info("Boot rescore complete")
+        except Exception as e:
+            log.error(f"Boot rescore error: {e}", exc_info=True)
+
+    import threading
+    threading.Thread(target=_rescore_all_on_boot, daemon=True).start()
 
 
 if __name__ == '__main__':

@@ -25,7 +25,10 @@ def get_properties():
     include_no_price = request.args.get('include_no_price', '').lower() in ('true', '1', 'yes')
     include_nearby = request.args.get('include_nearby', '').lower() in ('true', '1', 'yes')
     page = int(request.args.get('page', 1))
-    per_page = min(int(request.args.get('per_page', 20)), 50)
+    # The map view needs all matching properties in one page (up to 500).
+    # Normal list views are capped at 50 per page to keep responses fast.
+    max_per_page = 500 if request.args.get('view') == 'map' else 50
+    per_page = min(int(request.args.get('per_page', 20)), max_per_page)
     offset = (page - 1) * per_page
 
     # Tri par proximité: zone match first, then distance, then score

@@ -145,6 +145,21 @@
     return t;
   }
 
+  // Build a descriptive fallback title when cleanTitle returns empty.
+  // Avoids showing just the city name (which is already displayed below the title).
+  function _fallbackTitle(p) {
+    var parts = [];
+    var pt = (p.property_type || '').toLowerCase();
+    if (/maison|house|villa|chalet/.test(pt)) { parts.push('Maison'); }
+    else if (/terrain|land/.test(pt)) { parts.push('Terrain'); }
+    else if (/commercial|bureau|office/.test(pt)) { parts.push('Local commercial'); }
+    else if (/parking|garage/.test(pt)) { parts.push('Parking'); }
+    else { parts.push('Appartement'); }
+    if (p.rooms && p.rooms > 0 && p.rooms < 20) parts.push(p.rooms + ' pièces');
+    if (p.surface && p.surface > 0) parts.push(p.surface + ' m\u00B2');
+    return parts.join(' · ') || 'Bien immobilier';
+  }
+
   // Wrapper for authenticated API calls — handles 401 (expired token)
   function apiFetch(url, opts) {
     opts = opts || {};
@@ -1072,7 +1087,7 @@
     function _loadAllMapProperties(cb) {
       // Always reload: apply the same filters the main list uses so
       // the map doesn't show properties outside the zone / score_zone < 80.
-      var mapUrl = API + '/api/properties?page=1&per_page=500' +
+      var mapUrl = API + '/api/properties?page=1&per_page=500&view=map' +
         '&sort=' + (currentSort || 'score') +
         '&min_score=' + (currentMinScore || 0) +
         (currentIncludeNearby ? '&include_nearby=true' : '');
@@ -1234,7 +1249,7 @@
 
         var popup = '<div style="min-width:220px;font-family:Inter,sans-serif">' +
           (p.images && p.images[0] ? '<img src="' + escapeHtml(p.images[0]) + '" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px" onerror="this.style.display=\'none\'">' : '') +
-          '<div style="font-weight:700;font-size:14px;margin-bottom:4px">' + escapeHtml(cleanTitle(p.title, p) || p.city || 'Bien') + '</div>' +
+          '<div style="font-weight:700;font-size:14px;margin-bottom:4px">' + escapeHtml(cleanTitle(p.title, p) || _fallbackTitle(p)) + '</div>' +
           '<div style="font-size:16px;font-weight:800;color:#0f172a;margin-bottom:4px">' + priceStr + ' CHF</div>' +
           '<div style="font-size:13px;color:#64748b;margin-bottom:6px">' + escapeHtml(p.address || '') + '</div>' +
           '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">' +
@@ -1715,10 +1730,10 @@
         galleryHtml +
         '<div class="detail-body">' +
           '<div class="detail-price">' + priceHtml + '</div>' +
-          '<h2 class="detail-title">' + escapeHtml(cleanTitle(p.title, p) || p.city || 'Bien immobilier') + '</h2>' +
+          '<h2 class="detail-title">' + escapeHtml(cleanTitle(p.title, p) || _fallbackTitle(p)) + '</h2>' +
           '<div class="detail-address">' + ICO.pin + ' ' + escapeHtml((p.address || '').replace(/\bTravel time\s+\d+\s*min\b/gi, '').replace(/^\d{4}\s+/, '').trim() || p.city || '') + '</div>' +
           '<div class="detail-section"><h3>Caractéristiques</h3><div class="detail-table">' + tableHtml + '</div></div>' +
-          (p.description ? '<div class="detail-section"><h3>Description</h3><p class="detail-description">' + escapeHtml(p.description) + (p.description.length >= 490 && sources.length > 0 && sources[0].url ? ' <a href="' + escapeHtml(sources[0].url) + '" target="_blank" rel="noopener" class="read-more-link" onclick="event.stopPropagation()">Lire la suite sur le portail ↗</a>' : '') + '</p></div>' : '') +
+          (p.description ? '<div class="detail-section"><h3>Description</h3><p class="detail-description">' + escapeHtml(p.description) + ((p.description.length >= 490 || /\.\.\.\s*$/.test(p.description)) && sources.length > 0 && sources[0].url ? ' <a href="' + escapeHtml(sources[0].url) + '" target="_blank" rel="noopener" class="read-more-link" onclick="event.stopPropagation()">Lire la suite sur le portail ↗</a>' : '') + '</p></div>' : '') +
           scoreHtml +
           featHtml +
           contactHtml +
@@ -2180,7 +2195,7 @@
       '</div>' +
       '<div class="prop-card-body">' +
         '<div class="prop-price">' + priceText + '</div>' +
-        '<div class="prop-title">' + escapeHtml(cleanTitle(p.title, p) || p.city || 'Bien immobilier') + '</div>' +
+        '<div class="prop-title">' + escapeHtml(cleanTitle(p.title, p) || _fallbackTitle(p)) + '</div>' +
         '<div class="prop-address">' + escapeHtml((p.address || '').replace(/\bTravel time\s+\d+\s*min\b/gi, '').replace(/\btemps de trajet\s+\d+\s*min\b/gi, '').trim() || p.city || '') + '</div>' +
         '<div class="prop-details">' + details.join(' &middot; ') + '</div>' +
         '<div class="prop-footer">' +
@@ -2398,7 +2413,7 @@
       '</div>' +
       '<div class="prop-card-body">' +
         '<div class="prop-price">' + priceText + '</div>' +
-        '<div class="prop-title">' + escapeHtml(cleanTitle(p.title, p) || p.city || 'Bien immobilier') + '</div>' +
+        '<div class="prop-title">' + escapeHtml(cleanTitle(p.title, p) || _fallbackTitle(p)) + '</div>' +
         '<div class="prop-address">' + escapeHtml((p.address || '').replace(/\bTravel time\s+\d+\s*min\b/gi, '').replace(/\btemps de trajet\s+\d+\s*min\b/gi, '').trim() || p.city || '') + '</div>' +
         '<div class="prop-details">' + details.join(' &middot; ') + '</div>' +
         noteSnippet +
