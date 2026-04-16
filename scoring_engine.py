@@ -455,8 +455,18 @@ def score_type_rooms(prop, profile):
                 score -= 15  # Too many rooms
         else:
             diff = rooms_min - rooms
-            # Penalize proportionally: 0.5 short → 20, 1 short → 10, 1.5+ → 0
-            score += max(0, int(25 - diff * 30))
+            # Bug #5 fix: additive penalty wasn't strong enough (3.5 pcs with
+            # rooms_min=4 could still score 88A). Now we BOTH remove the
+            # rooms bonus AND apply a multiplicative penalty on the type
+            # score below. Additive here just keeps small tolerance for
+            # diff < 0.25 (rounding noise between 3.5 and 3.75).
+            score += max(0, int(10 - diff * 40))
+
+            # Multiplicative penalty: 0.5 short → 0.5×, 1.0 short → 0.3×
+            # Applied to the entire type_rooms score so a rooms-short property
+            # can't ride on type match + other perfect factors.
+            penalty_factor = max(0.2, 1.0 - diff * 1.0)
+            score = int(score * penalty_factor)
     else:
         score += 25
 

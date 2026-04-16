@@ -306,6 +306,30 @@
                 body: '{}'
               }).catch(_logErr('signup score trigger'));
             }
+            // Bug #0A fix: if the user logged in AFTER a chat (where chatCriteria
+            // was accumulated but not yet sent), push the criteria now.
+            // Signup already sends them in the body; login doesn't, so we push via PUT.
+            if (mode === 'login' && chatCriteria && Object.keys(chatCriteria).length > 0) {
+              var criteriaPayload = {
+                property_types: chatCriteria.property_types || (chatCriteria.property_type ? [chatCriteria.property_type] : ['appartement']),
+                transaction: chatCriteria.transaction || 'location',
+                budget_max: chatCriteria.budget_max,
+                budget_min: chatCriteria.budget_min,
+                rooms_min: chatCriteria.rooms_min,
+                rooms_max: chatCriteria.rooms_max,
+                surface_min: chatCriteria.surface_min,
+                priorities: chatCriteria.priorities || [],
+                zones: (chatCriteria.zones || []).map(function (z) {
+                  return { city: z.city || '', canton: z.canton || '', radius_km: z.radius_km || 3,
+                           latitude: z.latitude || null, longitude: z.longitude || null, postal_code: z.postal_code || null };
+                })
+              };
+              fetch(API + '/api/profile', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + data.token },
+                body: JSON.stringify(criteriaPayload)
+              }).catch(_logErr('login post-chat profile push'));
+            }
             // On external hosts (Webflow), render dashboard in place
             var isRenderHost = window.location.hostname === 'lou-platform.onrender.com' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
             if (isRenderHost) {
@@ -1563,6 +1587,17 @@
 
   // Expose globally for onclick
   window._pfRmZone = function (i) { _pfZones.splice(i, 1); _pfRenderZones(); };
+
+  // Bug #4 fix: clear compareSet + uncheck all compare checkboxes when the
+  // user closes the compare panel. Previously only hid the panel, leaving
+  // compareSet populated and UI checkboxes checked — reopening showed stale
+  // biens.
+  window._closeComparePanel = function () {
+    compareSet = {};
+    var panel = document.getElementById('compare-panel');
+    if (panel) panel.style.display = 'none';
+    document.querySelectorAll('.fav-compare-check').forEach(function (cb) { cb.checked = false; });
+  };
   window._pfAddZone = function () {
     var city = $('pf-new-city').value.trim();
     var kmStr = $('pf-new-km').value;
@@ -2485,6 +2520,16 @@
               renderCompare();
             } else {
               $('compare-panel').style.display = 'none';
+              // Bug #4 fix: when panel closes because count dropped < 2,
+              // uncheck the remaining stray checkbox so UI stays in sync
+              // with compareSet. Otherwise the last 1 bien stays visually
+              // checked while the user can no longer see the panel.
+              if (count === 1) {
+                document.querySelectorAll('.fav-compare-check').forEach(function (otherCb) {
+                  var otherId = parseInt(otherCb.dataset.id);
+                  if (!compareSet[otherId]) otherCb.checked = false;
+                });
+              }
             }
           };
         });
@@ -2645,9 +2690,11 @@
     var gradeColors = { A: '#059669', B: '#0369a1', C: '#d97706', D: '#dc2626' };
 
     // Build comparison table
+    // Bug #4 fix: close button now also clears compareSet and unchecks all
+    // checkboxes so the next open starts from a clean state.
     var html = '<div class="compare-header">' +
       '<h3>&#9878; Comparaison (' + props.length + ' biens)</h3>' +
-      '<button class="compare-close-btn" onclick="document.getElementById(\'compare-panel\').style.display=\'none\'">&times;</button>' +
+      '<button class="compare-close-btn" onclick="_closeComparePanel()">&times;</button>' +
     '</div>';
 
     html += '<div class="compare-scroll"><table class="compare-table"><thead><tr><th>Critere</th>';
@@ -2743,11 +2790,17 @@
 
     $('chat-close').onclick = function () { panel.classList.remove('open'); };
 
+    var _chatSending = false;
     function sendMsg() {
+      // Bug #0C fix: prevent double-submit (rapid clicks / Enter spam)
+      if (_chatSending) return;
       var input = $('chat-in');
       var msg = input.value.trim();
       if (!msg) return;
+      _chatSending = true;
       input.value = '';
+      var sendBtn = $('chat-send');
+      if (sendBtn) sendBtn.disabled = true;
 
       var body = $('chat-body');
 
@@ -2819,11 +2872,15 @@
             });
           }
           body.scrollTop = body.scrollHeight;
+          _chatSending = false;
+          if (sendBtn) sendBtn.disabled = false;
         })
         .catch(function () {
           loading.remove();
           body.insertAdjacentHTML('beforeend', '<div class="chat-msg bot">Erreur de connexion. Reessayez.</div>');
           body.scrollTop = body.scrollHeight;
+          _chatSending = false;
+          if (sendBtn) sendBtn.disabled = false;
         });
     }
 
