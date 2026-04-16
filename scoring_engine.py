@@ -10,6 +10,7 @@ Intégrer dans le cron job après chaque scrape:
 """
 
 import math
+import re
 import unicodedata
 from datetime import datetime
 
@@ -87,6 +88,96 @@ CITY_COORDS = {
     'corcelles-cormondrèche': (46.982, 6.872),
     'corcelles':            (46.982, 6.872),
     'cernier':              (47.060, 6.903),
+    'corcelles ne':         (46.982, 6.872),
+}
+
+# NPA (Swiss postal code) → (lat, lng, canonical_city_name)
+# Used when the user types a postal code instead of a city name in their zone.
+NPA_COORDS = {
+    # Canton NE
+    '2000': (46.992, 6.931, 'Neuchâtel'),
+    '2002': (46.992, 6.931, 'Neuchâtel'),
+    '2012': (46.974, 6.881, 'Auvernier'),
+    '2013': (46.968, 6.869, 'Colombier'),
+    '2014': (46.950, 6.838, 'Boudry'),
+    '2016': (46.941, 6.845, 'Cortaillod'),
+    '2017': (46.950, 6.838, 'Boudry'),
+    '2034': (46.988, 6.859, 'Peseux'),
+    '2035': (46.982, 6.872, 'Corcelles-Cormondrèche'),
+    '2036': (46.982, 6.872, 'Cormondrèche'),
+    '2037': (46.997, 6.916, 'Milvignes'),
+    '2074': (47.006, 6.984, 'Marin-Epagnier'),
+    '2075': (47.007, 6.988, 'La Tène'),
+    '2088': (47.011, 6.983, 'Saint-Blaise'),
+    '2068': (46.997, 6.941, 'Hauterive'),
+    '2063': (46.920, 6.793, 'Engollon'),
+    '2022': (46.935, 6.820, 'Bevaix'),
+    '2023': (46.906, 6.782, 'Gorgier'),
+    '2024': (47.011, 6.983, 'Saint-Aubin-Sauges'),
+    '2025': (46.945, 6.694, 'Chez-le-Bart'),
+    '2042': (47.048, 6.908, 'Val-de-Ruz'),
+    '2046': (47.070, 6.937, 'Fontaines'),
+    '2052': (47.010, 6.943, 'Fontainemelon'),
+    '2056': (47.075, 6.862, 'Dombresson'),
+    '2057': (47.100, 6.826, 'Villiers'),
+    '2300': (47.100, 6.826, 'La Chaux-de-Fonds'),
+    '2301': (47.100, 6.826, 'La Chaux-de-Fonds'),
+    '2400': (47.056, 6.748, 'Le Locle'),
+    '2105': (46.916, 6.606, 'Travers'),
+    '2114': (46.902, 6.585, 'Fleurier'),
+    '2056': (47.075, 6.862, 'Dombresson'),
+    # Canton VD
+    '1000': (46.520, 6.632, 'Lausanne'),
+    '1003': (46.520, 6.632, 'Lausanne'),
+    '1004': (46.520, 6.632, 'Lausanne'),
+    '1005': (46.520, 6.632, 'Lausanne'),
+    '1006': (46.520, 6.632, 'Lausanne'),
+    '1007': (46.520, 6.632, 'Lausanne'),
+    '1008': (46.535, 6.603, 'Prilly'),
+    '1009': (46.510, 6.662, 'Pully'),
+    '1010': (46.538, 6.588, 'Renens'),
+    '1020': (46.538, 6.588, 'Renens'),
+    '1024': (46.528, 6.561, 'Ecublens'),
+    '1110': (46.510, 6.498, 'Morges'),
+    '1260': (46.383, 6.239, 'Nyon'),
+    '1400': (46.778, 6.641, 'Yverdon-les-Bains'),
+    '1800': (46.462, 6.843, 'Vevey'),
+    '1820': (46.434, 6.912, 'Montreux'),
+    # Canton GE
+    '1200': (46.204, 6.143, 'Genève'),
+    '1201': (46.204, 6.143, 'Genève'),
+    '1202': (46.204, 6.143, 'Genève'),
+    '1203': (46.204, 6.143, 'Genève'),
+    '1204': (46.204, 6.143, 'Genève'),
+    '1205': (46.204, 6.143, 'Genève'),
+    '1206': (46.204, 6.143, 'Genève'),
+    '1207': (46.204, 6.143, 'Genève'),
+    '1208': (46.204, 6.143, 'Genève'),
+    '1209': (46.204, 6.143, 'Genève'),
+    '1227': (46.180, 6.141, 'Carouge'),
+    '1217': (46.231, 6.080, 'Meyrin'),
+    # Canton FR
+    '1700': (46.806, 7.162, 'Fribourg'),
+    # Canton VS
+    '1950': (46.227, 7.359, 'Sion'),
+    '1920': (46.102, 7.074, 'Martigny'),
+    '3960': (46.292, 7.535, 'Sierre'),
+    # Canton BE
+    '3000': (46.948, 7.447, 'Berne'),
+    # Canton JU
+    '2800': (47.366, 7.343, 'Delémont'),
+    # Canton BS
+    '4000': (47.559, 7.588, 'Bâle'),
+    # Canton ZH
+    '8000': (47.377, 8.541, 'Zürich'),
+    # Canton LU
+    '6000': (47.050, 8.308, 'Luzern'),
+    # Canton TI
+    '6900': (46.004, 8.951, 'Lugano'),
+    # Canton SG
+    '9000': (47.424, 9.376, 'St. Gallen'),
+    # Canton BI
+    '2500': (47.141, 7.247, 'Bienne'),
 }
 
 
@@ -98,17 +189,37 @@ def _norm_city_name(name):
     return ''.join(c for c in s if unicodedata.category(c) != 'Mn')
 
 
+def _is_npa(value):
+    """True if the value looks like a Swiss NPA (4-digit postal code)."""
+    if not value:
+        return False
+    return bool(re.match(r'^\d{4}$', str(value).strip()))
+
+
 def _lookup_city_coords(city):
-    """Retourne (lat, lng) pour une ville connue, ou None."""
+    """Retourne (lat, lng) pour une ville ou un NPA connu, ou None."""
     if not city:
         return None
-    c = city.lower().strip()
+    c = str(city).strip()
+    # Check NPA first
+    if _is_npa(c) and c in NPA_COORDS:
+        lat, lng, _name = NPA_COORDS[c]
+        return (lat, lng)
+    c = c.lower()
     if c in CITY_COORDS:
         return CITY_COORDS[c]
     cn = _norm_city_name(city)
     for k, v in CITY_COORDS.items():
         if _norm_city_name(k) == cn:
             return v
+    return None
+
+
+def _npa_to_city_name(npa):
+    """Retourne le nom de ville canonique pour un NPA, ou None."""
+    npa = str(npa).strip()
+    if npa in NPA_COORDS:
+        return NPA_COORDS[npa][2]
     return None
 
 
@@ -175,10 +286,23 @@ def score_zone(prop, zones):
             prop_lat, prop_lng = fallback
 
     for zone in zones:
+        zone_city = zone.get('city', '')
+
         # Check exact city match (accent-insensitive)
         if (_norm_city_name(prop.get('city', '')) ==
-                _norm_city_name(zone.get('city', ''))):
+                _norm_city_name(zone_city)):
             city_match = True
+
+        # NPA match: if zone city is a postal code, match against prop's postal_code
+        # OR against the canonical city name for that NPA
+        if _is_npa(zone_city):
+            prop_postal = str(prop.get('postal_code') or '').strip()
+            if prop_postal == zone_city.strip():
+                city_match = True
+            # Also match by canonical city name (e.g., NPA 2074 → Marin-Epagnier)
+            canonical = _npa_to_city_name(zone_city)
+            if canonical and _norm_city_name(prop.get('city', '')) == _norm_city_name(canonical):
+                city_match = True
 
         # Fallback: coordonnées centrales de la ville de la zone si GPS manquant
         zone_lat = zone.get('latitude')
@@ -196,11 +320,20 @@ def score_zone(prop, zones):
                 # radius_km comes from a NUMERIC column → psycopg2 returns Decimal,
                 # which can't be multiplied with float (the * 1.5 / * 3 below).
                 # Coerce to float at the source so all downstream maths works.
-                target_radius = float(zone.get('radius_km') or 3.0)
+                r = zone.get('radius_km')
+                target_radius = float(r) if r is not None else 3.0
 
     # If we have GPS data
     if min_distance != float('inf'):
-        if min_distance <= target_radius:
+        # Radius 0 = "commune exacte": only city_match properties score high
+        if target_radius == 0:
+            if city_match:
+                score = 100
+            elif min_distance <= 1.0:
+                score = 60  # Very close but not same commune
+            else:
+                score = max(0, int(15 - min_distance))
+        elif min_distance <= target_radius:
             # Progressive scoring within radius: closer = higher score
             # At 0 km → 100, at target_radius → 80
             score = int(100 - (min_distance / target_radius) * 20)
@@ -500,8 +633,17 @@ def score_all_for_profile(db, profile_id):
             query += " AND (price IS NULL OR price <= %s)"
             params.append(int(float(profile['budget_max']) * 1.3))
 
-        # Zone pre-filter: if we have zones, limit to matching cantons to reduce scope
+        # Zone pre-filter: if we have zones, limit to matching cantons to reduce scope.
+        # When zone city is an NPA, also include properties in nearby postal codes.
         zone_cantons = [z.get('canton', '').upper() for z in zones if z.get('canton')]
+        # For NPA zones with no canton, infer canton from NPA_COORDS → CITY_COORDS
+        for z in zones:
+            zc = z.get('city', '')
+            if _is_npa(zc) and not z.get('canton'):
+                # NPA zones without canton: skip canton pre-filter entirely
+                # (we rely on GPS distance scoring to filter)
+                zone_cantons = []
+                break
         if zone_cantons:
             placeholders = ','.join(['%s'] * len(zone_cantons))
             query += f" AND (canton IN ({placeholders}) OR canton IS NULL OR canton = '')"

@@ -352,7 +352,8 @@ def get_profile():
         cur.execute("""
             SELECT sp.*, json_agg(json_build_object(
                 'id', sz.id, 'city', sz.city, 'canton', sz.canton,
-                'radius_km', sz.radius_km, 'latitude', sz.latitude, 'longitude', sz.longitude
+                'radius_km', sz.radius_km, 'latitude', sz.latitude, 'longitude', sz.longitude,
+                'postal_code', sz.postal_code
             )) as zones
             FROM search_profiles sp
             LEFT JOIN search_zones sz ON sz.profile_id = sp.id

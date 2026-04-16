@@ -1398,7 +1398,7 @@
         // Build chips — zones and priorities get a "×" close button
         var tagHtml = tags.map(function (t) { return '<span class="ptag">' + escapeHtml(t) + '</span>'; }).join('');
         var zoneHtml = zones.map(function (z) {
-          var label = z.city + (z.radius_km ? ' (' + z.radius_km + ' km)' : '');
+          var label = z.city + (z.radius_km == 0 ? ' (commune exacte)' : z.radius_km ? ' (' + z.radius_km + ' km)' : '');
           return '<span class="ptag ptag-removable" data-kind="zone" data-value="' + escapeHtml(z.city) + '">' +
             escapeHtml(label) + '<button class="ptag-x" title="Retirer">×</button></span>';
         }).join('');
@@ -1470,18 +1470,118 @@
     var c = $('pf-zone-list');
     if (!c) return;
     c.innerHTML = _pfZones.map(function (z, i) {
-      return '<div class="pf-zone"><span>' + ICO.pin + ' ' + escapeHtml(z.city) + '</span><span style="color:#0ea5e9;font-size:12px;font-weight:600">' + z.radius_km + ' km</span><button onclick="_pfRmZone(' + i + ')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px">✕</button></div>';
+      var radiusLabel = (z.radius_km == 0) ? 'Commune exacte' : z.radius_km + ' km';
+      return '<div class="pf-zone"><span>' + ICO.pin + ' ' + escapeHtml(z.city) + '</span><span style="color:#0ea5e9;font-size:12px;font-weight:600">' + radiusLabel + '</span><button onclick="_pfRmZone(' + i + ')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px">✕</button></div>';
     }).join('');
+  }
+
+  // ── NPA / City autocomplete using geo.admin.ch ──
+  var _pfAutoSelected = null;
+  var _pfAutoTimer = null;
+
+  function _pfSetupAutocomplete() {
+    var input = $('pf-new-city');
+    if (!input) return;
+    // Create dropdown
+    var dd = document.createElement('div');
+    dd.id = 'pf-city-autocomplete';
+    dd.style.cssText = 'position:absolute;z-index:1000;background:#fff;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;display:none;width:100%';
+    input.parentNode.style.position = 'relative';
+    input.parentNode.appendChild(dd);
+
+    input.setAttribute('autocomplete', 'off');
+    input.addEventListener('input', function () {
+      _pfAutoSelected = null;
+      clearTimeout(_pfAutoTimer);
+      var q = input.value.trim();
+      if (q.length < 2) { dd.style.display = 'none'; return; }
+      _pfAutoTimer = setTimeout(function () { _pfFetchSuggestions(q, dd, input); }, 250);
+    });
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); _pfAddZone(); dd.style.display = 'none'; }
+      if (e.key === 'Escape') dd.style.display = 'none';
+    });
+    document.addEventListener('click', function (e) {
+      if (!input.contains(e.target) && !dd.contains(e.target)) dd.style.display = 'none';
+    });
+  }
+
+  function _pfFetchSuggestions(query, dd, input) {
+    // geo.admin.ch search API — returns Swiss localities with NPA + coords
+    var url = 'https://api3.geo.admin.ch/rest/services/api/SearchServer?sr=4326&lang=fr&limit=8&type=locations&searchText=' + encodeURIComponent(query);
+    fetch(url).then(function (r) { return r.json(); }).then(function (data) {
+      var results = (data.results || []).filter(function (r) {
+        // Only keep "gg25" (communes) and "zipcode" location types
+        var attrs = r.attrs || {};
+        return attrs.origin === 'gg25' || attrs.origin === 'zipcode' || attrs.origin === 'district';
+      }).slice(0, 8);
+      if (!results.length) { dd.style.display = 'none'; return; }
+      dd.innerHTML = results.map(function (r, i) {
+        var a = r.attrs || {};
+        var label = (a.label || '').replace(/<[^>]+>/g, '').trim();
+        // Extract NPA if in label (e.g., "2074 Marin-Epagnier")
+        var npaMatch = label.match(/^(\d{4})\s+(.+)/);
+        var npa = npaMatch ? npaMatch[1] : '';
+        var cityName = npaMatch ? npaMatch[2] : label;
+        // Clean HTML artifacts
+        cityName = cityName.replace(/\s*\(.*\)\s*$/, '').trim();
+        var canton = (a.detail || '').replace(/<[^>]+>/g, '').trim();
+        // Extract canton abbreviation from detail (often "neuch\u00e2tel" → "NE")
+        var cantonAbbr = '';
+        var cMap = {'vaud':'VD','genève':'GE','neuchâtel':'NE','fribourg':'FR','valais':'VS','berne':'BE','jura':'JU','bâle-ville':'BS','zurich':'ZH','lucerne':'LU','tessin':'TI','st-gall':'SG','argovie':'AG','thurgovie':'TG','soleure':'SO','bâle-campagne':'BL','grisons':'GR','schwyz':'SZ'};
+        var detailLow = canton.toLowerCase();
+        for (var ck in cMap) { if (detailLow.indexOf(ck) > -1) { cantonAbbr = cMap[ck]; break; } }
+        return '<div class="pf-auto-item" data-idx="' + i + '" data-lat="' + (a.lat || '') + '" data-lng="' + (a.lon || '') + '" data-npa="' + npa + '" data-city="' + escapeHtml(cityName) + '" data-canton="' + cantonAbbr + '" style="padding:8px 12px;cursor:pointer;font-size:14px;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center">' +
+          '<span>' + escapeHtml(npa ? npa + ' ' + cityName : cityName) + '</span>' +
+          (cantonAbbr ? '<span style="color:#6b7280;font-size:12px">' + cantonAbbr + '</span>' : '') +
+        '</div>';
+      }).join('');
+      dd.style.display = 'block';
+      // Click handler on items
+      var items = dd.querySelectorAll('.pf-auto-item');
+      items.forEach(function (el) {
+        el.addEventListener('mouseenter', function () { el.style.background = '#f0f9ff'; });
+        el.addEventListener('mouseleave', function () { el.style.background = '#fff'; });
+        el.addEventListener('click', function () {
+          var npa = el.getAttribute('data-npa');
+          var city = el.getAttribute('data-city');
+          var displayName = npa ? npa + ' ' + city : city;
+          input.value = displayName;
+          _pfAutoSelected = {
+            label: displayName,
+            city: city,
+            npa: npa,
+            canton: el.getAttribute('data-canton'),
+            lat: parseFloat(el.getAttribute('data-lat')) || null,
+            lng: parseFloat(el.getAttribute('data-lng')) || null
+          };
+          dd.style.display = 'none';
+        });
+      });
+    }).catch(function () { dd.style.display = 'none'; });
   }
 
   // Expose globally for onclick
   window._pfRmZone = function (i) { _pfZones.splice(i, 1); _pfRenderZones(); };
   window._pfAddZone = function () {
     var city = $('pf-new-city').value.trim();
-    var km = parseFloat($('pf-new-km').value) || 3;
+    var kmStr = $('pf-new-km').value;
+    var km = parseFloat(kmStr);
+    if (isNaN(km)) km = 3;
     if (!city) return;
-    _pfZones.push({ city: city, canton: '', radius_km: km });
+    // Use selected suggestion data if available
+    var canton = '';
+    var lat = null, lng = null, postal = null;
+    if (_pfAutoSelected) {
+      city = _pfAutoSelected.label;
+      canton = _pfAutoSelected.canton || '';
+      lat = _pfAutoSelected.lat;
+      lng = _pfAutoSelected.lng;
+      postal = _pfAutoSelected.npa || null;
+    }
+    _pfZones.push({ city: city, canton: canton, radius_km: km, latitude: lat, longitude: lng, postal_code: postal });
     $('pf-new-city').value = '';
+    _pfAutoSelected = null;
     _pfRenderZones();
   };
   window._pfToggleChip = function (el) { el.classList.toggle('on'); };
@@ -1828,7 +1928,7 @@
       return;
     }
     var p = _currentProfile || {};
-    _pfZones = (p.zones || []).filter(function (z) { return z && z.city; }).map(function (z) { return { city: z.city, canton: z.canton || '', radius_km: z.radius_km || 3 }; });
+    _pfZones = (p.zones || []).filter(function (z) { return z && z.city; }).map(function (z) { return { city: z.city, canton: z.canton || '', radius_km: z.radius_km || 3, latitude: z.latitude || null, longitude: z.longitude || null, postal_code: z.postal_code || null }; });
 
     var types = ['appartement','maison','villa','immeuble','terrain','parking','commerce'];
     var pTypes = p.property_types || [];
@@ -1861,7 +1961,7 @@
             '<div id="pf-zone-list" class="pf-zone-list"></div>' +
             '<div class="pf-zone-add">' +
               '<input id="pf-new-city" type="text" placeholder="Ajouter une ville..." style="flex:1">' +
-              '<select id="pf-new-km"><option value="1">1 km</option><option value="2">2 km</option><option value="3" selected>3 km</option><option value="5">5 km</option><option value="10">10 km</option><option value="15">15 km</option><option value="20">20 km</option></select>' +
+              '<select id="pf-new-km"><option value="0">Commune exacte</option><option value="1">1 km</option><option value="2">2 km</option><option value="3" selected>3 km</option><option value="5">5 km</option><option value="10">10 km</option><option value="15">15 km</option><option value="20">20 km</option></select>' +
               '<button class="pf-add-btn" onclick="_pfAddZone()">+</button>' +
             '</div>' +
           '</div>' +
@@ -1904,6 +2004,7 @@
 
     formWrap.style.display = 'block';
     _pfRenderZones();
+    _pfSetupAutocomplete();
 
     $('pf-cancel').onclick = function () { formWrap.style.display = 'none'; };
     $('pf-save').onclick = function () { saveProfileForm(); };
