@@ -116,6 +116,32 @@ def _run_migrations():
             WHERE source = 'ImmoScout24' AND source_url LIKE '%/en/d/%'
         """)
 
+        # v6.2 Erreur #3 fix: backfill lat/lng on existing zones that were
+        # saved before resolve_zone_coords() was wired into the save path.
+        # Without GPS, score_zone() can't compute distances (haversine needs
+        # both endpoints) and falls back to canton match → stale/wrong scores.
+        try:
+            from scoring_engine import resolve_zone_coords
+            cur.execute("""
+                SELECT id, city, canton FROM search_zones
+                WHERE latitude IS NULL OR longitude IS NULL
+            """)
+            missing_coords = cur.fetchall()
+            fixed = 0
+            for row in missing_coords:
+                zone = {'city': row['city'], 'canton': row['canton']}
+                resolve_zone_coords(zone)
+                if zone.get('latitude') and zone.get('longitude'):
+                    cur.execute(
+                        "UPDATE search_zones SET latitude=%s, longitude=%s WHERE id=%s",
+                        (zone['latitude'], zone['longitude'], row['id'])
+                    )
+                    fixed += 1
+            if missing_coords:
+                log.info(f"Zone GPS backfill: resolved {fixed}/{len(missing_coords)} zones")
+        except Exception as e:
+            log.warning(f"Zone GPS backfill failed: {e}")
+
         # Auto-create alert rows for active profiles without alerts
         cur.execute("""
             INSERT INTO alerts (user_id, profile_id, channel, frequency, min_score, is_active)

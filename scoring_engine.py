@@ -223,6 +223,26 @@ def _npa_to_city_name(npa):
     return None
 
 
+def resolve_zone_coords(zone):
+    """
+    Remplit latitude/longitude d'une zone si absentes.
+    Utilise NPA_COORDS (si city est un NPA) puis CITY_COORDS (nom de ville).
+    Ne modifie pas la zone si déjà remplie. Retourne la zone (mutée).
+
+    Sans GPS, score_zone() ne peut pas calculer de distance Haversine et
+    tombe sur le fallback canton match (score=10 ou 40), ce qui donne des
+    scores erronés et laisse passer des biens hors zone.
+    """
+    if zone.get('latitude') and zone.get('longitude'):
+        return zone
+    city = zone.get('city', '') or ''
+    coords = _lookup_city_coords(city)
+    if coords:
+        zone['latitude'] = coords[0]
+        zone['longitude'] = coords[1]
+    return zone
+
+
 # Synonymes pour la détection d'équipements dans les descriptions
 SYNONYMS = {
     'vue': ['vue', 'panoram', 'dégagé', 'dégagée', 'lac', 'montagne'],
@@ -443,10 +463,15 @@ def score_type_rooms(prop, profile):
     else:
         score += 25  # Neutral
 
-    # Rooms match
-    rooms = prop.get('rooms')
-    rooms_min = profile.get('rooms_min')
-    rooms_max = profile.get('rooms_max')
+    # Rooms match — cast to float defensively. rooms_min / rooms_max / rooms
+    # all come from NUMERIC columns (Decimal). Any `* float_literal` below
+    # raises TypeError: unsupported operand type(s) for *: 'Decimal' and 'float'.
+    rooms_raw = prop.get('rooms')
+    rooms_min_raw = profile.get('rooms_min')
+    rooms_max_raw = profile.get('rooms_max')
+    rooms = float(rooms_raw) if rooms_raw is not None else None
+    rooms_min = float(rooms_min_raw) if rooms_min_raw is not None else None
+    rooms_max = float(rooms_max_raw) if rooms_max_raw is not None else None
 
     if rooms and rooms_min:
         if rooms >= rooms_min:

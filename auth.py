@@ -265,24 +265,30 @@ def signup():
             profile_id = profile['id']
 
             zones = criteria.get('zones', [])
+            # v6.2 Erreur #3 fix: resolve lat/lng on signup too, same reason
+            # as in PUT /api/profile (see auth.py:~460).
+            from scoring_engine import resolve_zone_coords
             if zones and isinstance(zones, list):
                 for z in zones:
                     city = z.get('city', '')
                     canton = z.get('canton', '')
                     radius = z.get('radius_km', 3.0)
                     if city:
+                        resolve_zone_coords(z)
                         cur.execute("""
-                            INSERT INTO search_zones (profile_id, city, canton, radius_km)
-                            VALUES (%s, %s, %s, %s)
-                        """, (profile_id, city, canton, radius))
+                            INSERT INTO search_zones (profile_id, city, canton, latitude, longitude, radius_km)
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                        """, (profile_id, city, canton, z.get('latitude'), z.get('longitude'), radius))
             else:
                 city = criteria.get('city', '')
                 canton = criteria.get('canton', '')
                 if city:
+                    zone_tmp = {'city': city, 'canton': canton}
+                    resolve_zone_coords(zone_tmp)
                     cur.execute("""
-                        INSERT INTO search_zones (profile_id, city, canton, radius_km)
-                        VALUES (%s, %s, %s, %s)
-                    """, (profile_id, city, canton, 3.0))
+                        INSERT INTO search_zones (profile_id, city, canton, latitude, longitude, radius_km)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                    """, (profile_id, city, canton, zone_tmp.get('latitude'), zone_tmp.get('longitude'), 3.0))
 
         conn.commit()
         token = make_token(user['id'])
@@ -455,7 +461,12 @@ def update_profile():
             cur.execute("SELECT city FROM search_zones WHERE profile_id = %s", (profile_id,))
             old_zone_cities = {r['city'].lower().strip() for r in cur.fetchall() if r['city']}
             cur.execute("DELETE FROM search_zones WHERE profile_id = %s", (profile_id,))
+            # v6.2 Erreur #3 fix: resolve lat/lng via NPA_COORDS / CITY_COORDS
+            # BEFORE inserting. Without GPS, score_zone() can't compute distances
+            # and drops to canton-match fallback (Auvernier at 5 km → zone=40).
+            from scoring_engine import resolve_zone_coords
             for z in zones:
+                resolve_zone_coords(z)
                 cur.execute("""
                     INSERT INTO search_zones (profile_id, city, canton, postal_code, latitude, longitude, radius_km)
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
