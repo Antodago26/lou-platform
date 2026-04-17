@@ -895,16 +895,22 @@
     // Admin panel
     $('admin-btn').onclick = function () { showAdminPanel(); };
 
-    // Load data
-    loadStats();
-    loadProfileBar();
+    // Load data. loadProfileBar AND loadStats are awaited so loadProperties
+    // sees _hasProfile and _lastStats.last_scored_at already set — otherwise a
+    // new signup would flash the wrong empty-state placeholder (Bug #2).
+    var statsReady = loadStats();
+    var profileReady = loadProfileBar();
+    var readinessGate = Promise.all([profileReady, statsReady]).catch(function () {});
     // If first login, trigger scoring first (properties may already exist in DB from other users' scrapes)
     if (localStorage.getItem('lou_first_login') === 'true') {
-      apiFetch(API + '/api/score', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
-        .then(function () { loadProperties(1, 'score', 0); })
+      readinessGate.then(function () {
+        return apiFetch(API + '/api/score', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      })
+        .then(function () { loadStats(); loadProperties(1, 'score', 0); })
         .catch(function () { loadProperties(1, 'score', 0); });
     } else {
-      loadProperties(1, 'score', 0);
+      readinessGate.then(function () { loadProperties(1, 'score', 0); })
+        .catch(function () { loadProperties(1, 'score', 0); });
     }
 
     // Refresh button — reload data from database without scraping
@@ -1416,10 +1422,15 @@
   // ============================================================
   // LOAD STATS
   // ============================================================
+  // v6.3.1 Bug #2: cached stats (incl. last_scored_at) so loadProperties can
+  // distinguish "scoring in progress" vs "scoring done, 0 match".
+  var _lastStats = null;
+
   function loadStats() {
-    apiFetch(API + '/api/stats')
+    return apiFetch(API + '/api/stats')
       .then(function (r) { return r.json(); })
       .then(function (data) {
+        _lastStats = data;
         $('stat-total').textContent = data.total || 0;
         $('stat-new').textContent = data.new_count || 0;
         $('stat-favs').textContent = data.favorites || 0;
@@ -1441,12 +1452,21 @@
   // LOAD PROFILE BAR
   // ============================================================
   var _currentProfile = null; // cached profile for edit form
+  // v6.3.1 Bug #2: shared flag so loadProperties() knows whether to show the
+  // "Lou est en chasse" first-login placeholder (only valid if a profile
+  // actually exists). Previously, users with no profile saw the misleading
+  // "1-3 min" message even though nothing was being scored.
+  var _hasProfile = false;
 
   function loadProfileBar() {
-    apiFetch(API + '/api/profile')
+    // Returns a promise so callers can sequence loadProperties after the
+    // profile state is known (v6.3.1 Bug #2: avoid race where loadProperties
+    // runs before _hasProfile is set).
+    return apiFetch(API + '/api/profile')
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (!data.profile) {
+          _hasProfile = false;
           $('profile-bar').innerHTML = '<div class="dash-profile-empty">Aucun profil de recherche. <a href="#" id="setup-profile">Parlez à Lou</a> pour configurer vos critères.</div>';
           var link = $('setup-profile');
           if (link) link.onclick = function (e) {
@@ -1455,6 +1475,7 @@
           };
           return;
         }
+        _hasProfile = true;
         _currentProfile = data.profile;
         var p = data.profile;
         var tags = [];
@@ -2216,14 +2237,42 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (!data.properties || data.properties.length === 0) {
-          var isFirstLogin = localStorage.getItem('lou_first_login') === 'true';
+          // v6.3.1 Bug #2: distinguish three empty cases:
+          //   A) no profile → "Configurez vos critères"
+          //   B) profile + scoring recent (<3 min) or lou_first_login → "Lou est en chasse"
+          //   C) profile + scoring done (>3 min ago) → "Aucun match — ajustez vos critères"
+          // Without the last_scored_at gate, a user with overly narrow criteria
+          // (e.g. 10 rooms, 5M CHF in Val-de-Travers) sees "1-3 min" forever.
+          var scoringFresh = false;
+          if (_lastStats && _lastStats.last_scored_at) {
+            try {
+              var ageMs = Date.now() - new Date(_lastStats.last_scored_at).getTime();
+              scoringFresh = ageMs < 3 * 60 * 1000; // < 3 min
+            } catch (_) {}
+          }
+          // First-login flag is a frontend hint — still useful right after signup
+          // when last_scored_at is null because scoring hasn't run yet.
+          var isFirstLogin = localStorage.getItem('lou_first_login') === 'true' && _hasProfile;
+          var scoringInProgress = _hasProfile && (scoringFresh || (isFirstLogin && _lastStats && !_lastStats.last_scored_at));
+          if (!_hasProfile) {
+            // Case A — no profile. profile-bar above already shows a prominent
+            // "Aucun profil" CTA; reinforce here with a clear call to action.
+            list.innerHTML = '<div class="dash-empty">' +
+              '<h3 style="margin-bottom:8px;font-family:Playfair Display,serif">Configurez vos critères</h3>' +
+              '<p>Lou a besoin de vos critères pour chercher. <a href="#" class="open-chat-link" style="color:#0369a1;cursor:pointer">Parlez-lui</a> pour démarrer.</p>' +
+            '</div>';
+            var chatLinkNp = list.querySelector('.open-chat-link');
+            if (chatLinkNp) chatLinkNp.onclick = function(e) { e.preventDefault(); _openChat(); };
+            $('pagination').innerHTML = '';
+            return;
+          }
           if (currentNewOnly) {
             list.innerHTML = '<div class="dash-empty">' +
               '<h3 style="margin-bottom:8px;font-family:Playfair Display,serif">Aucun nouveau bien</h3>' +
               '<p>Aucun nouveau bien n\'a été détecté dans les dernières 24 heures.</p>' +
               '<p style="margin-top:12px">Les résultats se mettent à jour automatiquement toutes les 2 heures.</p>' +
             '</div>';
-          } else if (isFirstLogin) {
+          } else if (isFirstLogin || scoringInProgress) {
             list.innerHTML = '<div class="dash-empty">' +
               '<div style="margin-bottom:16px">' + ICO.wolf + '</div>' +
               '<h3 style="margin-bottom:8px;font-family:Playfair Display,serif">Bienvenue ! Lou est en chasse...</h3>' +
@@ -2247,10 +2296,18 @@
               loadStats();
               localStorage.removeItem('lou_first_login');
             }, 90000));
+          } else if (_lastStats && _lastStats.last_scored_at) {
+            // Case C: scoring done (>3 min ago), 0 match → criteria likely too narrow.
+            // Point the user at adjustments rather than implying Lou is still working.
+            list.innerHTML = '<div class="dash-empty">' +
+              '<h3 style="margin-bottom:8px;font-family:Playfair Display,serif">Aucun bien ne correspond</h3>' +
+              '<p>Vos critères sont peut-être trop étroits. Essayez d\'élargir le budget, la zone ou le nombre de pièces.</p>' +
+              '<p style="margin-top:12px"><a href="#" class="open-chat-link" style="color:#0369a1;cursor:pointer">Parlez à Lou</a> pour ajuster, ou modifiez directement votre profil ci-dessus.</p>' +
+            '</div>';
           } else {
             list.innerHTML = '<div class="dash-empty">' +
               '<h3 style="margin-bottom:8px;font-family:Playfair Display,serif">Pas encore de résultats</h3>' +
-              '<p>Lou est en train de chasser pour vous ! Les premiers biens apparaîtront après le prochain cycle de recherche (toutes les 2 heures).</p>' +
+              '<p>Lou va se mettre en chasse dès le prochain cycle (toutes les 2 heures).</p>' +
               '<p style="margin-top:12px">En attendant, <a href="#" class="open-chat-link" style="color:#0369a1;cursor:pointer">parlez à Lou</a> pour affiner vos critères.</p>' +
             '</div>';
           }

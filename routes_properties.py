@@ -417,6 +417,20 @@ def get_stats():
                   AND sp.score_zone >= 80{tx_filter}
         """, [user_id, user_id] + extra_params)
         stats = dict(cur.fetchone())
+
+        # v6.3.1 Bug #2 refinement: expose last_scored_at so the frontend can
+        # distinguish "scoring in progress" (recent, <3 min) from "scoring done
+        # but 0 match" (stale, older). Without this, users with overly narrow
+        # criteria see "Lou est en chasse 1-3 min" forever.
+        cur.execute("""
+            SELECT MAX(scored_at) AS last_scored_at
+            FROM scored_properties
+            WHERE user_id = %s
+        """, (user_id,))
+        row = cur.fetchone()
+        last = row['last_scored_at'] if row else None
+        stats['last_scored_at'] = last.isoformat() if last else None
+        stats['has_profile'] = bool(active_pid)
         return jsonify(stats)
     finally:
         cur.close()
