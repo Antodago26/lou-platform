@@ -247,6 +247,24 @@ if os.environ.get('DATABASE_URL', ''):
     except Exception as e:
         log.exception(f"v6.3 backfill error: {e}")
 
+    # v6.3.2 refix GPS NPA-fallback — gardé par env var V632_REFIX_MODE
+    # (skip | dry-run | apply). skip par défaut pour safety.
+    # Auto-skip si déjà appliqué (migrations_applied).
+    # Doit tourner AVANT _rescore_all_on_boot pour que le rescore utilise
+    # les coords corrigées.
+    try:
+        from migrations.refix_gps_npa_fallback import run_at_boot as refix_run_at_boot
+        from scoring_engine import _lookup_city_coords
+        conn = get_db()
+        try:
+            stats = refix_run_at_boot(conn, _lookup_city_coords)
+            log.info(f"v6.3.2 refix GPS stats: {stats.get('mode')} detected={stats.get('detected')} "
+                     f"updated={stats.get('updated')} status={stats.get('status')}")
+        finally:
+            return_db(conn)
+    except Exception as e:
+        log.exception(f"v6.3.2 refix GPS error: {e}")
+
     # One-time rescore on deploy: the equipment synonyms changed (terrasse ≠ balcon)
     # so all scored_properties rows are stale.  Run in a background thread so boot
     # isn't blocked.
