@@ -205,12 +205,44 @@ NPA_COORDS = {
 }
 
 
+# v6.3.2 étape 3 : abréviations courantes → forme longue.
+# Appliqué AVANT dé-accentuation et AVANT normalisation espace/tiret.
+# Ordre important : 'ste' avant 'st' pour éviter 'ste' → 'saintte'.
+_ABBREV_PATTERNS = [
+    (re.compile(r'\bste[\s\.\-]+', re.IGNORECASE), 'sainte-'),
+    (re.compile(r'\bst[\s\.\-]+', re.IGNORECASE), 'saint-'),
+]
+
+
 def _norm_city_name(name):
-    """Normalise un nom de ville : sans accent, minuscules."""
+    """
+    Normalise un nom de ville pour comparaison robuste :
+      - trim + lower
+      - 'St-', 'St ', 'St.', 'Ste-', 'Ste.', 'Ste ' → 'saint-' / 'sainte-'
+      - strip accents (NFD + filter Mn)
+      - unifie tout whitespace/tiret multiple en un seul '-'
+    Exemples :
+      'Saint-Blaise'    → 'saint-blaise'
+      'St-Blaise'       → 'saint-blaise'
+      'St. Blaise'      → 'saint-blaise'
+      'Saint Blaise'    → 'saint-blaise'
+      'Ste-Croix'       → 'sainte-croix'
+      'Zürich'          → 'zurich'
+      'Neuchâtel'       → 'neuchatel'
+    """
     if not name:
         return ''
-    s = unicodedata.normalize('NFD', str(name).lower().strip())
-    return ''.join(c for c in s if unicodedata.category(c) != 'Mn')
+    s = str(name).lower().strip()
+    # 1. Abréviations St/Ste → forme longue (avant tout)
+    for pattern, repl in _ABBREV_PATTERNS:
+        s = pattern.sub(repl, s)
+    # 2. Strip accents
+    s = unicodedata.normalize('NFD', s)
+    s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
+    # 3. Unifier whitespace/tiret multiples en un seul '-'
+    s = re.sub(r'[\s\-]+', '-', s)
+    # 4. Strip tirets résiduels aux bords
+    return s.strip('-')
 
 
 def _is_npa(value):
@@ -221,18 +253,29 @@ def _is_npa(value):
 
 
 def _lookup_city_coords(city):
-    """Retourne (lat, lng) pour une ville ou un NPA connu, ou None."""
+    """
+    Retourne (lat, lng) pour une ville ou un NPA connu, ou None.
+
+    Stratégie de lookup :
+      1. NPA (4 chiffres) → NPA_COORDS direct
+      2. Ville lowercase → CITY_COORDS direct (fast path)
+      3. Nom normalisé (St/Ste/accents/espaces) vs CITY_COORDS normalisé
+    """
     if not city:
         return None
     c = str(city).strip()
-    # Check NPA first
+    # 1. NPA direct
     if _is_npa(c) and c in NPA_COORDS:
         lat, lng, _name = NPA_COORDS[c]
         return (lat, lng)
-    c = c.lower()
-    if c in CITY_COORDS:
-        return CITY_COORDS[c]
+    # 2. Fast path lowercase
+    c_lower = c.lower()
+    if c_lower in CITY_COORDS:
+        return CITY_COORDS[c_lower]
+    # 3. Slow path normalisé (St/Ste, accents, espaces/tirets)
     cn = _norm_city_name(city)
+    if not cn:
+        return None
     for k, v in CITY_COORDS.items():
         if _norm_city_name(k) == cn:
             return v
