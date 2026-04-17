@@ -428,17 +428,17 @@
       }
     });
 
-    // Hook CTA buttons to open chat directly
-    ['hero-cta-1', 'cta-bottom', 'nav-cta-btn'].forEach(function (id) {
+    // Hook CTA buttons to open chat directly.
+    // v6.3.1 Bug #1: the previous guard `if (panel && !panel.classList.contains('open'))`
+    // silently did nothing when initChat hadn't created the panel yet (race on
+    // slow mobile networks) — clicks looked dead. Now we call _openChat() which
+    // initializes the widget on demand and explicitly opens the panel.
+    ['hero-cta-1', 'cta-bottom', 'nav-cta-btn', 'setup-profile'].forEach(function (id) {
       var el = $(id);
       if (el) {
         el.addEventListener('click', function (e) {
           e.preventDefault();
-          var chatToggle = document.querySelector('.chat-toggle');
-          if (chatToggle) {
-            var panel = document.querySelector('.chat-panel');
-            if (panel && !panel.classList.contains('open')) chatToggle.click();
-          }
+          _openChat();
         });
       }
     });
@@ -1451,7 +1451,7 @@
           var link = $('setup-profile');
           if (link) link.onclick = function (e) {
             e.preventDefault();
-            document.querySelector('.chat-toggle').click();
+            _openChat();
           };
           return;
         }
@@ -2255,7 +2255,7 @@
             '</div>';
           }
           var chatLink = list.querySelector('.open-chat-link');
-          if (chatLink) chatLink.onclick = function(e) { e.preventDefault(); document.querySelector('.chat-toggle').click(); };
+          if (chatLink) chatLink.onclick = function(e) { e.preventDefault(); _openChat(); };
           var refreshBtn = $('first-login-refresh');
           if (refreshBtn) refreshBtn.onclick = function () {
             this.textContent = '⟳ Chargement...';
@@ -2819,7 +2819,30 @@
   // ============================================================
   // CHAT WIDGET
   // ============================================================
+  // v6.3.1 Bug #1 helper: open chat widget reliably from any CTA.
+  // Initializes the widget on demand if it hasn't been created yet, then
+  // explicitly adds `.open` and focuses the input. Previous implementation
+  // relied on the CSS toggle class already existing — which failed silently
+  // if initChat ran late or was skipped because of a JS error earlier.
+  function _openChat() {
+    var panel = document.querySelector('.chat-panel');
+    if (!panel) {
+      try { initChat(); } catch (e) { console.warn('[lou] initChat failed', e); }
+      panel = document.querySelector('.chat-panel');
+    }
+    if (!panel) return;
+    panel.classList.add('open');
+    setTimeout(function () {
+      var input = document.getElementById('chat-in');
+      if (input) {
+        try { input.focus({ preventScroll: true }); } catch (_) { input.focus(); }
+      }
+    }, 120);
+  }
+
   function initChat() {
+    // Idempotent: if the widget already exists, short-circuit.
+    if (document.querySelector('.chat-panel')) return;
     var toggle = ce('button', 'chat-toggle', '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 18 L8.5 7 L10 12 L12 3 L14 12 L15.5 7 L19 18 Z" fill="#fff" opacity="0.95"/><circle cx="10" cy="13.5" r="1" fill="#fff" opacity="0.5"/><circle cx="14" cy="13.5" r="1" fill="#fff" opacity="0.5"/></svg>');
     document.body.appendChild(toggle);
 
