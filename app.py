@@ -218,6 +218,19 @@ if os.environ.get('DATABASE_URL', ''):
     except Exception as e:
         log.warning(f"Migrations error on boot: {e}")
 
+    # v6.3.2 schema: migrations_applied registry + properties.gps_source column.
+    # Idempotent (IF NOT EXISTS). Safe à chaque boot.
+    try:
+        from migrations.schema_v632 import run_schema_v632
+        conn = get_db()
+        try:
+            stats = run_schema_v632(conn)
+            log.info(f"v6.3.2 schema stats: {stats}")
+        finally:
+            return_db(conn)
+    except Exception as e:
+        log.exception(f"v6.3.2 schema error: {e}")
+
     # v6.3 backfills: rooms (NULL/0), Homegate titles (.â mojibake),
     # addresses (leading 'CH '/NPA/dots), properties GPS.
     # Doit tourner APRÈS _run_migrations() (qui backfill les zones GPS) et
