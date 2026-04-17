@@ -76,7 +76,10 @@ CITY_COORDS = {
     'marin-epagnier':       (47.006, 6.984),
     'marin':                (47.006, 6.984),
     'hauterive':            (46.997, 6.941),
-    'saint-blaise':         (47.011, 6.983),
+    'saint-blaise':         (47.0365, 6.9889),
+    'st-blaise':            (47.0365, 6.9889),
+    'cressier':             (47.049, 7.034),
+    'cressier ne':          (47.049, 7.034),
     'le locle':             (47.056, 6.748),
     'val-de-travers':       (46.916, 6.606),
     'fleurier':             (46.902, 6.585),
@@ -89,43 +92,64 @@ CITY_COORDS = {
     'corcelles':            (46.982, 6.872),
     'cernier':              (47.060, 6.903),
     'corcelles ne':         (46.982, 6.872),
+    # v6.3.2: communes ajoutées suite audit NPA
+    'bôle':                 (46.969, 6.836),
+    'bole':                 (46.969, 6.836),
+    'thielle':              (47.019, 7.027),
+    'thielle-wavre':        (47.019, 7.027),
+    'valangin':             (47.016, 6.900),
+    'vilars':               (47.033, 6.932),
+    'vilars ne':            (47.033, 6.932),
+    'montmollin':           (47.000, 6.836),
+    'fontaines ne':         (47.041, 6.901),
+    'fontainemelon':        (47.056, 6.886),
+    'dombresson':           (47.072, 6.954),
+    'villiers':             (47.083, 6.981),
+    'travers':              (46.947, 6.678),
+    'saint-aubin-sauges':   (46.904, 6.760),
+    'st-aubin-sauges':      (46.904, 6.760),
+    'chez-le-bart':         (46.896, 6.813),
+    'engollon':             (47.033, 6.932),  # même NPA que Vilars
 }
 
 # NPA (Swiss postal code) → (lat, lng, canonical_city_name)
 # Used when the user types a postal code instead of a city name in their zone.
 NPA_COORDS = {
     # Canton NE
+    # NOTE v6.3.2: audit 2026-04-17 vs geo.admin.ch a révélé 11 entrées >5km fausses.
+    # Corrections factuelles appliquées, +ajouts 2072 (St-Blaise), 1010 (Lausanne, pas Renens).
+    # Voir migrations/audit_npa_coords.py pour le détail.
     '2000': (46.992, 6.931, 'Neuchâtel'),
-    '2002': (46.992, 6.931, 'Neuchâtel'),
+    '2002': (47.021, 6.948, 'Neuchâtel'),  # fix: delta 3.3km (gg25)
     '2012': (46.974, 6.881, 'Auvernier'),
     '2013': (46.968, 6.869, 'Colombier'),
-    '2014': (46.950, 6.838, 'Boudry'),
+    '2014': (46.969, 6.836, 'Bôle'),  # fix: 2014 = Bôle factuellement, pas Boudry
     '2016': (46.941, 6.845, 'Cortaillod'),
-    '2017': (46.950, 6.838, 'Boudry'),
+    '2017': (46.954, 6.818, 'Boudry'),  # fix: vraies coords Boudry (delta 1.6km)
     '2034': (46.988, 6.859, 'Peseux'),
     '2035': (46.982, 6.872, 'Corcelles-Cormondrèche'),
     '2036': (46.982, 6.872, 'Cormondrèche'),
-    '2037': (46.997, 6.916, 'Milvignes'),
-    '2074': (47.006, 6.984, 'Marin-Epagnier'),
-    '2075': (47.007, 6.988, 'La Tène'),
-    '2088': (47.011, 6.983, 'Saint-Blaise'),
+    '2037': (47.000, 6.836, 'Montmollin'),  # fix: 2037 = Montmollin (commune Milvignes)
     '2068': (46.997, 6.941, 'Hauterive'),
-    '2063': (46.920, 6.793, 'Engollon'),
+    '2072': (47.0365, 6.9889, 'Saint-Blaise'),  # AJOUT: NPA réel de Saint-Blaise
+    '2074': (46.995, 7.013, 'Marin-Epagnier'),  # fix: delta 2.5km
+    '2075': (47.019, 7.027, 'Thielle'),  # fix: 2075 = Thielle (commune La Tène)
+    '2088': (47.049, 7.034, 'Cressier NE'),  # fix CRITIQUE: était Saint-Blaise, est Cressier
+    '2063': (47.033, 6.932, 'Vilars NE'),  # fix: 2063 = Vilars NE (commune Val-de-Ruz)
     '2022': (46.935, 6.820, 'Bevaix'),
     '2023': (46.906, 6.782, 'Gorgier'),
-    '2024': (47.011, 6.983, 'Saint-Aubin-Sauges'),
-    '2025': (46.945, 6.694, 'Chez-le-Bart'),
-    '2042': (47.048, 6.908, 'Val-de-Ruz'),
-    '2046': (47.070, 6.937, 'Fontaines'),
-    '2052': (47.010, 6.943, 'Fontainemelon'),
-    '2056': (47.075, 6.862, 'Dombresson'),
-    '2057': (47.100, 6.826, 'Villiers'),
+    '2024': (46.904, 6.760, 'Saint-Aubin-Sauges'),  # fix CRITIQUE: était coords St-Blaise (20km off)
+    '2025': (46.896, 6.813, 'Chez-le-Bart'),  # fix: delta 10.5km
+    '2042': (47.016, 6.900, 'Valangin'),  # fix: 2042 = Valangin (commune Val-de-Ruz)
+    '2046': (47.041, 6.901, 'Fontaines NE'),  # fix: delta 4.2km
+    '2052': (47.056, 6.886, 'Fontainemelon'),  # fix: delta 6.7km
+    '2056': (47.072, 6.954, 'Dombresson'),  # fix: delta 7.0km
+    '2057': (47.083, 6.981, 'Villiers'),  # fix CRITIQUE: était coords La Chaux-de-Fonds (12km off)
     '2300': (47.100, 6.826, 'La Chaux-de-Fonds'),
-    '2301': (47.100, 6.826, 'La Chaux-de-Fonds'),
+    '2301': (47.114, 6.844, 'La Chaux-de-Fonds'),  # fix: delta 2.6km (gg25)
     '2400': (47.056, 6.748, 'Le Locle'),
-    '2105': (46.916, 6.606, 'Travers'),
+    '2105': (46.947, 6.678, 'Travers'),  # fix: delta 6.4km
     '2114': (46.902, 6.585, 'Fleurier'),
-    '2056': (47.075, 6.862, 'Dombresson'),
     # Canton VD
     '1000': (46.520, 6.632, 'Lausanne'),
     '1003': (46.520, 6.632, 'Lausanne'),
@@ -135,8 +159,8 @@ NPA_COORDS = {
     '1007': (46.520, 6.632, 'Lausanne'),
     '1008': (46.535, 6.603, 'Prilly'),
     '1009': (46.510, 6.662, 'Pully'),
-    '1010': (46.538, 6.588, 'Renens'),
-    '1020': (46.538, 6.588, 'Renens'),
+    '1010': (46.536, 6.659, 'Lausanne'),  # fix CRITIQUE: 1010 = Lausanne, pas Renens !
+    '1020': (46.535, 6.589, 'Renens'),
     '1024': (46.528, 6.561, 'Ecublens'),
     '1110': (46.510, 6.498, 'Morges'),
     '1260': (46.383, 6.239, 'Nyon'),
@@ -163,21 +187,21 @@ NPA_COORDS = {
     '1920': (46.102, 7.074, 'Martigny'),
     '3960': (46.292, 7.535, 'Sierre'),
     # Canton BE
-    '3000': (46.948, 7.447, 'Berne'),
+    '3000': (46.955, 7.421, 'Bern'),  # fix: delta 2.0km (gg25)
     # Canton JU
     '2800': (47.366, 7.343, 'Delémont'),
     # Canton BS
-    '4000': (47.559, 7.588, 'Bâle'),
+    '4000': (47.555, 7.590, 'Basel'),  # fix (gg25, delta 0.5km mais cohérence)
     # Canton ZH
-    '8000': (47.377, 8.541, 'Zürich'),
+    '8000': (47.377, 8.527, 'Zürich'),  # fix: delta 1.1km (gg25)
     # Canton LU
-    '6000': (47.050, 8.308, 'Luzern'),
+    '6000': (47.055, 8.301, 'Luzern'),  # fix (gg25)
     # Canton TI
     '6900': (46.004, 8.951, 'Lugano'),
     # Canton SG
     '9000': (47.424, 9.376, 'St. Gallen'),
     # Canton BI
-    '2500': (47.141, 7.247, 'Bienne'),
+    '2500': (47.149, 7.269, 'Bienne'),  # fix: delta 2.4km (gg25)
 }
 
 
