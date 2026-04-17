@@ -11,8 +11,24 @@
   var USER = null;
   try { USER = JSON.parse(localStorage.getItem('lou_user') || 'null'); } catch(e) { localStorage.removeItem('lou_user'); }
 
-  // Accumulated chatbot criteria (persists across messages)
+  // Accumulated chatbot criteria (persists across messages).
+  // v6.3.1 Bug #3: also persisted to localStorage so anonymous criteria
+  // survive a page reload between chat and signup — without this, a user
+  // who closes the tab after chatting loses their criteria and sees an
+  // empty profile after signup.
   var chatCriteria = {};
+  try {
+    var _storedCriteria = localStorage.getItem('lou_anon_criteria');
+    if (_storedCriteria) chatCriteria = JSON.parse(_storedCriteria) || {};
+  } catch (_) { localStorage.removeItem('lou_anon_criteria'); }
+
+  function _persistChatCriteria() {
+    try {
+      if (chatCriteria && Object.keys(chatCriteria).length > 0) {
+        localStorage.setItem('lou_anon_criteria', JSON.stringify(chatCriteria));
+      }
+    } catch (_) {}
+  }
 
   // Map cache — must live at IIFE scope because saveProfileForm() invalidates
   // it from outside showDashboard() (where the map code lives). Previously
@@ -340,6 +356,10 @@
             localStorage.setItem('lou_user', JSON.stringify(data.user));
             TOKEN = data.token;
             USER = data.user;
+            // v6.3.1 Bug #3: signup already transferred `criteria` in the body.
+            // Clear the anonymous cache so it doesn't resurface on future
+            // anonymous visits on the same device.
+            try { localStorage.removeItem('lou_anon_criteria'); } catch (_) {}
             // If signup, trigger initial scraping so results appear quickly
             if (mode === 'signup') {
               localStorage.setItem('lou_first_login', 'true');
@@ -2965,6 +2985,7 @@
                 chatCriteria[k] = data.criteria[k];
               }
             });
+            _persistChatCriteria();
           }
 
           // Handle profile_ready — prompt signup if not logged in
