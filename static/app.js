@@ -30,6 +30,42 @@
     } catch (_) {}
   }
 
+  // v6.3.2 Bug #1 hardening — lou_first_login a désormais une TTL de 60s
+  // (durée max plausible d'un scoring sync + bg rescore). Avant, le flag
+  // persistait indéfiniment si aucun timer ne le nettoyait : un user qui
+  // fermait/rouvrait l'onglet pendant la fenêtre de scoring se retrouvait
+  // bloqué en permanence sur "Lou est en chasse" sans progression.
+  // Compat : lit aussi l'ancien format 'true' sans TTL (fallback).
+  var _FIRST_LOGIN_TTL_MS = 60000;
+  function _setFirstLogin() {
+    try {
+      localStorage.setItem('lou_first_login', JSON.stringify({
+        value: true,
+        expires_at: Date.now() + _FIRST_LOGIN_TTL_MS
+      }));
+    } catch (_) {}
+  }
+  function _isFirstLoginActive() {
+    var raw = localStorage.getItem('lou_first_login');
+    if (!raw) return false;
+    try {
+      var parsed = JSON.parse(raw);
+      if (parsed && parsed.value && typeof parsed.expires_at === 'number') {
+        if (Date.now() < parsed.expires_at) return true;
+        // Expiré : nettoie pour éviter relecture.
+        localStorage.removeItem('lou_first_login');
+        return false;
+      }
+    } catch (_) {
+      // Fallback compat : ancien format 'true' sans TTL.
+      return raw === 'true';
+    }
+    return false;
+  }
+  function _clearFirstLogin() {
+    try { localStorage.removeItem('lou_first_login'); } catch (_) {}
+  }
+
   // Map cache — must live at IIFE scope because saveProfileForm() invalidates
   // it from outside showDashboard() (where the map code lives). Previously
   // declared as `var _mapAllProps` inside showDashboard, which made the
@@ -362,7 +398,7 @@
             try { localStorage.removeItem('lou_anon_criteria'); } catch (_) {}
             // If signup, trigger initial scraping so results appear quickly
             if (mode === 'signup') {
-              localStorage.setItem('lou_first_login', 'true');
+              _setFirstLogin();
               fetch(API + '/api/scrape', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + data.token },
@@ -922,7 +958,7 @@
     var profileReady = loadProfileBar();
     var readinessGate = Promise.all([profileReady, statsReady]).catch(function () {});
     // If first login, trigger scoring first (properties may already exist in DB from other users' scrapes)
-    if (localStorage.getItem('lou_first_login') === 'true') {
+    if (_isFirstLoginActive()) {
       readinessGate.then(function () {
         return apiFetch(API + '/api/score', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       })
@@ -2272,7 +2308,7 @@
           }
           // First-login flag is a frontend hint — still useful right after signup
           // when last_scored_at is null because scoring hasn't run yet.
-          var isFirstLogin = localStorage.getItem('lou_first_login') === 'true' && _hasProfile;
+          var isFirstLogin = _isFirstLoginActive() && _hasProfile;
           var scoringInProgress = _hasProfile && (scoringFresh || (isFirstLogin && _lastStats && !_lastStats.last_scored_at));
           if (!_hasProfile) {
             // Case A — no profile. profile-bar above already shows a prominent
@@ -2314,7 +2350,7 @@
             _firstLoginTimers.push(setTimeout(function () {
               loadProperties(1, 'score', 0);
               loadStats();
-              localStorage.removeItem('lou_first_login');
+              _clearFirstLogin();
             }, 90000));
           } else if (_lastStats && _lastStats.last_scored_at) {
             // Case C: scoring done (>3 min ago), 0 match → criteria likely too narrow.
@@ -2349,7 +2385,7 @@
         // Clear first login flag once we have results + cancel any pending
         // first-login auto-refresh timers so they don't fire later on top of
         // a fully-loaded dashboard.
-        localStorage.removeItem('lou_first_login');
+        _clearFirstLogin();
         _clearFirstLoginTimers();
 
         // Store property data for detail view
@@ -3060,7 +3096,8 @@
       // Case B ("Lou est en chasse 1-3 min") with its progress bar + auto-refresh,
       // instead of falling through to Case D ("toutes les 2 heures") during the
       // 5-15s window where the bg rescore thread hasn't committed yet.
-      localStorage.setItem('lou_first_login', 'true');
+      // TTL 60s pour éviter qu'un user fermant l'onglet reste bloqué.
+      _setFirstLogin();
       apiFetch(API + '/api/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
