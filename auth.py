@@ -289,7 +289,7 @@ def signup():
                     canton = z.get('canton', '')
                     radius = z.get('radius_km', 3.0)
                     if city:
-                        resolve_zone_coords(z)
+                        resolve_zone_coords(z, conn=conn)
                         cur.execute("""
                             INSERT INTO search_zones (profile_id, city, canton, latitude, longitude, radius_km)
                             VALUES (%s, %s, %s, %s, %s, %s)
@@ -299,7 +299,7 @@ def signup():
                 canton = criteria.get('canton', '')
                 if city:
                     zone_tmp = {'city': city, 'canton': canton}
-                    resolve_zone_coords(zone_tmp)
+                    resolve_zone_coords(zone_tmp, conn=conn)
                     cur.execute("""
                         INSERT INTO search_zones (profile_id, city, canton, latitude, longitude, radius_km)
                         VALUES (%s, %s, %s, %s, %s, %s)
@@ -481,7 +481,7 @@ def update_profile():
             # so a bad payload doesn't wipe out existing zones.
             from scoring_engine import resolve_zone_coords
             for z in zones:
-                resolve_zone_coords(z)
+                resolve_zone_coords(z, conn=conn)
                 if not z.get('latitude') or not z.get('longitude'):
                     conn.rollback()
                     return jsonify({

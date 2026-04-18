@@ -290,23 +290,289 @@ def _npa_to_city_name(npa):
     return None
 
 
-def resolve_zone_coords(zone):
+# ======================================================================
+# v6.3.2 étape 4 — geo.admin.ch fallback + cache DB write-through
+# ----------------------------------------------------------------------
+# Lookup order dans resolve_zone_coords(zone, conn) :
+#   1. Cache DB (geo_cache)                   — 0 latence
+#   2. Dict local Python (CITY_COORDS/NPA)    — 0 latence + cache write
+#   3. API geo.admin type=locations           — <3s + cache write
+#   4. API geo.admin type=locations+gg25      — <3s + cache write
+#   5. Sinon cache "miss" (TTL 7j) + None     — caller décide (UX chat)
+#
+# Si conn=None (hot-path scoring), reste sur dict-only : ne fait PAS d'I/O.
+# ======================================================================
+
+_GEO_ADMIN_URL = 'https://api3.geo.admin.ch/rest/services/api/SearchServer'
+_GEO_ADMIN_TIMEOUT = 3.0   # s — plan spec
+_CACHE_MISS_TTL_DAYS = 7
+
+
+def _norm_cache_key(q):
+    """Clé cache normalisée : NPA → 4 digits inchangés, sinon _norm_city_name."""
+    if not q:
+        return ''
+    s = str(q).strip().lower()
+    if re.match(r'^\d{4}$', s):
+        return s
+    return _norm_city_name(s)
+
+
+def _cache_get(conn, key):
+    """
+    Retourne (lat, lng) si hit cache, None si miss valide (dans TTL) ou absent.
+    Bump hit_count + last_hit_at sur hit.
+    Si row source='miss' et older than 7 days, DELETE et retourne None (=> re-tenter).
+    Ne throw jamais : cache unavailable → fallthrough.
+    """
+    if not key or conn is None:
+        return None
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT latitude, longitude, source, created_at FROM geo_cache WHERE query = %s",
+            (key,),
+        )
+        row = cur.fetchone()
+        if not row:
+            cur.close()
+            return None
+        # db.py configure RealDictCursor — rows sont des dicts.
+        lat = row['latitude']
+        lng = row['longitude']
+        src = row['source']
+        created = row['created_at']
+        if src == 'miss':
+            # TTL 7j
+            from datetime import datetime, timedelta
+            if created and (datetime.now() - created) > timedelta(days=_CACHE_MISS_TTL_DAYS):
+                cur.execute("DELETE FROM geo_cache WHERE query = %s", (key,))
+                conn.commit()
+                cur.close()
+                return None
+            cur.close()
+            return 'MISS'  # sentinel : caller sait qu'il faut PAS ré-interroger l'API
+        # Hit valide — bump stats
+        cur.execute(
+            "UPDATE geo_cache SET hit_count = hit_count + 1, last_hit_at = NOW() WHERE query = %s",
+            (key,),
+        )
+        conn.commit()
+        cur.close()
+        return (float(lat), float(lng))
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        _log_warn(f"geo_cache read failed for key={key!r}: {e}")
+        return None
+
+
+def _cache_put(conn, key, lat, lng, name, postal_code, source):
+    """UPSERT d'un hit. Idempotent. Ne throw jamais."""
+    if not key or conn is None:
+        return
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO geo_cache (query, postal_code, name, latitude, longitude, source)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (query) DO UPDATE SET
+                hit_count = geo_cache.hit_count + 1,
+                last_hit_at = NOW()
+            """,
+            (key, postal_code, name or key, float(lat), float(lng), source),
+        )
+        conn.commit()
+        cur.close()
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        _log_warn(f"geo_cache write failed for key={key!r}: {e}")
+
+
+def _cache_put_miss(conn, key):
+    """Enregistre un miss avec lat=0, lng=0, source='miss'. TTL 7j appliqué à la lecture."""
+    if not key or conn is None:
+        return
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO geo_cache (query, postal_code, name, latitude, longitude, source)
+            VALUES (%s, NULL, %s, 0, 0, 'miss')
+            ON CONFLICT (query) DO UPDATE SET
+                created_at = NOW(),
+                last_hit_at = NOW()
+            """,
+            (key, key),
+        )
+        conn.commit()
+        cur.close()
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        _log_warn(f"geo_cache miss-write failed for key={key!r}: {e}")
+
+
+def _log_warn(msg):
+    try:
+        import logging
+        logging.getLogger('lou-app').warning(msg)
+    except Exception:
+        pass
+
+
+def _geo_admin_search(query, origins=None):
+    """
+    Appel geo.admin.ch SearchServer. Retourne dict {lat, lng, name, postal_code}
+    ou None. Ne throw jamais :
+      - 4xx/5xx : warning + None (caller NE CACHE PAS le miss, on retry plus tard)
+      - timeout : warning + None (idem)
+      - 200 mais 0 résultats : retourne {} (caller cache le miss)
+    Le caller distingue None (erreur API) vs {} (vraiment pas trouvé).
+    """
+    try:
+        import requests
+    except Exception:
+        return None
+    params = {
+        'searchText': query,
+        'type': 'locations',
+        'limit': 5,
+    }
+    if origins:
+        params['origins'] = origins
+    try:
+        r = requests.get(_GEO_ADMIN_URL, params=params, timeout=_GEO_ADMIN_TIMEOUT)
+    except Exception as e:
+        _log_warn(f"geo.admin timeout/conn error for {query!r}: {e}")
+        return None
+    if r.status_code != 200:
+        _log_warn(f"geo.admin HTTP {r.status_code} for {query!r}")
+        return None
+    try:
+        data = r.json()
+    except Exception as e:
+        _log_warn(f"geo.admin invalid JSON for {query!r}: {e}")
+        return None
+    results = data.get('results') or []
+    if not results:
+        return {}  # vraiment vide — cacher le miss
+    # Prendre le premier résultat. attrs contient y/x (LV95) + lat/lon (WGS84) selon type.
+    attrs = results[0].get('attrs') or {}
+    lat = attrs.get('lat')
+    lng = attrs.get('lon')
+    if lat is None or lng is None:
+        # Fallback LV95 → WGS84 (approx Swisstopo, précision ~1m, OK pour centre commune)
+        y = attrs.get('y')  # easting
+        x = attrs.get('x')  # northing
+        if y is not None and x is not None:
+            lat, lng = _lv95_to_wgs84(float(y), float(x))
+        else:
+            _log_warn(f"geo.admin result missing coords for {query!r}: {attrs}")
+            return {}
+    label = attrs.get('label') or attrs.get('detail') or query
+    # postal_code : peut être dans detail/label selon le layer
+    postal = None
+    if 'zip' in attrs:
+        postal = str(attrs.get('zip'))
+    elif 'detail' in attrs:
+        m = re.search(r'\b(\d{4})\b', str(attrs.get('detail')))
+        if m:
+            postal = m.group(1)
+    return {
+        'lat': float(lat),
+        'lng': float(lng),
+        'name': str(label),
+        'postal_code': postal,
+    }
+
+
+def _lv95_to_wgs84(east, north):
+    """Approximation Swisstopo LV95 → WGS84 (précision ~1m). Pour centres communes."""
+    y = (east - 2600000) / 1_000_000
+    x = (north - 1200000) / 1_000_000
+    lat_sec = (16.9023892 + 3.238272 * x
+               - 0.270978 * (y ** 2)
+               - 0.002528 * (x ** 2)
+               - 0.0447 * (y ** 2) * x
+               - 0.0140 * (x ** 3)) * 100
+    lng_sec = (2.6779094 + 4.728982 * y
+               + 0.791484 * y * x
+               + 0.1306 * y * (x ** 2)
+               - 0.0436 * (y ** 3)) * 100
+    return (lat_sec / 36, lng_sec / 36)
+
+
+def resolve_zone_coords(zone, conn=None):
     """
     Remplit latitude/longitude d'une zone si absentes.
-    Utilise NPA_COORDS (si city est un NPA) puis CITY_COORDS (nom de ville).
-    Ne modifie pas la zone si déjà remplie. Retourne la zone (mutée).
+    Retourne la zone (mutée).
+
+    Ordre de résolution (conn requis pour étapes 1/3/4, sinon dict-only) :
+      1. Cache DB (geo_cache) — miss sentinel → bail sans API
+      2. Dict local (NPA_COORDS + CITY_COORDS, normalisation St/Ste/accents)
+         → écrit dans cache si conn fourni
+      3. API geo.admin.ch type=locations (broad)
+      4. API geo.admin.ch type=locations&origins=gg25 (communes only)
+      5. Sinon : cache 'miss' (TTL 7j) + zone.latitude/longitude restent None
 
     Sans GPS, score_zone() ne peut pas calculer de distance Haversine et
-    tombe sur le fallback canton match (score=10 ou 40), ce qui donne des
-    scores erronés et laisse passer des biens hors zone.
+    tombe sur le fallback canton match → scores erronés.
     """
     if zone.get('latitude') and zone.get('longitude'):
         return zone
-    city = zone.get('city', '') or ''
+    city = (zone.get('city', '') or '').strip()
+    if not city:
+        return zone
+    key = _norm_cache_key(city)
+
+    # 1. Cache DB
+    if conn is not None:
+        cached = _cache_get(conn, key)
+        if cached == 'MISS':
+            # Miss valide dans TTL — ne pas ré-interroger
+            return zone
+        if cached:
+            zone['latitude'], zone['longitude'] = cached[0], cached[1]
+            return zone
+
+    # 2. Dict local (fast path — toujours tenté, même sans conn)
     coords = _lookup_city_coords(city)
     if coords:
-        zone['latitude'] = coords[0]
-        zone['longitude'] = coords[1]
+        zone['latitude'], zone['longitude'] = coords[0], coords[1]
+        # Write-through cache si on a un conn
+        if conn is not None:
+            postal = city if _is_npa(city) else None
+            _cache_put(conn, key, coords[0], coords[1], city, postal, 'local_dict')
+        return zone
+
+    # 3/4. API geo.admin — uniquement si conn fourni (évite I/O dans hot-path scoring)
+    if conn is None:
+        return zone
+
+    got_confirmed_empty = False
+    for origins in (None, 'gg25'):
+        res = _geo_admin_search(city, origins=origins)
+        if res is None:
+            # Erreur API (4xx/5xx/timeout) — ne pas cacher miss, essayer fallback
+            continue
+        if not res:
+            # 200 + 0 résultats — confirmed empty, essayer fallback avant miss-cache
+            got_confirmed_empty = True
+            continue
+        zone['latitude'] = res['lat']
+        zone['longitude'] = res['lng']
+        _cache_put(conn, key, res['lat'], res['lng'],
+                   res.get('name'), res.get('postal_code'), 'geo.admin.ch')
+        return zone
+
+    # 5. Miss définitif — uniquement si on a eu au moins un 200+empty confirmé.
+    # Sinon (timeouts / 5xx), on laisse le trafic naturel retenter plus tard
+    # sans polluer le cache avec un miss sur panne transitoire.
+    if got_confirmed_empty:
+        _cache_put_miss(conn, key)
     return zone
 
 
