@@ -512,8 +512,23 @@ def update_profile():
             def _bg_scrape_and_score(city_list, scrape_list, tx, pid, uid):
                 from scrapers import scrape_all, save_to_db
                 from scoring_engine import score_property
-                bg_conn = get_db()
-                bg_cur = bg_conn.cursor()
+                # v6.3.2 Bug #5: lors d'un redéploiement, le pool de connexions
+                # peut être fermé pendant que ce thread démarre. get_db() ou
+                # .cursor() throw InterfaceError/OperationalError et le thread
+                # mourait silencieusement. On catch explicitement et on bail
+                # proprement : le user garde son profil, juste pas de rescore
+                # immédiat (le prochain POST /api/score le fera).
+                import psycopg2
+                try:
+                    bg_conn = get_db()
+                    bg_cur = bg_conn.cursor()
+                except (psycopg2.InterfaceError, psycopg2.OperationalError) as e:
+                    log.warning(f"bg_scrape_and_score: DB pool unavailable ({e}), "
+                                f"skipping rescore for profile {pid} (likely deploy restart)")
+                    return
+                except Exception as e:
+                    log.error(f"bg_scrape_and_score: get_db failed: {e}", exc_info=True)
+                    return
                 try:
                     # Only scrape cities that are genuinely NEW (not already in the profile)
                     if scrape_list:
@@ -584,8 +599,10 @@ def update_profile():
                     except Exception:
                         pass
                 finally:
-                    bg_cur.close()
-                    return_db(bg_conn)
+                    try: bg_cur.close()
+                    except Exception: pass
+                    try: return_db(bg_conn)
+                    except Exception: pass
 
             thread = threading.Thread(target=_bg_scrape_and_score, args=(all_cities, cities_to_scrape, transaction, profile_id, request.user_id))
             thread.daemon = True
