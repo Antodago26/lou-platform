@@ -97,6 +97,39 @@ def ensure_geo_cache_table(conn) -> None:
     cur.close()
 
 
+def ensure_unresolved_locations_table(conn) -> None:
+    """
+    Table d'audit pour les résolutions géographiques échouées (step 5).
+
+    Utilisée par le chat UX : quand une zone entrée par l'user n'est ni dans
+    CITY_COORDS/NPA_COORDS, ni dans geo_cache, ni résolue par geo.admin.ch,
+    on log ici la query + les suggestions proposées + le choix final de l'user
+    (ou NULL si abandon). Audit hebdo pour enrichir CITY_COORDS et prioriser
+    les ajustements.
+
+    user_id est nullable + anon_session_id TEXT pour supporter le chat anonyme
+    (pré-signup flow). Index sur created_at pour scan chronologique.
+    """
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS unresolved_locations (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            anon_session_id TEXT,
+            query TEXT NOT NULL,
+            suggestions_json JSONB,
+            chosen TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+    """)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_unresolved_locations_created_at
+        ON unresolved_locations(created_at DESC)
+    """)
+    conn.commit()
+    cur.close()
+
+
 def run_schema_v632(conn) -> dict:
     """Point d'entrée — à appeler au boot, avant les autres migrations v6.3.2."""
     stats = {}
@@ -120,5 +153,12 @@ def run_schema_v632(conn) -> dict:
     except Exception as e:
         log.exception("geo_cache create failed: %s", e)
         stats['geo_cache_table'] = f'error: {e}'
+
+    try:
+        ensure_unresolved_locations_table(conn)
+        stats['unresolved_locations_table'] = 'ok'
+    except Exception as e:
+        log.exception("unresolved_locations create failed: %s", e)
+        stats['unresolved_locations_table'] = f'error: {e}'
 
     return stats
