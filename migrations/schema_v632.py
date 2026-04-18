@@ -63,6 +63,40 @@ def ensure_gps_source_column(conn) -> None:
     cur.close()
 
 
+def ensure_geo_cache_table(conn) -> None:
+    """
+    Table de cache persistant pour geo.admin.ch + dict local.
+
+    Stratégie :
+      - Hits (lat/lng non null) : pas de TTL, coords communes suisses stables.
+      - Miss (latitude=0 & longitude=0 & source='miss') : TTL 7j, re-tenter
+        au cas où une nouvelle commune/alias apparaît côté geo.admin.
+      - query normalisé (lowercase, accents strippés, trim) — PRIMARY KEY
+        pour idempotence des write-through.
+      - source : 'geo.admin.ch' | 'local_dict' | 'miss'.
+    """
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS geo_cache (
+            query TEXT PRIMARY KEY,
+            postal_code TEXT,
+            name TEXT NOT NULL,
+            latitude FLOAT NOT NULL,
+            longitude FLOAT NOT NULL,
+            source TEXT NOT NULL,
+            hit_count INT DEFAULT 1,
+            created_at TIMESTAMP DEFAULT NOW(),
+            last_hit_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_geo_cache_postal
+        ON geo_cache(postal_code)
+    """)
+    conn.commit()
+    cur.close()
+
+
 def run_schema_v632(conn) -> dict:
     """Point d'entrée — à appeler au boot, avant les autres migrations v6.3.2."""
     stats = {}
@@ -79,5 +113,12 @@ def run_schema_v632(conn) -> dict:
     except Exception as e:
         log.exception("gps_source ADD COLUMN failed: %s", e)
         stats['gps_source_column'] = f'error: {e}'
+
+    try:
+        ensure_geo_cache_table(conn)
+        stats['geo_cache_table'] = 'ok'
+    except Exception as e:
+        log.exception("geo_cache create failed: %s", e)
+        stats['geo_cache_table'] = f'error: {e}'
 
     return stats
