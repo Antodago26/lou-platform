@@ -2352,7 +2352,7 @@
             list.innerHTML = '<div class="dash-empty">' +
               '<h3 style="margin-bottom:8px;font-family:Playfair Display,serif">Aucun nouveau bien</h3>' +
               '<p>Aucun nouveau bien n\'a été détecté dans les dernières 24 heures.</p>' +
-              '<p style="margin-top:12px">Les résultats se mettent à jour automatiquement toutes les 2 heures.</p>' +
+              '<p style="margin-top:12px">Les résultats se mettent à jour automatiquement.</p>' +
             '</div>';
           } else if (isFirstLogin || scoringInProgress) {
             list.innerHTML = '<div class="dash-empty">' +
@@ -2387,11 +2387,19 @@
               '<p style="margin-top:12px"><a href="#" class="open-chat-link" style="color:#0369a1;cursor:pointer">Parlez à Lou</a> pour ajuster, ou modifiez directement votre profil ci-dessus.</p>' +
             '</div>';
           } else {
+            // Case D: profile exists but no last_scored_at yet (scoring not run, or
+            // background scrape still warming up). Auto-refresh once after 10s so
+            // the user doesn't sit on a stale empty state.
             list.innerHTML = '<div class="dash-empty">' +
-              '<h3 style="margin-bottom:8px;font-family:Playfair Display,serif">Pas encore de résultats</h3>' +
-              '<p>Lou va se mettre en chasse dès le prochain cycle (toutes les 2 heures).</p>' +
+              '<h3 style="margin-bottom:8px;font-family:Playfair Display,serif">Analyse en cours…</h3>' +
+              '<p>Vos premiers résultats apparaîtront dans quelques secondes.</p>' +
               '<p style="margin-top:12px">En attendant, <a href="#" class="open-chat-link" style="color:#0369a1;cursor:pointer">parlez à Lou</a> pour affiner vos critères.</p>' +
             '</div>';
+            _clearFirstLoginTimers();
+            _firstLoginTimers.push(setTimeout(function () {
+              loadStats();
+              loadProperties(1, 'score', 0);
+            }, 10000));
           }
           var chatLink = list.querySelector('.open-chat-link');
           if (chatLink) chatLink.onclick = function(e) { e.preventDefault(); _openChat(); };
@@ -3120,7 +3128,7 @@
       // v6.3.2 Bug #1: set lou_first_login BEFORE PUT so that if the user is
       // currently on the dashboard, the next loadProperties() pass renders
       // Case B ("Lou est en chasse 1-3 min") with its progress bar + auto-refresh,
-      // instead of falling through to Case D ("toutes les 2 heures") during the
+      // instead of falling through to Case D ("Analyse en cours…") during the
       // 5-15s window where the bg rescore thread hasn't committed yet.
       // TTL 60s pour éviter qu'un user fermant l'onglet reste bloqué.
       _setFirstLogin();
