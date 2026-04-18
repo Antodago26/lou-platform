@@ -3046,15 +3046,43 @@
         surface_min: criteria.surface_min,
         priorities: criteria.priorities || [],
         zones: (criteria.zones || []).map(function (z) {
-          return { city: z.city || '', canton: z.canton || '', radius_km: z.radius_km || 3 };
+          // v6.3.2 Bug #2: include lat/lng if chat extracted them (chat LLM
+          // currently doesn't, but future geo.admin.ch resolution may add them).
+          var zone = { city: z.city || '', canton: z.canton || '', radius_km: z.radius_km || 3 };
+          if (z.latitude) zone.latitude = z.latitude;
+          if (z.longitude) zone.longitude = z.longitude;
+          if (z.postal_code) zone.postal_code = z.postal_code;
+          return zone;
         })
       };
+      // v6.3.2 Bug #1: set lou_first_login BEFORE PUT so that if the user is
+      // currently on the dashboard, the next loadProperties() pass renders
+      // Case B ("Lou est en chasse 1-3 min") with its progress bar + auto-refresh,
+      // instead of falling through to Case D ("toutes les 2 heures") during the
+      // 5-15s window where the bg rescore thread hasn't committed yet.
+      localStorage.setItem('lou_first_login', 'true');
       apiFetch(API + '/api/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
-      }).then(function (r) { return r.json(); })
-      .then(function () {
+      }).then(function (r) {
+        return r.json().then(function (body) { return { status: r.status, body: body }; });
+      })
+      .then(function (res) {
+        // v6.3.2 Bug #2: backend now returns 400 if any zone failed to resolve.
+        if (res.status === 400) {
+          var body = document.getElementById('chat-body');
+          if (body) {
+            var msg = (res.body && res.body.error) ? res.body.error :
+              "Je n'ai pas pu enregistrer tes critères — une commune n'a pas été reconnue.";
+            body.insertAdjacentHTML('beforeend',
+              '<div class="chat-msg bot" style="background:#fef3c7;color:#92400e">' +
+              escapeHtml(msg) + ' Peux-tu préciser la commune ?</div>');
+            body.scrollTop = body.scrollHeight;
+          }
+          // Keep criteria locally so the user can retry in one more turn.
+          return;
+        }
         loadProfileBar();
         // Trigger scoring + scraping so results appear immediately
         apiFetch(API + '/api/score', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
