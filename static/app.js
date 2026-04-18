@@ -1642,13 +1642,25 @@
     input.setAttribute('autocomplete', 'off');
     input.addEventListener('input', function () {
       _pfAutoSelected = null;
+      _pfClearZoneError();
       clearTimeout(_pfAutoTimer);
       var q = input.value.trim();
       if (q.length < 2) { dd.style.display = 'none'; return; }
       _pfAutoTimer = setTimeout(function () { _pfFetchSuggestions(q, dd, input); }, 250);
     });
     input.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') { e.preventDefault(); _pfAddZone(); dd.style.display = 'none'; }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        // v6.3.2 Bug #2: si le dropdown est visible avec des suggestions et
+        // aucune n'a été sélectionnée, auto-sélectionne la première (UX : pas
+        // obliger le clic quand l'user a tapé presque tout le nom).
+        if (!_pfAutoSelected && dd.style.display !== 'none') {
+          var first = dd.querySelector('.pf-auto-item');
+          if (first) { first.click(); }
+        }
+        _pfAddZone();
+        dd.style.display = 'none';
+      }
       if (e.key === 'Escape') dd.style.display = 'none';
     });
     document.addEventListener('click', function (e) {
@@ -1724,25 +1736,38 @@
     if (panel) panel.style.display = 'none';
     document.querySelectorAll('.fav-compare-check').forEach(function (cb) { cb.checked = false; });
   };
+  function _pfShowZoneError(msg) {
+    var el = document.getElementById('pf-zone-error');
+    if (el) { el.textContent = msg; el.style.display = 'block'; }
+  }
+  function _pfClearZoneError() {
+    var el = document.getElementById('pf-zone-error');
+    if (el) { el.textContent = ''; el.style.display = 'none'; }
+  }
   window._pfAddZone = function () {
-    var city = $('pf-new-city').value.trim();
+    var input = $('pf-new-city');
+    var city = input ? input.value.trim() : '';
     var kmStr = $('pf-new-km').value;
     var km = parseFloat(kmStr);
     if (isNaN(km)) km = 3;
-    if (!city) return;
-    // Use selected suggestion data if available
-    var canton = '';
-    var lat = null, lng = null, postal = null;
-    if (_pfAutoSelected) {
-      city = _pfAutoSelected.label;
-      canton = _pfAutoSelected.canton || '';
-      lat = _pfAutoSelected.lat;
-      lng = _pfAutoSelected.lng;
-      postal = _pfAutoSelected.npa || null;
+    if (!city) { _pfClearZoneError(); return; }
+    // v6.3.2 Bug #2: on exige qu'une suggestion ait été sélectionnée. Saisie
+    // libre (ex: 'corta') → resolve_zone_coords échoue silencieusement,
+    // scoring tombe au fallback canton, user voit dashboard vide sans raison.
+    if (!_pfAutoSelected) {
+      _pfShowZoneError('Sélectionnez une commune dans la liste proposée.');
+      if (input) input.focus();
+      return;
     }
+    var canton = _pfAutoSelected.canton || '';
+    var lat = _pfAutoSelected.lat;
+    var lng = _pfAutoSelected.lng;
+    var postal = _pfAutoSelected.npa || null;
+    city = _pfAutoSelected.label;
     _pfZones.push({ city: city, canton: canton, radius_km: km, latitude: lat, longitude: lng, postal_code: postal });
-    $('pf-new-city').value = '';
+    if (input) input.value = '';
     _pfAutoSelected = null;
+    _pfClearZoneError();
     _pfRenderZones();
   };
   window._pfToggleChip = function (el) { el.classList.toggle('on'); };
@@ -2125,6 +2150,7 @@
               '<select id="pf-new-km"><option value="0">Commune exacte</option><option value="1">1 km</option><option value="2">2 km</option><option value="3" selected>3 km</option><option value="5">5 km</option><option value="10">10 km</option><option value="15">15 km</option><option value="20">20 km</option></select>' +
               '<button class="pf-add-btn" onclick="_pfAddZone()">+</button>' +
             '</div>' +
+            '<div id="pf-zone-error" style="display:none;color:#b91c1c;font-size:13px;margin-top:6px"></div>' +
           '</div>' +
           '<div class="pf-section pf-flex1"><div class="pf-section-title">' + ICO.home + ' Type de bien</div>' +
             '<div class="pf-chips" id="pf-types">' + typeChips + '</div>' +

@@ -477,13 +477,19 @@ def update_profile():
         if zones:
             cur.execute("SELECT city FROM search_zones WHERE profile_id = %s", (profile_id,))
             old_zone_cities = {r['city'].lower().strip() for r in cur.fetchall() if r['city']}
-            cur.execute("DELETE FROM search_zones WHERE profile_id = %s", (profile_id,))
-            # v6.2 Erreur #3 fix: resolve lat/lng via NPA_COORDS / CITY_COORDS
-            # BEFORE inserting. Without GPS, score_zone() can't compute distances
-            # and drops to canton-match fallback (Auvernier at 5 km → zone=40).
+            # v6.3.2 Bug #2: validate all zones resolve to GPS BEFORE any delete,
+            # so a bad payload doesn't wipe out existing zones.
             from scoring_engine import resolve_zone_coords
             for z in zones:
                 resolve_zone_coords(z)
+                if not z.get('latitude') or not z.get('longitude'):
+                    conn.rollback()
+                    return jsonify({
+                        "error": f"Commune non reconnue : « {z.get('city', '?')} ». Veuillez sélectionner une suggestion dans la liste.",
+                        "unresolved_zone": z.get('city', '')
+                    }), 400
+            cur.execute("DELETE FROM search_zones WHERE profile_id = %s", (profile_id,))
+            for z in zones:
                 cur.execute("""
                     INSERT INTO search_zones (profile_id, city, canton, postal_code, latitude, longitude, radius_km)
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
