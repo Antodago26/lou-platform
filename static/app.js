@@ -942,9 +942,25 @@
     document.body.appendChild(wrap);
 
     // Logout
+    // v6.3.2 Bug #4: clear ALL lou_* keys, not just token/user. Otherwise
+    // lou_first_login / lou_anon_criteria / lou_anon_session leak across
+    // accounts when users switch on the same browser (e.g. a friend test
+    // session reusing a demo laptop).
     $('logout-btn').onclick = function () {
-      localStorage.removeItem('lou_token');
-      localStorage.removeItem('lou_user');
+      try {
+        var toRemove = [];
+        for (var i = 0; i < localStorage.length; i++) {
+          var k = localStorage.key(i);
+          if (k && k.indexOf('lou_') === 0) toRemove.push(k);
+        }
+        toRemove.forEach(function (k) { localStorage.removeItem(k); });
+      } catch (_) {
+        // Fallback: explicit list if localStorage iteration fails.
+        ['lou_token', 'lou_user', 'lou_first_login',
+         'lou_anon_criteria', 'lou_anon_session'].forEach(function (k) {
+          try { localStorage.removeItem(k); } catch (_) {}
+        });
+      }
       window.location.reload();
     };
 
