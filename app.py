@@ -130,7 +130,7 @@ def _run_migrations():
             fixed = 0
             for row in missing_coords:
                 zone = {'city': row['city'], 'canton': row['canton']}
-                resolve_zone_coords(zone, conn=conn)
+                resolve_zone_coords(zone, conn=db)
                 if zone.get('latitude') and zone.get('longitude'):
                     cur.execute(
                         "UPDATE search_zones SET latitude=%s, longitude=%s WHERE id=%s",
