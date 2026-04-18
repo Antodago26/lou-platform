@@ -768,6 +768,8 @@
       '.chat-suggestions{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}',
       '.chat-sug{padding:6px 12px;background:#e0f2fe;border:none;border-radius:20px;font-size:12px;color:#0369a1;cursor:pointer;transition:background .2s}',
       '.chat-sug:hover{background:#bae6fd}',
+      '.chat-unresolved{display:flex;flex-direction:column;gap:4px;margin-top:4px;align-self:flex-start;max-width:85%}',
+      '.chat-unresolved-label{font-size:12px;color:#64748b;font-style:italic}',
       '@media(max-width:768px){.chat-panel{width:calc(100vw - 24px);right:12px;bottom:88px;height:50vh;max-height:380px;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,.25)}.chat-input{padding:10px;padding-bottom:max(10px,env(safe-area-inset-bottom))}.chat-input input{font-size:16px}}',
       '@media(max-width:480px){.chat-toggle{width:48px;height:48px;bottom:16px;right:16px}.chat-panel{width:calc(100vw - 20px);right:10px;bottom:72px;height:45vh;max-height:340px;border-radius:14px}.chat-head{padding:10px 14px;font-size:13px}.chat-body{padding:10px;gap:8px}.chat-msg{font-size:13px;padding:8px 12px}.chat-input{padding:8px}.chat-input input{padding:8px 10px;font-size:16px}.chat-input button{padding:8px 12px}}'
     ].join(''));
@@ -3040,7 +3042,7 @@
       var body = $('chat-body');
 
       // Remove old suggestion buttons before adding new message
-      var oldSugs = body.querySelectorAll('.chat-suggestions');
+      var oldSugs = body.querySelectorAll('.chat-suggestions, .chat-unresolved');
       oldSugs.forEach(function (el) { el.remove(); });
 
       body.insertAdjacentHTML('beforeend', '<div class="chat-msg user">' + escapeHtml(msg) + '</div>');
@@ -3092,8 +3094,52 @@
             _updateProfileFromChat(chatCriteria);
           }
 
-          // Show suggestions
-          if (data.suggestions && data.suggestions.length) {
+          // v6.3.2 étape 5 — unresolved zones : un groupe distinct par zone,
+          // avec label "Pour « query » :" + boutons cliquables. Chaque click
+          // inject la commune corrigée comme turn user (transparent, pas
+          // silent patch) via sendMsg(), et POST /api/chat/unresolved-choice
+          // pour audit. Rendu AVANT data.suggestions pour éviter doublons
+          // (backend duplique data.suggestions = top-3 de la 1ère unresolved).
+          var hasUnresolved = data.unresolved_zones && data.unresolved_zones.length;
+          if (hasUnresolved) {
+            data.unresolved_zones.forEach(function (uz) {
+              var groupHtml = '<div class="chat-unresolved" data-log-id="' +
+                (uz.log_id != null ? uz.log_id : '') + '" data-query="' +
+                escapeHtml(uz.query || '') + '">';
+              if (uz.suggestions && uz.suggestions.length) {
+                groupHtml += '<div class="chat-unresolved-label">Pour « ' +
+                  escapeHtml(uz.query || '') + ' » :</div>';
+                groupHtml += '<div class="chat-suggestions">';
+                uz.suggestions.forEach(function (s) {
+                  groupHtml += '<button class="chat-sug chat-sug-city" data-city="' +
+                    escapeHtml(s.city) + '">' + escapeHtml(s.city) + '</button>';
+                });
+                groupHtml += '</div>';
+              }
+              // Note : si suggestions=[], le message bot ci-dessus explique
+              // déjà à l'user quoi faire (donner NPA ou nom commune).
+              // On rend quand même le div (vide) avec data-log-id pour
+              // tracer l'abandon éventuel si on l'implémente un jour.
+              groupHtml += '</div>';
+              body.insertAdjacentHTML('beforeend', groupHtml);
+            });
+            body.querySelectorAll('.chat-unresolved').forEach(function (grp) {
+              var logId = grp.getAttribute('data-log-id');
+              grp.querySelectorAll('.chat-sug-city').forEach(function (btn) {
+                btn.onclick = function () {
+                  var city = btn.getAttribute('data-city');
+                  _postUnresolvedChoice(logId, city);
+                  $('chat-in').value = city;
+                  sendMsg();
+                };
+              });
+            });
+          }
+
+          // Show generic suggestions — skip si on a déjà rendu des groupes
+          // unresolved (backend renvoie les mêmes noms dans data.suggestions
+          // pour fallback mais on veut pas les dupliquer).
+          if (!hasUnresolved && data.suggestions && data.suggestions.length) {
             var sugHtml = '<div class="chat-suggestions">';
             data.suggestions.forEach(function (s) {
               sugHtml += '<button class="chat-sug">' + escapeHtml(s) + '</button>';
@@ -3118,6 +3164,25 @@
           _chatSending = false;
           if (sendBtn) sendBtn.disabled = false;
         });
+    }
+
+    // v6.3.2 étape 5 — log silent du choix user face aux suggestions de
+    // commune. Fire-and-forget ; un échec réseau ne doit pas bloquer l'UX.
+    // Le payload inclut anon_session_id pour les chats pré-signup (même si
+    // le backend a déjà cette info — on la repasse pour cohérence/future).
+    function _postUnresolvedChoice(logId, chosen) {
+      if (!logId) return;
+      var headers = { 'Content-Type': 'application/json' };
+      if (TOKEN) headers['Authorization'] = 'Bearer ' + TOKEN;
+      var payload = { log_id: logId, chosen: chosen };
+      if (!TOKEN && ANON_SESSION) payload.anon_session_id = ANON_SESSION;
+      try {
+        fetch(API + '/api/chat/unresolved-choice', {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify(payload)
+        }).catch(function () {});
+      } catch (_) {}
     }
 
     // Auto-update the user's profile when chatbot has collected all criteria
@@ -3412,6 +3477,8 @@
       '.chat-suggestions{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}',
       '.chat-sug{padding:6px 12px;background:#e0f2fe;border:none;border-radius:20px;font-size:12px;color:#0369a1;cursor:pointer;transition:background .2s}',
       '.chat-sug:hover{background:#bae6fd}',
+      '.chat-unresolved{display:flex;flex-direction:column;gap:4px;margin-top:4px;align-self:flex-start;max-width:85%}',
+      '.chat-unresolved-label{font-size:12px;color:#64748b;font-style:italic}',
 
       // Property detail overlay
       '.detail-overlay{position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:2000;display:flex;justify-content:center;overflow-y:auto;padding:24px;backdrop-filter:blur(4px)}',
