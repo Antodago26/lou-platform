@@ -119,6 +119,103 @@ def _save_chat_message(user_id, role, content, criteria_json=None):
         return_db(conn)
 
 
+def _post_process_zones(result, user_id, is_anonymous):
+    """
+    v6.3.2 étape 5 — post-processing déterministe des zones extraites par le LLM.
+
+    Pour chaque zone de result.criteria.zones :
+      - tente resolve_zone_coords (cache DB → dict → geo.admin.ch)
+      - si non résolue, calcule suggestions via geo_suggestions
+      - log dans unresolved_locations (audit hebdo)
+
+    Si des zones restent non résolues, injecte :
+      - result['unresolved_zones'] : liste [{query, is_npa, suggestions, log_id}]
+      - result['message'] : message déterministe (override LLM)
+      - result['suggestions'] : boutons = top suggestions de la première zone
+      - result['profile_ready'] = False (on ne peut pas finaliser sans GPS)
+
+    Le LLM ne gère PAS cette logique parce qu'il ne connaît pas le dict
+    CITY_COORDS et hallucinerait des communes inexistantes.
+    """
+    criteria = result.get('criteria') or {}
+    zones = criteria.get('zones') or []
+    if not zones or not isinstance(zones, list):
+        return result
+
+    from scoring_engine import resolve_zone_coords
+    from geo_suggestions import suggest_similar_cities, is_npa, log_unresolved
+
+    conn = get_db()
+    unresolved = []
+    try:
+        for z in zones:
+            if not isinstance(z, dict):
+                continue
+            city = (z.get('city') or '').strip()
+            if not city:
+                continue
+            if z.get('latitude') and z.get('longitude'):
+                continue  # LLM a déjà fourni GPS (rare mais possible)
+            try:
+                resolve_zone_coords(z, conn=conn)
+            except Exception as e:
+                log.warning(f"resolve_zone_coords failed for {city!r}: {e}")
+            if z.get('latitude') and z.get('longitude'):
+                continue
+            # Zone non résolue — suggestions + log audit
+            sugg = suggest_similar_cities(city, limit=3)
+            uid_int = int(user_id) if user_id and user_id.isdigit() else None
+            anon_sid = user_id if is_anonymous else None
+            row_id = log_unresolved(
+                conn, city, sugg,
+                user_id=uid_int, anon_session_id=anon_sid,
+            )
+            unresolved.append({
+                'query': city,
+                'is_npa': is_npa(city),
+                'suggestions': sugg,
+                'log_id': row_id,
+            })
+    finally:
+        return_db(conn)
+
+    if not unresolved:
+        return result
+
+    result['unresolved_zones'] = unresolved
+    result['profile_ready'] = False
+
+    # Message déterministe (override LLM) — contrat UX de l'étape 5.
+    parts = []
+    for u in unresolved:
+        q = u['query']
+        if u['is_npa']:
+            parts.append(
+                f"Je ne trouve pas le NPA {q} dans la base suisse — "
+                f"peux-tu me donner le nom de la commune ?"
+            )
+        elif u['suggestions']:
+            names = ', '.join(f"« {s['city']} »" for s in u['suggestions'][:3])
+            parts.append(
+                f"Je ne connais pas « {q} » — tu voulais dire {names} ?"
+            )
+        else:
+            parts.append(
+                f"Je ne connais pas « {q} » — peux-tu me donner le NPA "
+                f"(code postal 4 chiffres) ?"
+            )
+    result['message'] = ' '.join(parts)
+
+    # Boutons suggestion = top 3 de la première zone non résolue (si dispo).
+    first = unresolved[0]
+    if first['suggestions']:
+        result['suggestions'] = [s['city'] for s in first['suggestions']]
+    else:
+        result['suggestions'] = []
+
+    return result
+
+
 def _parse_llm_json(raw):
     """Robustly parse JSON from Claude's response, handling markdown wrapping."""
     text = raw.strip()
@@ -289,6 +386,13 @@ def api_chat():
         result.setdefault("profile_ready", False)
         result.setdefault("confirmed", False)
 
+        # v6.3.2 étape 5 — résolution déterministe des zones + UX échec.
+        # Tolérant : si ça throw, on log et on laisse passer la réponse LLM.
+        try:
+            result = _post_process_zones(result, user_id, is_anonymous)
+        except Exception as e:
+            log.warning(f"_post_process_zones failed for user={user_id}: {e}", exc_info=True)
+
         _save_chat_message(user_id, "user", message)
         _save_chat_message(user_id, "assistant", raw, criteria_json=result.get("criteria"))
 
@@ -301,6 +405,38 @@ def api_chat():
             "suggestions": ["Réessayer"], "criteria": {},
             "profile_ready": False, "confirmed": False
         }), 500
+
+
+@chat_bp.route('/api/chat/unresolved-choice', methods=['POST'])
+def api_chat_unresolved_choice():
+    """
+    v6.3.2 étape 5 — enregistre le choix final de l'user après suggestions.
+
+    Payload : { "log_id": int, "chosen": str | null }
+      - chosen = nom de la commune finalement sélectionnée
+      - chosen = null si l'user a abandonné (ferme le chat / change sujet)
+
+    Pas d'auth stricte : le log_id est une clé opaque retournée par /api/chat
+    dans unresolved_zones[i].log_id, donc une corruption demande de guesser
+    un id précis. Impact d'un vandal : pollution du champ 'chosen' dans
+    unresolved_locations (table d'audit interne, pas de data user).
+    """
+    data = request.json or {}
+    row_id = data.get('log_id') or data.get('row_id')
+    chosen = data.get('chosen')
+    if not row_id:
+        return jsonify({'error': 'log_id required'}), 400
+    try:
+        row_id = int(row_id)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'log_id must be integer'}), 400
+    conn = get_db()
+    try:
+        from geo_suggestions import update_unresolved_choice
+        update_unresolved_choice(conn, row_id, chosen)
+    finally:
+        return_db(conn)
+    return jsonify({'ok': True})
 
 
 @chat_bp.route('/api/chat/reset', methods=['POST'])
