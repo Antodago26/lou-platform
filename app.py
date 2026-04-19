@@ -85,6 +85,7 @@ from routes_admin import admin_bp
 from routes_alerts import alerts_bp
 from routes_scraping import scraping_bp
 from routes_pages import pages_bp
+from routes_stats import stats_bp
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger('lou-app')
@@ -253,6 +254,7 @@ def create_app():
     flask_app.register_blueprint(alerts_bp)
     flask_app.register_blueprint(scraping_bp)
     flask_app.register_blueprint(pages_bp)
+    flask_app.register_blueprint(stats_bp)
 
     return flask_app
 
