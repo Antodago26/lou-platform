@@ -1,9 +1,8 @@
 """Bon Home — Static pages + health endpoint Blueprint."""
-import os
 import time
 import logging
 
-from flask import Blueprint, jsonify, send_from_directory, request
+from flask import Blueprint, jsonify, send_from_directory
 
 from plans import public_catalog
 from db import get_db, return_db, pool_stats
@@ -90,23 +89,6 @@ def health():
         "pool": pool_stats(),
     }
     return jsonify(payload), (200 if db_status == "ok" else 503)
-
-
-@pages_bp.route('/debug/sentry-ping')
-def debug_sentry_ping():
-    """
-    TEMPORAIRE — à retirer après validation Sentry en prod.
-    Protégé par un token simple pour éviter le trigger par bots.
-    Usage : GET /debug/sentry-ping?token=<SENTRY_PING_TOKEN>
-    """
-    expected = os.environ.get('SENTRY_PING_TOKEN', '')
-    if not expected or request.args.get('token') != expected:
-        return jsonify({"error": "forbidden"}), 403
-    try:
-        raise RuntimeError("Sentry ping — test event, safe to ignore")
-    except Exception:
-        log.exception("Sentry ping triggered")
-    return jsonify({"ok": True, "sent": "check Sentry dashboard"}), 200
 
 
 @pages_bp.route('/api/plans')

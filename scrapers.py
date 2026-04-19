@@ -266,38 +266,61 @@ def _sb_get(url, render_js=False):
             log.error(f"Direct request failed: {e}")
             return 0, ''
 
-    params = {
-        'api_key': SCRAPINGBEE_KEY,
-        'url': url,
-        'stealth_proxy': 'true',
-        'country_code': 'ch',
-    }
-    if render_js:
-        params['render_js'] = 'true'
-        params['wait'] = 3000
+    # v6.3.3 (SC2) : jusqu'à 3 tentatives.
+    #   - 500/502/504 : retry simple (3s).
+    #   - 403/429 : retry avec premium_proxy=true (consomme +10 crédits mais
+    #     passe les protections anti-bot qui ont caused le block).
+    def _build_params(premium=False):
+        p = {
+            'api_key': SCRAPINGBEE_KEY,
+            'url': url,
+            'country_code': 'ch',
+        }
+        if premium:
+            p['premium_proxy'] = 'true'
+        else:
+            p['stealth_proxy'] = 'true'
+        if render_js:
+            p['render_js'] = 'true'
+            p['wait'] = 3000
+        return p
 
-    # Retry up to 2 times on server errors (500, 502, 504)
-    for attempt in range(2):
+    params = _build_params(premium=False)
+    premium_retried = False
+
+    for attempt in range(3):
         try:
             r = requests.get(SCRAPINGBEE_URL, params=params, timeout=180)
             r.encoding = 'utf-8'  # Force UTF-8 to avoid Latin-1 misdetection
             log.info(f"[ScrapingBee] {url[:60]}... → HTTP {r.status_code} ({len(r.text)} bytes)")
-            if r.status_code in (500, 502, 504) and attempt == 0:
+
+            # 5xx : retry stealth
+            if r.status_code in (500, 502, 504) and attempt < 2:
                 log.warning(f"[ScrapingBee] Server error {r.status_code}, retrying in 3s...")
                 time.sleep(3)
                 continue
+
+            # 403/429 : retry avec premium_proxy (anti-bot contourné)
+            if r.status_code in (403, 429) and not premium_retried and attempt < 2:
+                log.warning(f"[ScrapingBee] Blocked ({r.status_code}), retrying with premium_proxy")
+                premium_retried = True
+                params = _build_params(premium=True)
+                time.sleep(2)
+                continue
+
             if r.status_code == 200 and r.text:
                 _cache_mark(url, r.text)
             return r.status_code, r.text
         except requests.exceptions.Timeout:
             log.error(f"[ScrapingBee] TIMEOUT fetching {url} (attempt {attempt+1})")
-            if attempt == 0:
+            if attempt < 2:
                 time.sleep(3)
                 continue
             return 0, ''
         except Exception as e:
             log.error(f"[ScrapingBee] Error fetching {url}: {e}")
             return 0, ''
+    return 0, ''
     return 0, ''
 
 
@@ -494,6 +517,155 @@ def _clean_surface(text):
 # HOMEGATE — via ScrapingBee + __NEXT_DATA__
 # ============================================================
 
+def _homegate_parse_next_data(html, transaction, city):
+    """
+    Parse le __NEXT_DATA__ d'une page Homegate (Next.js app).
+    Retourne une list[dict] de properties prêtes, ou [] si parsing KO.
+
+    Les paths Homegate sont instables : on tente quelques paths connus
+    puis un deep-search récursif pour tomber sur la première liste
+    d'objets qui ressemble à des listings (id + price/listingType).
+    """
+    nd_match = re.search(r'<script[^>]+id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.DOTALL)
+    if not nd_match:
+        return []
+    try:
+        data = json.loads(nd_match.group(1))
+    except Exception as e:
+        log.warning(f"[Homegate] __NEXT_DATA__ JSON error: {e}")
+        return []
+
+    # Paths connus (à compléter quand Homegate bouge).
+    items = []
+    try:
+        for path_fn in [
+            lambda d: d.get('props', {}).get('pageProps', {}).get('initialState', {}).get('searchResultList', {}).get('listings', []),
+            lambda d: d.get('props', {}).get('pageProps', {}).get('listings', []),
+            lambda d: d.get('props', {}).get('pageProps', {}).get('searchResult', {}).get('listings', []),
+            lambda d: d.get('props', {}).get('pageProps', {}).get('items', []),
+        ]:
+            try:
+                out = path_fn(data) or []
+                if out:
+                    items = out
+                    break
+            except (AttributeError, TypeError):
+                continue
+    except Exception:
+        pass
+
+    # Deep-search si paths connus ne matchent pas.
+    if not items:
+        def _find(obj, depth=0):
+            if depth > 6:
+                return []
+            if isinstance(obj, list) and len(obj) >= 2:
+                if all(isinstance(i, dict) and ('id' in i or 'listingId' in i) and any(k in i for k in ('price', 'prices', 'listing', 'rooms')) for i in obj[:3]):
+                    return obj
+            if isinstance(obj, dict):
+                for v in obj.values():
+                    r = _find(v, depth + 1)
+                    if r:
+                        return r
+            return []
+        items = _find(data)
+
+    if not items:
+        return []
+
+    results = []
+    for it in items:
+        try:
+            listing = it.get('listing', it) if isinstance(it, dict) else {}
+            lid = (
+                it.get('id') or it.get('listingId') or
+                listing.get('id') or listing.get('listingId')
+            )
+            if not lid:
+                continue
+
+            # URL : Homegate expose souvent un path relatif.
+            href = (
+                listing.get('url') or listing.get('listingUrl') or
+                listing.get('detailUrl') or it.get('url') or
+                f"/{'mieten' if transaction == 'location' else 'kaufen'}/{lid}"
+            )
+            if href.startswith('/'):
+                href = 'https://www.homegate.ch' + href
+
+            # Price : chercher dans plusieurs champs.
+            price = None
+            for p in (
+                listing.get('prices', {}).get('rent', {}).get('gross') if transaction == 'location' else listing.get('prices', {}).get('buy', {}).get('price'),
+                listing.get('price'),
+                listing.get('grossPrice'),
+                it.get('price'),
+            ):
+                if p:
+                    try:
+                        price = float(p)
+                        break
+                    except (TypeError, ValueError):
+                        continue
+
+            # Rooms / surface / title / address.
+            chars = listing.get('characteristics', {}) if isinstance(listing, dict) else {}
+            rooms = chars.get('numberOfRooms') or listing.get('rooms') or it.get('rooms')
+            surface = chars.get('livingSpace') or listing.get('surface') or it.get('surface')
+            try:
+                rooms = float(rooms) if rooms is not None else None
+            except (TypeError, ValueError):
+                rooms = None
+            try:
+                surface = int(surface) if surface is not None else None
+            except (TypeError, ValueError):
+                surface = None
+
+            title = (
+                (listing.get('localization', {}).get('de', {}) or {}).get('text', {}).get('title')
+                or listing.get('title')
+                or it.get('title', '')
+            )
+            address_obj = listing.get('address', {}) if isinstance(listing, dict) else {}
+            address = ''
+            if isinstance(address_obj, dict):
+                street = address_obj.get('street') or ''
+                plz = address_obj.get('postalCode') or ''
+                loc = address_obj.get('locality') or ''
+                address = ', '.join(x for x in (street, f"{plz} {loc}".strip()) if x).strip(', ')
+
+            # Images.
+            images = []
+            for img in (listing.get('pictures') or listing.get('images') or []):
+                if isinstance(img, dict):
+                    url = img.get('url') or img.get('originalUrl') or img.get('src')
+                else:
+                    url = img
+                if url:
+                    images.append(url)
+            images = list(dict.fromkeys(images))[:5]
+
+            card_text = f"{title} {address}".strip()
+
+            results.append(_make_property(
+                external_id=f"hg-{lid}", source='Homegate',
+                source_url=href,
+                title=title or '', description='',
+                property_type=_guess_type(card_text),
+                transaction=transaction,
+                price=price, rooms=rooms, surface=surface, floor=None,
+                address=address, city=city,
+                canton=CITY_CANTONS.get(city.lower(), ''),
+                postal_code=_extract_postal(address),
+                latitude=None, longitude=None,
+                features=[], images=images, published_at=None,
+                search_city=city,
+            ))
+        except Exception as e:
+            log.debug(f"[Homegate JSON] Item parse error: {e}")
+    return results
+
+
 def scrape_homegate(city="Lausanne", transaction="location", max_pages=4):
     log.info(f"[Homegate] Searching {city} ({transaction})")
     results = []
@@ -514,8 +686,33 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=4):
             break
 
         soup = BeautifulSoup(html, 'html.parser')
-        cards = soup.select('[data-test="result-list-item"]')
-        log.info(f"[Homegate] Page {page}: {len(cards)} cards")
+
+        # ============================================================
+        # PRIMARY : Homegate is a Next.js app → parse __NEXT_DATA__ JSON.
+        # ============================================================
+        json_listings = _homegate_parse_next_data(html, transaction, city)
+        if json_listings:
+            log.info(f"[Homegate] Page {page}: {len(json_listings)} listings via __NEXT_DATA__")
+            results.extend(json_listings)
+            time.sleep(1)
+            continue
+
+        # ============================================================
+        # FALLBACK : HTML parsing via selectors multi-layers.
+        # L'ancien sélecteur unique [data-test="result-list-item"] était
+        # SPOF : si Homegate renommait cet attr, on récoltait 0. Cascade.
+        # ============================================================
+        cards = (
+            soup.select('[data-test="result-list-item"]') or
+            soup.select('[data-testid="result-list-item"]') or
+            soup.select('article[data-test^="result"]') or
+            soup.select('[role="listitem"][data-test]') or
+            soup.select('[class*="ResultListItem"]') or
+            soup.select('[class*="result-list-item"]')
+        )
+        log.info(f"[Homegate] Page {page}: {len(cards)} cards via HTML fallback")
+        if not cards:
+            log.warning(f"[Homegate] No listings found on page {page} (JSON + HTML both empty) — layout may have changed")
 
         for card in cards:
             try:
