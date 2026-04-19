@@ -16,7 +16,7 @@ import psycopg2
 import psycopg2.extras
 import requests as http_requests
 
-from scrapers import scrape_all, save_to_db, reset_scraper_stats, get_scraper_stats
+from scrapers import scrape_all, save_to_db, reset_scraper_stats, get_scraper_stats, get_scraper_stats_city
 from scoring_engine import score_all_for_profile
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(name)s] %(message)s')
@@ -142,9 +142,18 @@ def _build_alert_email(properties, count_total):
 </html>'''
 
 
-def _send_scraper_alert(failed_scrapers, stats):
-    """Send a monitoring email to ADMIN_EMAIL when one or more scrapers
-    returned 0 results across every city of the run."""
+def _send_scraper_alert(failed_scrapers, stats, major_gaps=None):
+    """
+    Send a monitoring email to ADMIN_EMAIL.
+
+    failed_scrapers : scrapers qui ont renvoyé 0 sur TOUTES les villes
+                      (catastrophic — layout change / credits exhausted).
+    major_gaps      : list de "scraper/ville" où un trou a été détecté
+                      sur une ville à gros volume (Neuchâtel, Lausanne, …).
+                      Sert d'alerte plus fine même si le scraper marche
+                      globalement ailleurs.
+    """
+    major_gaps = major_gaps or []
     if not ADMIN_EMAIL:
         log.warning("ADMIN_EMAIL not set, skipping scraper alert")
         return False
@@ -163,9 +172,19 @@ def _send_scraper_alert(failed_scrapers, stats):
             for name, count in sorted(stats.items(), key=lambda kv: kv[1], reverse=True)
             if name not in failed_scrapers
         )
+        gaps_block = ''
+        if major_gaps:
+            gaps_rows = ''.join(
+                f'<tr><td style="padding:4px 12px;color:#b45309">{g}</td></tr>'
+                for g in major_gaps
+            )
+            gaps_block = f'''<h3 style="color:#b45309;margin:24px 0 8px;font-size:15px">🟠 Trous sur villes majeures</h3>
+            <p style="color:#64748b;margin:0 0 8px;font-size:13px">Scrapers qui retournent 0 sur ces couples (scraper / ville) — fonctionnent ailleurs, mais signal probable d'un problème ciblé :</p>
+            <table style="width:100%;border-collapse:collapse;background:#fefce8;border:1px solid #fde68a;border-radius:8px;overflow:hidden;margin-bottom:16px">{gaps_rows}</table>'''
         html = f'''<!DOCTYPE html><html><body style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px">
             <h2 style="color:#dc2626;margin:0 0 8px">⚠️ Scrapers en échec</h2>
             <p style="color:#64748b;margin:0 0 16px">Le cron du {datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M UTC")} a retourné 0 résultat pour ces scrapers sur TOUTES les villes. À investiguer :</p>
+            {gaps_block}
             <table style="width:100%;border-collapse:collapse;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;overflow:hidden">
               <thead><tr style="background:#fecaca"><th style="padding:8px 12px;text-align:left">Scraper</th><th style="padding:8px 12px;text-align:right">Résultats</th></tr></thead>
               <tbody>{rows}</tbody>
@@ -177,7 +196,11 @@ def _send_scraper_alert(failed_scrapers, stats):
         resp = http_requests.post('https://api.resend.com/emails', json={
             'from': 'Bon Home Monitoring <noreply@bonhome.ch>',
             'to': [ADMIN_EMAIL],
-            'subject': f"[Bon Home] {len(failed_scrapers)} scraper(s) en échec",
+            'subject': (
+                f"[Bon Home] {len(failed_scrapers)} scraper(s) en échec"
+                if failed_scrapers else
+                f"[Bon Home] Trous ciblés : {len(major_gaps)} couple(s) scraper/ville à 0"
+            ),
             'html': html,
         }, headers={
             'Authorization': f'Bearer {RESEND_API_KEY}',
@@ -367,14 +390,32 @@ def run():
 
     log.info(f"Total scraped and saved: {total_scraped}")
 
-    # Step 3bis: Monitor — alert admin if any scraper returned 0 across ALL cities
+    # Step 3bis: Monitor (v6.3.3 SC4) — 2 niveaux d'alerte :
+    #   1. GLOBAL : un scraper retourne 0 sur TOUTES les villes du run
+    #      (portal layout changed, crédits SB exhaustés) → alerte rouge.
+    #   2. PAR VILLE MAJEURE : un scraper retourne 0 sur une ville à fort
+    #      volume attendu (Neuchâtel, Lausanne, Genève, etc.) → alerte orange.
+    #      Pour les petites communes, 0 est acceptable (pas de listing du jour).
+    MAJOR_CITIES = {
+        'Neuchâtel', 'Lausanne', 'Genève', 'La Chaux-de-Fonds',
+        'Fribourg', 'Sion', 'Bienne', 'Montreux',
+    }
     stats = get_scraper_stats()
+    stats_city = get_scraper_stats_city()
     if stats:
         log.info(f"Scraper totals across all cities: {stats}")
         failed_scrapers = sorted([name for name, count in stats.items() if count == 0])
+        major_gaps = sorted([
+            f"{name}/{city}"
+            for (name, city), count in stats_city.items()
+            if count == 0 and city in MAJOR_CITIES
+        ])
         if failed_scrapers:
             log.warning(f"Scrapers with 0 results on all cities: {failed_scrapers}")
-            _send_scraper_alert(failed_scrapers, stats)
+            _send_scraper_alert(failed_scrapers, stats, major_gaps=major_gaps)
+        elif major_gaps:
+            log.warning(f"Scraper gaps on major cities: {major_gaps}")
+            _send_scraper_alert([], stats, major_gaps=major_gaps)
 
     # Step 4: Deactivate stale listings (> 21 days without update)
     # C2.6 — tightened from 30d to 21d so the catalog purges sooner.

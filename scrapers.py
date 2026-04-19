@@ -2618,18 +2618,28 @@ _NE_AGENCY_CACHE = set()
 # all cities of the current run. Used by cron_job.py to detect scrapers returning
 # 0 results everywhere (→ portal layout changed, credits exhausted, etc.).
 _SCRAPER_STATS = {}
+# v6.3.3 (SC4) : stats granulaires par (scraper, ville). Permet à
+# cron_job.py de détecter un trou ciblé (ex : Homegate KO sur Lausanne
+# mais OK sur Neuchâtel) plutôt que de n'alerter que sur 0 global.
+_SCRAPER_STATS_CITY = {}
 
 
 def reset_scraper_stats():
     """Reset per-scraper counters. Call once at the start of a cron run."""
-    global _SCRAPER_STATS, _NE_AGENCY_CACHE
+    global _SCRAPER_STATS, _SCRAPER_STATS_CITY, _NE_AGENCY_CACHE
     _SCRAPER_STATS = {}
+    _SCRAPER_STATS_CITY = {}
     _NE_AGENCY_CACHE = set()
 
 
 def get_scraper_stats():
     """Return a snapshot of {scraper_name: total_listings_across_cities}."""
     return dict(_SCRAPER_STATS)
+
+
+def get_scraper_stats_city():
+    """Return a snapshot of {(scraper_name, city): count} for granular alerting."""
+    return dict(_SCRAPER_STATS_CITY)
 
 
 # For small towns, also scrape the nearest large city to find listings
@@ -2701,10 +2711,12 @@ def scrape_all(city="Lausanne", transaction="location", skip_nearby=False):
             for future in as_completed(futures):
                 name = futures[future]
                 _SCRAPER_STATS.setdefault(name, 0)
+                _SCRAPER_STATS_CITY.setdefault((name, scrape_city), 0)
                 try:
                     results = [r for r in future.result() if r is not None]
                     all_results.extend(results)
                     _SCRAPER_STATS[name] += len(results)
+                    _SCRAPER_STATS_CITY[(name, scrape_city)] += len(results)
                     log.info(f"[{name}][{scrape_city}] {len(results)} results")
                 except Exception as e:
                     log.error(f"[{name}][{scrape_city}] FAILED: {e}")
