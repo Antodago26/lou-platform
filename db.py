@@ -105,6 +105,23 @@ def return_db(conn):
             pass
 
 
+def pool_stats():
+    """
+    Lightweight introspection for /health. Uses private psycopg2 attrs
+    (_pool = free conns list, _used = dict of in-use conns) — stable in
+    psycopg2 2.9.x. Never raises.
+    """
+    pool = _db_pool
+    if pool is None:
+        return {"enabled": False, "used": 0, "free": 0, "max": POOL_MAX}
+    try:
+        used = len(getattr(pool, '_used', {}) or {})
+        free = len(getattr(pool, '_pool', []) or [])
+        return {"enabled": True, "used": used, "free": free, "max": POOL_MAX}
+    except Exception:
+        return {"enabled": True, "used": -1, "free": -1, "max": POOL_MAX}
+
+
 def init_db():
     """Create all tables if they don't exist (from schema.sql)."""
     sql_path = os.path.join(os.path.dirname(__file__), 'schema.sql')

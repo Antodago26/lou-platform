@@ -1,7 +1,13 @@
 """Bon Home — Static pages + health endpoint Blueprint."""
+import time
+import logging
+
 from flask import Blueprint, jsonify, send_from_directory
 
 from plans import public_catalog
+from db import get_db, return_db, pool_stats
+
+log = logging.getLogger('lou-app')
 
 pages_bp = Blueprint('pages', __name__)
 
@@ -48,7 +54,41 @@ def pricing():
 
 @pages_bp.route('/health')
 def health():
-    return jsonify({"status": "ok"})
+    """
+    Deep health check (v6.3.3 O2). Teste DB (SELECT 1) + expose stats pool.
+    Renvoie 503 si DB down pour que Render health checks / load balancer
+    sortent l'instance du pool. Pas d'auth (public) — on ne leak rien de
+    sensible (pas de version, pas de hostnames, pas de secrets).
+    """
+    db_status = "ok"
+    db_latency_ms = None
+    conn = None
+    t0 = time.time()
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT 1")
+        cur.fetchone()
+        cur.close()
+        db_latency_ms = round((time.time() - t0) * 1000, 1)
+    except Exception as e:
+        db_status = "down"
+        log.error(f"/health DB check failed: {e}")
+    finally:
+        if conn is not None:
+            try:
+                return_db(conn)
+            except Exception:
+                pass
+
+    overall = "ok" if db_status == "ok" else "degraded"
+    payload = {
+        "status": overall,
+        "db": db_status,
+        "db_latency_ms": db_latency_ms,
+        "pool": pool_stats(),
+    }
+    return jsonify(payload), (200 if db_status == "ok" else 503)
 
 
 @pages_bp.route('/api/plans')
