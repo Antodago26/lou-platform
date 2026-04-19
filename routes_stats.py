@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify
 
 from db import get_db, return_db
-from scrapers import scrape_homegate, scrape_immoscout
+from scrapers import scrape_homegate, scrape_immoscout, sb_bypass_cache
 
 log = logging.getLogger('lou-app')
 stats_bp = Blueprint('stats', __name__)
@@ -40,11 +40,16 @@ _CITY_SLUG_TO_DISPLAY = {
     'le-locle': 'Le Locle',
     'cortaillod': 'Cortaillod',
     'colombier': 'Colombier',
+    # Slugs URL Homegate avec suffixe canton (convention cron Cowork).
+    # Utiles quand la ville existe dans plusieurs cantons (Colombier VD et NE).
+    'colombier-ne': 'Colombier',
     'peseux': 'Peseux',
     'boudry': 'Boudry',
     'marin-epagnier': 'Marin-Epagnier',
     'hauterive': 'Hauterive',
+    'hauterive-ne': 'Hauterive',
     'saint-blaise': 'Saint-Blaise',
+    'saint-blaise-ne': 'Saint-Blaise',
     'milvignes': 'Milvignes',
     'la-tene': 'La Tène',
     'le-landeron': 'Le Landeron',
@@ -53,6 +58,7 @@ _CITY_SLUG_TO_DISPLAY = {
     'val-de-travers': 'Val-de-Travers',
     'fleurier': 'Fleurier',
     'corcelles-cormondreche': 'Corcelles-Cormondrèche',
+    'corcelles-cormondreche-ne': 'Corcelles-Cormondrèche',
     'lausanne': 'Lausanne',
     'geneve': 'Genève',
     'fribourg': 'Fribourg',
@@ -153,7 +159,10 @@ def listings_qa():
                 bonhome["by_transaction"][tx] = int(n)
             bonhome["total"] += int(n)
 
-        # Breakdown par source (via property_sources)
+        # Breakdown par source (via property_sources).
+        # NOTE (QA2) : la colonne source est stockée en PascalCase dans la DB
+        # ('Homegate', 'ImmoScout24', etc.). On normalise en lowercase côté
+        # sortie pour matcher la convention slug de l'endpoint.
         cur.execute("""
             SELECT ps.source, COUNT(DISTINCT p.id) AS n
             FROM properties p
@@ -166,15 +175,16 @@ def listings_qa():
             src = r['source'] if isinstance(r, dict) else r[0]
             n = r['n'] if isinstance(r, dict) else r[1]
             if src:
-                bonhome["by_source"][src] = int(n)
+                bonhome["by_source"][src.lower()] = int(n)
 
-        # IDs externes connus par portail (pour recall)
+        # IDs externes connus par portail (pour recall).
+        # LOWER(source) pour rattraper le mismatch 'ImmoScout24' vs 'immoscout24'.
         cur.execute("""
-            SELECT p.source, p.external_id
+            SELECT LOWER(p.source) AS source, p.external_id
             FROM properties p
             WHERE p.is_active = TRUE
               AND LOWER(COALESCE(p.city,'')) IN (%s, %s)
-              AND p.source IN ('homegate', 'immoscout24')
+              AND LOWER(p.source) IN ('homegate', 'immoscout24')
               AND p.external_id IS NOT NULL
         """, (city_display.lower(), city_slug))
         for r in cur.fetchall():
@@ -185,12 +195,12 @@ def listings_qa():
 
         # Aussi via property_sources (cross-portal dedup)
         cur.execute("""
-            SELECT ps.source, ps.external_id
+            SELECT LOWER(ps.source) AS source, ps.external_id
             FROM property_sources ps
             JOIN properties p ON p.id = ps.property_id
             WHERE p.is_active = TRUE
               AND LOWER(COALESCE(p.city,'')) IN (%s, %s)
-              AND ps.source IN ('homegate', 'immoscout24')
+              AND LOWER(ps.source) IN ('homegate', 'immoscout24')
               AND ps.external_id IS NOT NULL
         """, (city_display.lower(), city_slug))
         for r in cur.fetchall():
@@ -211,24 +221,27 @@ def listings_qa():
                 pass
 
     # --- 2) Scrape live Homegate + ImmoScout24 (vente + location) ---------
+    # QA1 : bypass du cache DB de _sb_get — sinon on rejoue du cache posé par
+    # le cron du matin et live_count=0 systématique (Homegate cassé hier).
     sources = {}
-    for portal_name, scraper_fn in (
-        ('homegate', scrape_homegate),
-        ('immoscout24', scrape_immoscout),
-    ):
-        db_ids = bonhome["ids_by_portal"].get(portal_name, set())
-        portal_block = {}
-        for transaction in ('location', 'achat'):
-            listings, elapsed_ms, err = _safe_scrape(
-                scraper_fn, portal_name, city_display, transaction
-            )
-            live_ids = [str(l.get('external_id')) for l in listings if l.get('external_id')]
-            stats = _recall(live_ids, db_ids)
-            stats["elapsed_ms"] = elapsed_ms
-            if err:
-                stats["error"] = err
-            portal_block[transaction] = stats
-        sources[portal_name + '_live'] = portal_block
+    with sb_bypass_cache():
+        for portal_name, scraper_fn in (
+            ('homegate', scrape_homegate),
+            ('immoscout24', scrape_immoscout),
+        ):
+            db_ids = bonhome["ids_by_portal"].get(portal_name, set())
+            portal_block = {}
+            for transaction in ('location', 'achat'):
+                listings, elapsed_ms, err = _safe_scrape(
+                    scraper_fn, portal_name, city_display, transaction
+                )
+                live_ids = [str(l.get('external_id')) for l in listings if l.get('external_id')]
+                stats = _recall(live_ids, db_ids)
+                stats["elapsed_ms"] = elapsed_ms
+                if err:
+                    stats["error"] = err
+                portal_block[transaction] = stats
+            sources[portal_name + '_live'] = portal_block
 
     total_elapsed_ms = round((time.time() - t_start) * 1000, 1)
 

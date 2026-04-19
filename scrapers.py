@@ -243,13 +243,34 @@ def _smart_get(url, render_js=False, try_direct=False):
     return _sb_get(url, render_js=render_js)
 
 
+# v6.3.3 (QA1) : thread-local flag pour bypasser le cache DB de _sb_get.
+# Utilisé par l'endpoint /api/stats/listings-qa qui doit mesurer la fraîcheur
+# live d'un portail — sinon on rejoue du cache post-cron et live_count=0.
+import threading as _threading
+_SB_CONTEXT = _threading.local()
+
+def _sb_bypass_cache_active():
+    return bool(getattr(_SB_CONTEXT, 'bypass_cache', False))
+
+
+class sb_bypass_cache:
+    """Context manager : `with sb_bypass_cache(): scrape_homegate(...)`
+    désactive le cache DB pour ce thread uniquement. Re-entrant safe."""
+    def __enter__(self):
+        self._prev = getattr(_SB_CONTEXT, 'bypass_cache', False)
+        _SB_CONTEXT.bypass_cache = True
+        return self
+    def __exit__(self, *_):
+        _SB_CONTEXT.bypass_cache = self._prev
+
+
 def _sb_get(url, render_js=False):
     """Fetch a URL via ScrapingBee. Returns (status_code, html_text).
     If the URL was scraped successfully less than SCRAPE_CACHE_TTL_HOURS ago,
     returns (304, '') without spending a credit — callers treat it as an
-    empty/terminal page."""
+    empty/terminal page. Bypassed if `sb_bypass_cache` context active."""
     # Cache short-circuit — save credits on URLs we already hit recently
-    if _cache_is_fresh(url):
+    if not _sb_bypass_cache_active() and _cache_is_fresh(url):
         log.info(f"[cache-hit] skip {url[:80]}... (< {SCRAPE_CACHE_TTL_HOURS}h)")
         return 304, ''
 
