@@ -39,6 +39,23 @@ HCAPTCHA_SITEKEY = os.environ.get('HCAPTCHA_SITEKEY', '')
 RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
 ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', '')
 
+# v6.3.3 (S5) : log.error visible en prod si un secret secondaire est
+# absent. Pas fail-fast car ils sont non-critiques (le serveur peut
+# démarrer sans), mais on veut que Sentry capture l'event au boot pour
+# qu'il ne reste pas silencieux pendant des semaines.
+if os.environ.get('FLASK_ENV') == 'production':
+    _missing_prod_secrets = []
+    if not HCAPTCHA_SECRET:
+        _missing_prod_secrets.append('HCAPTCHA_SECRET (signup abuse risk)')
+    if not RESEND_API_KEY:
+        _missing_prod_secrets.append('RESEND_API_KEY (email alerts disabled)')
+    if not ADMIN_EMAIL:
+        _missing_prod_secrets.append('ADMIN_EMAIL (scraper alerts lost)')
+    if _missing_prod_secrets:
+        log.error(
+            f"Production secrets missing (server still starting): {', '.join(_missing_prod_secrets)}"
+        )
+
 # v6.3 security fix: bcrypt silently truncates passwords to 72 bytes.
 # Without this guard, two passwords that share the first 72 UTF-8 bytes
 # collide — anyone knowing a 72-byte prefix authenticates as the user.

@@ -16,7 +16,35 @@ Entry points:
   python app.py             (local dev)
 """
 import os
+import signal
+import threading
 import logging
+
+# ----------------------------------------------------------------------
+# v6.3.3 (DB4) — shutdown event partagé. Les threads daemon de longue
+# durée (boot rescore, bg scrapes) checkent ce flag entre les itérations
+# pour exit proprement au SIGTERM Render (redeploy) plutôt que d'être
+# tués mid-transaction.
+# ----------------------------------------------------------------------
+SHUTDOWN_EVENT = threading.Event()
+
+
+def _install_shutdown_handler():
+    def _handler(signum, _frame):
+        log = logging.getLogger('lou-app')
+        log.warning(f"Shutdown signal {signum} received, setting SHUTDOWN_EVENT")
+        SHUTDOWN_EVENT.set()
+    try:
+        signal.signal(signal.SIGTERM, _handler)
+        signal.signal(signal.SIGINT, _handler)
+    except Exception:
+        # Sous gunicorn les handlers master/worker peuvent déjà être set ;
+        # on n'écrase pas s'ils existent. L'event restera False → pas de
+        # régression.
+        pass
+
+
+_install_shutdown_handler()
 
 # ----------------------------------------------------------------------
 # Sentry init (v6.3.3). MUST run before any other import that may raise,
@@ -333,6 +361,12 @@ if os.environ.get('DATABASE_URL', ''):
             """)
             profiles = [dict(r) for r in cur.fetchall()]
             for prof in profiles:
+                # v6.3.3 (DB4) : check SIGTERM entre chaque profil pour
+                # sortir proprement d'un redeploy Render plutôt que d'être
+                # tué mid-INSERT (risque incohérence scored_properties).
+                if SHUTDOWN_EVENT.is_set():
+                    log.warning("Boot rescore: SHUTDOWN_EVENT set, exiting loop cleanly")
+                    break
                 import json as _json
                 zones = prof.pop('zones', None)
                 if isinstance(zones, str):
