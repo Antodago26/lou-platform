@@ -7,7 +7,11 @@ services:
     name: lou-platform
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 300
+    # v6.3.3 (R1) : gthread avec 4 threads/worker = 8 requêtes concurrentes
+    # au lieu de 2 (sync). Nécessaire parce que ScrapingBee bloque 30s/appel
+    # et qu'avec sync seulement 2 users peuvent chatter en même temps.
+    # 2 workers × 4 threads = 8, pool DB max = 10 (marge OK).
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --worker-class gthread --threads 4 --timeout 300
     envVars:
       - key: DATABASE_URL
         fromDatabase:
