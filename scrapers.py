@@ -676,6 +676,7 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=4):
     if canton and slug in ('colombier', 'hauterive', 'saint-blaise', 'corcelles-cormondrèche', 'corcelles-cormondr', 'corcelles-cormondrche'):
         slug = f"{slug}-{canton.lower()}"
 
+    consecutive_errors = 0
     for page in range(1, max_pages + 1):
         url = f"https://www.homegate.ch/{tx}/real-estate/city-{slug}/matching-list?ep={page}"
         # render_js=False → 1 credit instead of 5. Homegate's SSR payload contains all listings.
@@ -683,7 +684,12 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=4):
 
         if status != 200:
             log.warning(f"[Homegate] Page {page}: HTTP {status}")
-            break
+            consecutive_errors += 1
+            if consecutive_errors >= 2:
+                log.warning(f"[Homegate] 2 consecutive errors, stopping pagination")
+                break
+            continue
+        consecutive_errors = 0
 
         soup = BeautifulSoup(html, 'html.parser')
 
@@ -846,6 +852,7 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=4):
     if canton and slug in ('colombier', 'hauterive', 'saint-blaise'):
         slug = f"{slug}-{canton.lower()}"
 
+    consecutive_errors = 0
     for page in range(1, max_pages + 1):
         # ImmoScout24 switched to English URL paths (mid-2025)
         url = f"https://www.immoscout24.ch/en/real-estate/{tx}/city-{slug}?pn={page}"
@@ -853,7 +860,12 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=4):
 
         if status != 200:
             log.warning(f"[ImmoScout24] Page {page}: HTTP {status}")
-            break
+            consecutive_errors += 1
+            if consecutive_errors >= 2:
+                log.warning(f"[ImmoScout24] 2 consecutive errors, stopping pagination")
+                break
+            continue
+        consecutive_errors = 0
 
         found_structured = False
 
@@ -1196,6 +1208,7 @@ def scrape_immobilier_ch(city="Lausanne", transaction="location", max_pages=2):
     if not city_slug:
         city_slug = _normalize_city(city).replace(' ', '-')
 
+    consecutive_errors = 0
     for page in range(1, max_pages + 1):
         # immobilier.ch uses /canton-slug/city-slug for city-level searches
         # and just /canton-slug for canton-level searches
@@ -1227,7 +1240,12 @@ def scrape_immobilier_ch(city="Lausanne", transaction="location", max_pages=2):
             status = 0  # Reset to trigger next URL
 
         if status != 200:
-            break
+            consecutive_errors += 1
+            if consecutive_errors >= 2:
+                log.warning(f"[Immobilier.ch] 2 consecutive errors, stopping pagination")
+                break
+            continue
+        consecutive_errors = 0
 
         soup = BeautifulSoup(html, 'html.parser')
 
@@ -1889,12 +1907,19 @@ def scrape_comparis(city="Lausanne", transaction="location", max_pages=2):
     canton = CITY_CANTONS.get(city.lower(), '')
     deal_type = 10 if transaction == 'location' else 20
 
+    consecutive_errors = 0
     for page in range(1, max_pages + 1):
         url = f"https://www.comparis.ch/immobilien/result/list?requestobject=%7B%22DealType%22%3A{deal_type}%2C%22Keyword%22%3A%22{quote(city)}%22%2C%22Sort%22%3A4%2C%22Page%22%3A{page}%7D"
         status, html = _sb_get(url, render_js=True)
 
         if status != 200:
-            break
+            log.warning(f"[Comparis] Page {page}: HTTP {status}")
+            consecutive_errors += 1
+            if consecutive_errors >= 2:
+                log.warning(f"[Comparis] 2 consecutive errors, stopping pagination")
+                break
+            continue
+        consecutive_errors = 0
         found = False
 
         # Method 1: Try __NEXT_DATA__
