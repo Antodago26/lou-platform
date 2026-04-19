@@ -11,3 +11,4 @@ gunicorn==22.0.0
 curl_cffi>=0.7.0
 cloudscraper>=1.2.71
 pydantic==2.9.2
+sentry-sdk[flask]==2.17.0

@@ -18,6 +18,32 @@ Entry points:
 import os
 import logging
 
+# ----------------------------------------------------------------------
+# Sentry init (v6.3.3). MUST run before any other import that may raise,
+# for capture-at-import to work. No-op si SENTRY_DSN pas set (dev local).
+# ----------------------------------------------------------------------
+_SENTRY_DSN = os.environ.get('SENTRY_DSN', '').strip()
+if _SENTRY_DSN:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.flask import FlaskIntegration
+        from sentry_sdk.integrations.logging import LoggingIntegration
+        sentry_sdk.init(
+            dsn=_SENTRY_DSN,
+            integrations=[
+                FlaskIntegration(),
+                LoggingIntegration(level=logging.INFO, event_level=logging.ERROR),
+            ],
+            environment=os.environ.get('FLASK_ENV', 'development'),
+            release=os.environ.get('RENDER_GIT_COMMIT', 'unknown')[:8],
+            # Beta : 100% des erreurs, 10% des traces (sampler cost-sensitive).
+            traces_sample_rate=0.1,
+            send_default_pii=False,  # RGPD : pas d'IP/user dans les events.
+        )
+    except Exception as _se:
+        # Import/init error ne doit jamais bloquer le boot.
+        logging.getLogger('lou-app').error(f"Sentry init failed: {_se}")
+
 from flask import Flask, request
 from flask_cors import CORS
 
