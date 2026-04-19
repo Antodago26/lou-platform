@@ -1,0 +1,292 @@
+/* ============================================================
+ * bonhome. — Brand tokens & shared components (V4 NCS 2026)
+ * ============================================================
+ * Palette teal-driven sur papier chaud.
+ * Light mode uniquement pour la bêta (dark mode = passe ultérieure).
+ * ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;500&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  /* Neutrals */
+  --ink:        #1E2A44;
+  --ink-soft:   #4A5468;
+  --ink-mute:   #7A8398;
+  --paper:      #F7F4EE;
+  --cream:      #F2EEE5;
+  --line:       #E4DFD4;
+  --line-soft:  #EEE9DE;
+
+  /* Teal — identité */
+  --teal:       #2A6670;
+  --teal-deep:  #1A4650;
+  --teal-soft:  #CEDFE1;
+
+  /* Terracotta — signal rare (≤ 1 / écran) */
+  --accent:      #C96A44;
+  --accent-soft: #F2D9CC;
+
+  /* Sauge — tags attributs uniquement */
+  --sage-tag:      #8FA780;
+  --sage-tag-soft: #DCE5D2;
+
+  /* Type */
+  --font-display: "Fraunces", Georgia, serif;
+  --font-body:    "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono:    ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Radii */
+  --r-pill: 100px;
+  --r-card: 16px;
+  --r-sm:   8px;
+}
+
+/* ============================================================
+ * Base reset minimal — à copier-coller par page si pas de reset local
+ * ============================================================ */
+.bh-base, body.bh-base {
+  font-family: var(--font-body);
+  color: var(--ink);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.bh-base h1, .bh-base h2, .bh-base h3,
+h1.bh-display, h2.bh-display, h3.bh-display {
+  font-family: var(--font-display);
+  font-weight: 400;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+/* ============================================================
+ * Wordmark "bonhome." — spec A.5
+ * Lettres en --ink, chevron sur 2e "o" en --teal, point final en --teal.
+ * Fraunces 300, letter-spacing -0.03em.
+ * ============================================================ */
+.wordmark {
+  font-family: var(--font-display);
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  line-height: 1;
+  display: inline-flex;
+  align-items: baseline;
+  white-space: nowrap;
+}
+.wordmark__chevron-wrap {
+  position: relative;
+  display: inline-block;
+}
+.wordmark__chevron {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: -0.28em;
+  width: 0.55em;
+  height: 0.33em;
+  fill: none;
+  stroke: var(--teal);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.wordmark__point { color: var(--teal); }
+
+/* Tailles courantes du wordmark — multiplicateur via font-size */
+.wordmark--sm  { font-size: 20px; }
+.wordmark--md  { font-size: 28px; }
+.wordmark--lg  { font-size: 48px; }
+.wordmark--xl  { font-size: 88px; }
+
+/* ============================================================
+ * Boutons — CTA primaire teal + variantes
+ * ============================================================ */
+.btn {
+  display: inline-block;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 500;
+  padding: 12px 24px;
+  border-radius: var(--r-pill);
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  line-height: 1.2;
+  transition: background .18s ease, transform .12s ease, box-shadow .18s ease, color .18s ease, border-color .18s ease;
+  white-space: nowrap;
+}
+.btn-primary {
+  background: var(--teal);
+  color: var(--paper);
+}
+.btn-primary:hover {
+  background: var(--teal-deep);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(42, 102, 112, 0.25);
+}
+.btn-primary:active { transform: translateY(0); }
+
+.btn-outline {
+  background: transparent;
+  color: var(--teal);
+  border: 1.5px solid var(--teal);
+  padding: 10.5px 22.5px; /* compense la border pour aligner avec primary */
+}
+.btn-outline:hover {
+  background: var(--teal);
+  color: var(--paper);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--ink);
+  padding: 10px 18px;
+}
+.btn-ghost:hover { color: var(--teal); }
+
+.btn-sm { font-size: 13px; padding: 8px 16px; }
+.btn-lg { font-size: 17px; padding: 14px 30px; }
+
+/* ============================================================
+ * Tags d'attribut — usage unique de la sauge
+ * "Lumineux", "Calme", "Balcon sud", "Transports", etc.
+ * ============================================================ */
+.tag {
+  display: inline-block;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--sage-tag);
+  background: var(--sage-tag-soft);
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  line-height: 1.4;
+}
+
+/* ============================================================
+ * Badge "Nouveau" — terracotta, ≤ 1 par écran (A.3)
+ * ============================================================ */
+.badge-new {
+  display: inline-block;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--paper);
+  background: var(--accent);
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+}
+
+/* ============================================================
+ * Labels appuyés — teal-deep, Inter uppercase letterspacing
+ * "LOU · TON ASSISTANTE", "TES CRITÈRES", etc.
+ * ============================================================ */
+.label-strong {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--teal-deep);
+}
+
+/* ============================================================
+ * Bulles de chat — Lou en teal-soft, user en cream
+ * ============================================================ */
+.bubble {
+  display: inline-block;
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.bubble--lou {
+  background: var(--teal-soft);
+  border-bottom-left-radius: 4px;
+  align-self: flex-start;
+}
+.bubble--user {
+  background: var(--cream);
+  border-bottom-right-radius: 4px;
+  align-self: flex-end;
+  font-weight: 500;
+}
+
+/* ============================================================
+ * Chevron primitive — emploi indépendant du wordmark
+ * (loader "Lou réfléchit", prefix input chat, bullets listes)
+ * ============================================================ */
+.chevron {
+  display: inline-block;
+  vertical-align: middle;
+  fill: none;
+  stroke: var(--teal);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.chevron--sm { width: 9px; height: 5.4px; }
+.chevron--md { width: 14px; height: 8.4px; }
+.chevron--lg { width: 20px; height: 12px; }
+
+@keyframes bh-chevron-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.15); }
+}
+.chevron--pulse { animation: bh-chevron-pulse 800ms ease-in-out infinite; }
+
+/* ============================================================
+ * Liens texte — teal hover
+ * ============================================================ */
+.bh-link {
+  color: var(--teal);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color .15s ease;
+}
+.bh-link:hover { border-bottom-color: var(--teal); }
+
+/* ============================================================
+ * Baseline "— au bon moment" (B.2)
+ * Em-dash + Fraunces 300 + ink-soft
+ * ============================================================ */
+.baseline {
+  font-family: var(--font-display);
+  font-weight: 300;
+  color: var(--ink-soft);
+  font-style: normal;
+}
+
+/* ============================================================
+ * Cartes — fond cream sur papier, line soft
+ * ============================================================ */
+.bh-card {
+  background: var(--cream);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-card);
+  padding: 24px;
+}
+
+/* ============================================================
+ * Utilities
+ * ============================================================ */
+.bh-ink       { color: var(--ink); }
+.bh-ink-soft  { color: var(--ink-soft); }
+.bh-ink-mute  { color: var(--ink-mute); }
+.bh-teal      { color: var(--teal); }
+.bh-teal-deep { color: var(--teal-deep); }
+.bh-accent    { color: var(--accent); }
+.bh-sage      { color: var(--sage-tag); }
+
+.bg-paper    { background: var(--paper); }
+.bg-cream    { background: var(--cream); }
+.bg-teal     { background: var(--teal); color: var(--paper); }
+.bg-teal-deep{ background: var(--teal-deep); color: var(--paper); }
