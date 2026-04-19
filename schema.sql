@@ -169,6 +169,22 @@ CREATE TABLE IF NOT EXISTS price_history (
 );
 CREATE INDEX IF NOT EXISTS idx_price_hist_prop ON price_history(property_id, detected_at DESC);
 
+-- property_sources (v6.3.3 DB2 — était créée lazy dans scrapers.py
+-- avant ce commit. Première exécution de _run_migrations pouvait
+-- casser silencieusement l'UPDATE app.py:92 si aucun scrape n'avait
+-- encore tourné. Maintenant créée upfront).
+CREATE TABLE IF NOT EXISTS property_sources (
+    id              SERIAL PRIMARY KEY,
+    property_id     INTEGER NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+    source          VARCHAR(50) NOT NULL,
+    source_url      VARCHAR(500),
+    external_id     VARCHAR(255),
+    created_at      TIMESTAMP DEFAULT NOW(),
+    UNIQUE(property_id, source)
+);
+CREATE INDEX IF NOT EXISTS idx_property_sources_property ON property_sources(property_id);
+CREATE INDEX IF NOT EXISTS idx_property_sources_source ON property_sources(source, external_id);
+
 -- ============================================
 -- Done! Tables created for Bon Home platform
 -- ============================================

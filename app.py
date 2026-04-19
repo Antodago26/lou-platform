@@ -291,16 +291,37 @@ if os.environ.get('DATABASE_URL', ''):
     except Exception as e:
         log.exception(f"v6.3.2 refix GPS error: {e}")
 
-    # One-time rescore on deploy: the equipment synonyms changed (terrasse ≠ balcon)
-    # so all scored_properties rows are stale.  Run in a background thread so boot
-    # isn't blocked.
+    # One-time rescore on deploy (v6.3.3 DB1 : protégé par advisory lock).
+    # Avant : chaque worker gunicorn relançait le rescore → 2× travail à
+    # chaque redeploy (~150k UPSERTs inutiles avec 15 testeurs). Maintenant
+    # un seul worker acquiert pg_try_advisory_lock(BOOT_RESCORE_LOCK_KEY),
+    # les autres voient le lock occupé et skippent proprement.
+    #
+    # Clé fixe arbitraire (bigint). pg_try_advisory_lock est non-bloquant :
+    # il renvoie false si déjà pris. Auto-release à la fermeture de la
+    # session Postgres si le worker crash sans unlock explicite.
+    BOOT_RESCORE_LOCK_KEY = 7463092017042019  # "rescore" hash-style + date
+
     def _rescore_all_on_boot():
         import time
         time.sleep(5)  # let gunicorn finish booting
+        db = None
+        lock_acquired = False
         try:
             from scoring_engine import score_property
             db = get_db()
             cur = db.cursor()
+
+            cur.execute("SELECT pg_try_advisory_lock(%s)", (BOOT_RESCORE_LOCK_KEY,))
+            row = cur.fetchone()
+            got = bool(row and (row[0] if not isinstance(row, dict) else list(row.values())[0]))
+            if not got:
+                log.info("Boot rescore: another worker holds the lock, skipping")
+                cur.close()
+                return_db(db)
+                return
+            lock_acquired = True
+            log.info("Boot rescore: acquired leader lock, proceeding")
             cur.execute("""
                 SELECT sp.*, sz_agg.zones
                 FROM search_profiles sp
@@ -354,11 +375,24 @@ if os.environ.get('DATABASE_URL', ''):
                     ))
                 db.commit()
                 log.info(f"Boot rescore: {len(props)} properties for profile {prof['id']}")
-            cur.close()
-            return_db(db)
             log.info("Boot rescore complete")
         except Exception as e:
             log.error(f"Boot rescore error: {e}", exc_info=True)
+        finally:
+            # Release advisory lock (auto-released sinon à la fin de session PG).
+            if lock_acquired and db is not None:
+                try:
+                    cur2 = db.cursor()
+                    cur2.execute("SELECT pg_advisory_unlock(%s)", (BOOT_RESCORE_LOCK_KEY,))
+                    cur2.close()
+                    db.commit()
+                except Exception:
+                    pass
+            if db is not None:
+                try:
+                    return_db(db)
+                except Exception:
+                    pass
 
     import threading
     threading.Thread(target=_rescore_all_on_boot, daemon=True).start()
