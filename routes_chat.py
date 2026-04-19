@@ -21,22 +21,72 @@ chat_bp = Blueprint('chat', __name__)
 ANTHROPIC_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 anthropic_client = Anthropic(api_key=ANTHROPIC_KEY) if ANTHROPIC_KEY else None
 
-# Simple rate limiter for chat endpoint
-_chat_rate = defaultdict(list)
-CHAT_RATE_LIMIT = 20
-CHAT_RATE_WINDOW = 60
-ANON_RATE_LIMIT = 5
+# ---------------------------------------------------------------------------
+# Rate limiter (in-memory, per gunicorn worker).
+#
+# v6.3.3 — clé serveur-contrôlée :
+#   - authentifié : "user:<jwt_user_id>"
+#   - anonyme     : "ip:<real_client_ip>"
+#
+# Le session_id fourni par le client n'est JAMAIS utilisé pour rate-limit
+# (il restait trivialement bypassable en incrémentant un cookie). Avec
+# clé = IP, un attaquant doit rotater son IP pour contourner.
+#
+# Buckets minute ET heure : le bucket horaire cape les attaques qui
+# respectent la fenêtre minute mais spamment sur la durée (drain budget
+# Anthropic). TODO post-beta : backer par Redis/flask-limiter pour agréger
+# entre workers — actuellement limite ×nb_workers en pratique.
+# ---------------------------------------------------------------------------
+_chat_rate_min = defaultdict(list)
+_chat_rate_hour = defaultdict(list)
+
+CHAT_AUTH_PER_MIN = 20
+CHAT_AUTH_PER_HOUR = 200
+CHAT_ANON_PER_MIN = 5
+CHAT_ANON_PER_HOUR = 30
 
 
-def _check_rate_limit(user_id, is_anonymous=False):
-    """Simple in-memory rate limiter. Returns True if allowed."""
+def _client_ip():
+    """
+    Real client IP. Render/Cloudflare injectent X-Forwarded-For ; on prend
+    la première IP (client original, le reste = proxies en chaîne).
+    """
+    xff = request.headers.get('X-Forwarded-For', '')
+    if xff:
+        first = xff.split(',')[0].strip()
+        if first:
+            return first
+    return request.remote_addr or 'unknown'
+
+
+def _rate_key():
+    """
+    Returns (key, is_anonymous). Clé serveur-contrôlée uniquement.
+    Ne se base JAMAIS sur data.session_id (user-fourni = bypassable).
+    """
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if token:
+        try:
+            tdata = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
+            return f"user:{tdata['user_id']}", False
+        except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
+            pass
+    return f"ip:{_client_ip()}", True
+
+
+def _check_rate_limit(key, is_anonymous):
+    """Vérifie buckets minute + heure. True si autorisé."""
     now = time.time()
-    timestamps = _chat_rate[user_id]
-    _chat_rate[user_id] = [t for t in timestamps if now - t < CHAT_RATE_WINDOW]
-    limit = ANON_RATE_LIMIT if is_anonymous else CHAT_RATE_LIMIT
-    if len(_chat_rate[user_id]) >= limit:
+    _chat_rate_min[key] = [t for t in _chat_rate_min[key] if now - t < 60]
+    _chat_rate_hour[key] = [t for t in _chat_rate_hour[key] if now - t < 3600]
+    per_min = CHAT_ANON_PER_MIN if is_anonymous else CHAT_AUTH_PER_MIN
+    per_hour = CHAT_ANON_PER_HOUR if is_anonymous else CHAT_AUTH_PER_HOUR
+    if len(_chat_rate_min[key]) >= per_min:
         return False
-    _chat_rate[user_id].append(now)
+    if len(_chat_rate_hour[key]) >= per_hour:
+        return False
+    _chat_rate_min[key].append(now)
+    _chat_rate_hour[key].append(now)
     return True
 
 
@@ -277,7 +327,10 @@ def api_chat():
             "suggestions": [], "criteria": {}, "profile_ready": False, "confirmed": False
         })
 
-    if not _check_rate_limit(user_id, is_anonymous=is_anonymous):
+    # Rate-limit AVANT tout appel LLM. Clé = IP (anon) ou JWT user_id.
+    rl_key, rl_is_anon = _rate_key()
+    if not _check_rate_limit(rl_key, rl_is_anon):
+        log.warning(f"Chat rate-limited key={rl_key} anon={rl_is_anon}")
         return jsonify({
             "message": "Trop de messages. Attends quelques secondes avant de réessayer.",
             "suggestions": [], "criteria": {}, "profile_ready": False, "confirmed": False
@@ -421,6 +474,13 @@ def api_chat_unresolved_choice():
     un id précis. Impact d'un vandal : pollution du champ 'chosen' dans
     unresolved_locations (table d'audit interne, pas de data user).
     """
+    # Rate-limit IP/user avant DB write (évite pollution massive de
+    # unresolved_locations par un attaquant qui scripte le POST).
+    rl_key, rl_is_anon = _rate_key()
+    if not _check_rate_limit(rl_key, rl_is_anon):
+        log.warning(f"Unresolved-choice rate-limited key={rl_key}")
+        return jsonify({'error': 'rate_limited'}), 429
+
     data = request.json or {}
     row_id = data.get('log_id') or data.get('row_id')
     chosen = data.get('chosen')
@@ -441,6 +501,12 @@ def api_chat_unresolved_choice():
 
 @chat_bp.route('/api/chat/reset', methods=['POST'])
 def chat_reset():
+    # Rate-limit (évite reset-spam qui re-force des /api/chat derrière).
+    rl_key, rl_is_anon = _rate_key()
+    if not _check_rate_limit(rl_key, rl_is_anon):
+        log.warning(f"Chat-reset rate-limited key={rl_key}")
+        return jsonify({'error': 'rate_limited'}), 429
+
     data = request.json or {}
     token = request.headers.get('Authorization', '').replace('Bearer ', '')
     if token:
