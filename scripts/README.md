@@ -81,6 +81,12 @@ repository secret**, add:
 | `RENDER_API_KEY`   | Render dashboard → Account Settings → API Keys → Create. Copy once.      |
 | `RENDER_SERVICE_ID`| Render dashboard → bonhome service → URL shows `srv-xxxxxxxx`.            |
 
+> **No `RENDER_OWNER_ID` needed.** The Render `/v1/logs` endpoint requires
+> `ownerId` in addition to `resource` since the 2025 API shift, but the
+> script resolves it automatically by calling `/v1/owners` at startup with
+> the same API key. If the token has access to multiple workspaces, the
+> first owner is used and a `::warning::` annotation is emitted.
+
 First run: **Actions** tab → `monitor-p0-ssl` → **Run workflow** → set
 `window=48h` → Run. After green, the `cron` schedule takes over every 2h.
 

@@ -34,7 +34,6 @@ import os
 import re
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 try:
@@ -96,13 +95,46 @@ def parse_window(spec):
 # ---------------------------------------------------------------------------
 # Render logs
 # ---------------------------------------------------------------------------
-def fetch_render_logs(api_key, service_id, since_iso, until_iso, limit=500):
+def fetch_render_owner_id(api_key):
+    """Resolve the owner ID automatically — the /v1/logs endpoint requires
+    ownerId in addition to resource (service_id) since the 2025 API shift.
+    Rather than loading Antony with a 4th secret, we call /v1/owners once
+    at startup and pick the first owner. If the token has access to multiple
+    workspaces we take the first; a warning is logged so it's visible in the
+    Actions output if that ever becomes ambiguous."""
+    r = requests.get(
+        f"{RENDER_API}/owners",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Accept": "application/json",
+        },
+        timeout=30,
+    )
+    r.raise_for_status()
+    body = r.json()
+    # Response shape: [{"owner": {"id": "tea-...", "name": "..."}}, ...]
+    owners = []
+    for item in body if isinstance(body, list) else body.get("data") or []:
+        owner = item.get("owner") if isinstance(item, dict) else None
+        if owner and owner.get("id"):
+            owners.append(owner["id"])
+        elif isinstance(item, dict) and item.get("id"):
+            owners.append(item["id"])
+    if not owners:
+        raise RuntimeError(f"no owner returned by /v1/owners (body preview: {str(body)[:200]})")
+    if len(owners) > 1:
+        print(f"::warning::Render token has access to {len(owners)} owners; using first ({owners[0]})", file=sys.stderr)
+    return owners[0]
+
+
+def fetch_render_logs(api_key, owner_id, service_id, since_iso, until_iso, limit=500):
     """Call Render /v1/logs. Returns a list of log entries (possibly empty).
     Render's API shape for logs has migrated a couple of times — we tolerate
     {"logs":[...]}, {"data":[...]}, or a bare list."""
     r = requests.get(
         f"{RENDER_API}/logs",
         params={
+            "ownerId": owner_id,
             "resource": service_id,
             "startTime": since_iso,
             "endTime": until_iso,
@@ -128,9 +160,11 @@ def scan_logs(api_key, service_id, window):
     until_iso = now.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     api_error = None
+    owner_id = None
     entries = []
     try:
-        entries = fetch_render_logs(api_key, service_id, since_iso, until_iso)
+        owner_id = fetch_render_owner_id(api_key)
+        entries = fetch_render_logs(api_key, owner_id, service_id, since_iso, until_iso)
     except requests.HTTPError as e:
         api_error = f"HTTP {e.response.status_code} {e.response.text[:200]}"
     except Exception as e:
@@ -147,6 +181,7 @@ def scan_logs(api_key, service_id, window):
 
     return {
         "window": {"since": since_iso, "until": until_iso, "duration": str(window)},
+        "owner_id": owner_id,
         "entries_scanned": len(entries),
         "hits": hits,
         "api_error": api_error,
@@ -241,29 +276,20 @@ def main():
     report["logs"] = scan_logs(api_key, service_id, window)
     _flush_report()
 
-    # 2) QA pings — parallélisés en 2 threads :
-    #   thread A : Peseux call 1 → sleep(peseux_delay) → Peseux call 2
-    #              (séquence OBLIGATOIRE, c'est le scénario reproduction
-    #              du crash — un retry sur conn SSL stale côté serveur).
-    #   thread B : Cortaillod (sanity check indépendant).
-    # Gain : ~/2 sur les window=48h qui ont cancelled le run #1.
-    def _peseux_sequence():
-        out = [call_qa(args.host, qa_token, "peseux")]
-        time.sleep(args.peseux_delay)
-        out.append(call_qa(args.host, qa_token, "peseux"))
-        return out
-
-    def _cortaillod_sequence():
-        return [call_qa(args.host, qa_token, "cortaillod")]
-
-    with ThreadPoolExecutor(max_workers=2) as ex:
-        fut_peseux = ex.submit(_peseux_sequence)
-        fut_cortaillod = ex.submit(_cortaillod_sequence)
-        # Ordre préservé dans le rapport : cortaillod, peseux#1, peseux#2.
-        report["qa_calls"].extend(fut_cortaillod.result())
-        _flush_report()
-        report["qa_calls"].extend(fut_peseux.result())
-        _flush_report()
+    # 2) QA pings — SÉQUENTIEL strict.
+    # Le run #2 avait tenté Peseux||Cortaillod en parallèle pour sauver du
+    # temps wall-clock : raté, les 2 calls concurrents saturent bonhome
+    # (scraping ScrapingBee × 2 villes × 2 portails × 2 tx = 8 workers
+    # simultanés, l'endpoint coupe à ~270s sur le timeout edge Render).
+    # Ordre : Cortaillod (sanity, ~60s quand l'endpoint n'est pas saturé)
+    # → Peseux#1 → sleep(peseux_delay) → Peseux#2 (reproduction digue).
+    report["qa_calls"].append(call_qa(args.host, qa_token, "cortaillod"))
+    _flush_report()
+    report["qa_calls"].append(call_qa(args.host, qa_token, "peseux"))
+    _flush_report()
+    time.sleep(args.peseux_delay)
+    report["qa_calls"].append(call_qa(args.host, qa_token, "peseux"))
+    _flush_report()
 
     # Verdict
     ssl_hit = bool(report["logs"]["hits"])
