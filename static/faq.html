@@ -3,61 +3,62 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FAQ — Bon Home</title>
-  <meta name="description" content="Foire aux questions sur Bon Home : comment fonctionne la recherche IA, les scores, les alertes et votre compte.">
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <title>FAQ — bonhome.</title>
+  <meta name="description" content="Foire aux questions sur bonhome. : comment fonctionne la recherche IA, les scores, les alertes et votre compte.">
+  <meta name="theme-color" content="#1F6B6E">
+  <link rel="icon" type="image/svg+xml" href="/static/logos/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,300;1,9..144,400&family=Inter:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="/static/brand.css?v=20260420b">
+  <link rel="stylesheet" href="/static/components.css?v=20260420b">
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-    :root { --dark: #0f172a; --blue: #0369a1; --blue-light: #0ea5e9; --gray-50: #f8fafc; --gray-100: #f1f5f9; --gray-500: #64748b; --gray-700: #334155; --white: #fff; }
-    body { font-family: 'Inter', system-ui, sans-serif; color: var(--dark); background: var(--white); -webkit-font-smoothing: antialiased; }
-    h1, h2, h3 { font-family: 'Playfair Display', Georgia, serif; }
+    body { font-family: var(--bh-font-sans); color: var(--bh-ink); background: var(--bh-paper); -webkit-font-smoothing: antialiased; font-feature-settings: "ss01" on, "ss02" on; }
+    h1, h2, h3 { font-family: var(--bh-font-serif); font-weight: var(--bh-weight-light); letter-spacing: var(--bh-track-snug); font-variation-settings: "opsz" 144; }
     .nav { display: flex; justify-content: space-between; align-items: center; padding: 18px 5%; max-width: 1280px; margin: 0 auto; position: relative; }
-    .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--dark); }
-    .nav-logo .logo-text { font-family: 'Playfair Display', Georgia, serif; font-size: 22px; font-weight: 800; }
+    .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--bh-ink); }
     .nav-links { display: flex; gap: 24px; align-items: center; }
-    .nav-links a { color: var(--gray-700); font-weight: 500; font-size: 15px; text-decoration: none; }
-    .nav-links a.active { color: var(--blue); font-weight: 600; }
+    .nav-links a { color: var(--bh-ink-soft); font-weight: 500; font-size: 15px; text-decoration: none; }
+    .nav-links a.active { color: var(--bh-teal); font-weight: 600; }
     .nav-toggle { display: none; background: none; border: 0; padding: 8px; cursor: pointer; width: 40px; height: 40px; flex-direction: column; justify-content: center; gap: 5px; }
-    .nav-toggle span { display: block; width: 22px; height: 2px; background: var(--dark); border-radius: 2px; transition: transform .2s, opacity .2s; }
+    .nav-toggle span { display: block; width: 22px; height: 2px; background: var(--bh-ink); border-radius: 2px; transition: transform .2s, opacity .2s; }
     .nav-toggle[aria-expanded="true"] span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
     .nav-toggle[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
     .nav-toggle[aria-expanded="true"] span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
     @media (max-width: 768px) {
       .nav-toggle { display: flex; }
-      .nav-links { display: none; position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; align-items: stretch; gap: 0; padding: 12px 5% 20px; background: var(--white); border-top: 1px solid var(--gray-100); box-shadow: 0 12px 24px rgba(15,23,42,.08); z-index: 50; }
+      .nav-links { display: none; position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; align-items: stretch; gap: 0; padding: 12px 5% 20px; background: var(--bh-paper-raised); border-top: 1px solid var(--bh-line-soft); box-shadow: 0 12px 24px rgba(26, 35, 50,.08); z-index: 50; }
       .nav-links.open { display: flex; }
-      .nav-links a { padding: 14px 8px; border-bottom: 1px solid var(--gray-100); font-size: 16px; }
+      .nav-links a { padding: 14px 8px; border-bottom: 1px solid var(--bh-line-soft); font-size: 16px; }
       .nav-links a:last-child { border-bottom: 0; }
       .content h1 { font-size: 30px; }
       .content { padding: 40px 5% 60px; }
     }
     .content { max-width: 820px; margin: 0 auto; padding: 60px 5% 80px; }
     .content h1 { font-size: 40px; margin-bottom: 12px; }
-    .content .subtitle { color: var(--gray-500); font-size: 16px; margin-bottom: 48px; }
+    .content .subtitle { color: var(--bh-ink-mute); font-size: 16px; margin-bottom: 48px; }
     .faq-group { margin-bottom: 40px; }
-    .faq-group h2 { font-size: 22px; margin-bottom: 16px; color: var(--dark); padding-bottom: 8px; border-bottom: 2px solid var(--gray-100); }
-    details { background: var(--gray-50); border: 1px solid var(--gray-100); border-radius: 12px; padding: 18px 22px; margin-bottom: 12px; transition: all .2s; }
-    details[open] { background: var(--white); border-color: var(--blue); box-shadow: 0 4px 16px rgba(3,105,161,.08); }
-    summary { font-weight: 600; font-size: 16px; color: var(--dark); cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+    .faq-group h2 { font-size: 22px; margin-bottom: 16px; color: var(--bh-ink); padding-bottom: 8px; border-bottom: 2px solid var(--bh-line-soft); }
+    details { background: var(--bh-paper-soft); border: 1px solid var(--bh-line-soft); border-radius: 12px; padding: 18px 22px; margin-bottom: 12px; transition: all .2s; }
+    details[open] { background: var(--bh-paper-raised); border-color: var(--bh-teal); box-shadow: 0 4px 16px rgba(31, 107, 110,.08); }
+    summary { font-weight: 600; font-size: 16px; color: var(--bh-ink); cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; }
     summary::-webkit-details-marker { display: none; }
-    summary::after { content: '+'; font-size: 22px; color: var(--blue); font-weight: 400; transition: transform .2s; }
+    summary::after { content: '+'; font-size: 22px; color: var(--bh-teal); font-weight: 400; transition: transform .2s; }
     details[open] summary::after { content: '−'; }
-    details p { font-size: 15px; line-height: 1.75; color: var(--gray-700); margin-top: 14px; }
-    .contact-cta { background: linear-gradient(135deg, var(--blue) 0%, var(--blue-light) 100%); color: var(--white); padding: 32px; border-radius: 16px; text-align: center; margin-top: 48px; }
-    .contact-cta h3 { font-size: 22px; margin-bottom: 8px; color: var(--white); }
+    details p { font-size: 15px; line-height: 1.75; color: var(--bh-ink-soft); margin-top: 14px; }
+    .contact-cta { background: linear-gradient(135deg, var(--bh-teal) 0%, var(--bh-teal-soft) 100%); color: var(--bh-paper-raised); padding: 32px; border-radius: 16px; text-align: center; margin-top: 48px; }
+    .contact-cta h3 { font-size: 22px; margin-bottom: 8px; color: var(--bh-paper-raised); }
     .contact-cta p { font-size: 15px; margin-bottom: 16px; opacity: .95; }
-    .contact-cta a { display: inline-block; background: var(--white); color: var(--blue); padding: 10px 24px; border-radius: 10px; font-weight: 600; text-decoration: none; transition: transform .2s; }
+    .contact-cta a { display: inline-block; background: var(--bh-paper-raised); color: var(--bh-teal); padding: 10px 24px; border-radius: 10px; font-weight: 600; text-decoration: none; transition: transform .2s; }
     .contact-cta a:hover { transform: translateY(-1px); }
-    .footer { background: var(--gray-50); border-top: 1px solid var(--gray-100); padding: 40px 5%; text-align: center; }
-    .footer p { font-size: 13px; color: var(--gray-500); }
+    .footer { background: var(--bh-paper-soft); border-top: 1px solid var(--bh-line-soft); padding: 40px 5%; text-align: center; }
+    .footer p { font-size: 13px; color: var(--bh-ink-mute); }
   </style>
 </head>
 <body>
   <nav class="nav">
-    <a href="/" class="nav-logo">
-      <svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" style="width:32px;height:32px"><rect width="48" height="48" rx="12" fill="#0369a1"/><circle cx="21" cy="20" r="11" fill="none" stroke="#fff" stroke-width="2.8"/><line x1="29" y1="28" x2="39" y2="38" stroke="#fff" stroke-width="2.8" stroke-linecap="round"/><path d="M21 13 L14 19 L15.5 19 L15.5 26 L26.5 26 L26.5 19 L28 19 Z" fill="#fff" opacity="0.95"/><rect x="19.5" y="22" width="3" height="4" rx="0.5" fill="#0369a1"/></svg>
-      <span class="logo-text">Bon Home</span>
-    </a>
+    <a href="/" class="nav-logo"><span class="wordmark" style="font-size:26px">bonh<span class="wordmark__chevron-wrap"><svg class="wordmark__chevron" viewBox="0 0 20 12" aria-hidden="true"><path d="M2 10 L10 3 L18 10"/></svg>o</span>me<span class="wordmark__point">.</span></span></a>
     <button class="nav-toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false" aria-controls="nav-links">
       <span></span><span></span><span></span>
     </button>
@@ -102,24 +103,24 @@
 
   <main class="content">
     <h1>Foire aux questions</h1>
-    <p class="subtitle">Tout ce que vous voulez savoir sur Bon Home.</p>
+    <p class="subtitle">Tout ce que vous voulez savoir sur bonhome.</p>
 
     <div class="faq-group">
       <h2>Fonctionnement général</h2>
 
       <details>
-        <summary>Comment Bon Home trouve-t-il les biens immobiliers ?</summary>
-        <p>Bon Home scrute en continu plus de 10 portails immobiliers suisses (Homegate, ImmoScout24, Comparis, Flatfox, Immobilier.ch, Acheter-Louer, Properstar et plusieurs régies indépendantes). Les annonces sont rafraîchies chaque jour, dédupliquées entre portails, puis scorées selon vos critères personnels.</p>
+        <summary>Comment bonhome. trouve-t-il les biens immobiliers ?</summary>
+        <p>bonhome. scrute en continu plus de 10 portails immobiliers suisses (Homegate, ImmoScout24, Comparis, Flatfox, Immobilier.ch, Acheter-Louer, Properstar et plusieurs régies indépendantes). Les annonces sont rafraîchies chaque jour, dédupliquées entre portails, puis scorées selon vos critères personnels.</p>
       </details>
 
       <details>
-        <summary>Est-ce que Bon Home est gratuit ?</summary>
-        <p>Oui, l'accès à Bon Home est gratuit pour l'instant. Nous réfléchissons à une offre premium à l'avenir pour des fonctionnalités avancées (alertes instantanées, analyses de marché), mais le service de base restera gratuit.</p>
+        <summary>Est-ce que bonhome. est gratuit ?</summary>
+        <p>Oui, l'accès à bonhome. est gratuit pour l'instant. Nous réfléchissons à une offre premium à l'avenir pour des fonctionnalités avancées (alertes instantanées, analyses de marché), mais le service de base restera gratuit.</p>
       </details>
 
       <details>
         <summary>Quelle est la différence avec Homegate ou ImmoScout24 ?</summary>
-        <p>Bon Home ne publie pas d'annonces : nous agrégeons les biens des autres portails et les présentons avec un scoring personnalisé. L'objectif est de vous épargner la corvée de consulter 10 sites différents et de repérer le bon bien parmi des centaines d'annonces.</p>
+        <p>bonhome. ne publie pas d'annonces : nous agrégeons les biens des autres portails et les présentons avec un scoring personnalisé. L'objectif est de vous épargner la corvée de consulter 10 sites différents et de repérer le bon bien parmi des centaines d'annonces.</p>
       </details>
     </div>
 
@@ -166,7 +167,7 @@
 
       <details>
         <summary>Mes données sont-elles partagées avec des tiers ?</summary>
-        <p>Non. Vos critères et conversations ne sont jamais vendus ni partagés. Les seuls sous-traitants techniques sont listés dans notre <a href="/privacy" style="color:#0369a1">politique de confidentialité</a>.</p>
+        <p>Non. Vos critères et conversations ne sont jamais vendus ni partagés. Les seuls sous-traitants techniques sont listés dans notre <a href="/privacy" style="color:#1F6B6E">politique de confidentialité</a>.</p>
       </details>
 
       <details>
@@ -183,7 +184,7 @@
   </main>
 
   <footer class="footer">
-    <p>&copy; 2026 Bon Home — Le bon home, au bon moment.</p>
+    <p>© 2026 bonhome.ch — Le bon home, au bon moment.</p>
   </footer>
 </body>
 </html>
