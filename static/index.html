@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="manifest" href="/static/manifest.json">
-  <meta name="theme-color" content="#2A6670">
+  <meta name="theme-color" content="#1F6B6E">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>bonhome. — L'appart qui te va.</title>
@@ -28,9 +28,14 @@
   <meta name="twitter:description" content="Lou surveille 7 portails pour toi. Tu vis, elle cherche.">
   <meta name="twitter:image" content="https://www.bonhome.ch/static/og-beta-v4.png">
 
+  <link rel="icon" type="image/svg+xml" href="/static/logos/favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="/static/brand.css?v=20260419a">
+  <!-- Fraunces avec l'axe opsz (CRITIQUE — sans ça rend fin comme Times).
+       URL verbatim du README DA V1.0 (section Font loading). -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,300;1,9..144,400&family=Inter:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="/static/brand.css?v=20260420b">
+  <link rel="stylesheet" href="/static/components.css?v=20260420b">
 
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -60,7 +65,7 @@
 
     /* CHAT CARD HERO */
     .hero-visual { flex-shrink: 0; width: 420px; }
-    .chat-card { background: var(--teal-deep); border-radius: 24px; padding: 28px 24px 24px; box-shadow: 0 20px 60px rgba(26,70,80,.22), 0 0 0 1px rgba(255,255,255,.05); position: relative; overflow: hidden; }
+    .chat-card { background: var(--teal-deep); border-radius: 24px; padding: 28px 24px 24px; box-shadow: 0 20px 60px rgba(23,78,81,.22), 0 0 0 1px rgba(255,255,255,.05); position: relative; overflow: hidden; }
     .cc-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; position: relative; z-index: 1; }
     .cc-avatar { width: 44px; height: 44px; background: rgba(206,223,225,.15); border-radius: 12px; display: flex; align-items: center; justify-content: center; }
     .cc-name { color: var(--paper); font-weight: 400; font-size: 16px; font-family: var(--font-display); letter-spacing: -0.01em; }
@@ -92,7 +97,7 @@
     .features-header p { font-size: 16px; color: var(--ink-soft); max-width: 560px; margin: 0 auto; }
     .features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; }
     .feature-card { background: var(--cream); border: 1px solid var(--line-soft); border-radius: 16px; padding: 32px; transition: all .3s; }
-    .feature-card:hover { border-color: var(--teal); box-shadow: 0 8px 32px rgba(42,102,112,.08); transform: translateY(-4px); }
+    .feature-card:hover { border-color: var(--teal); box-shadow: 0 8px 32px rgba(31,107,110,.08); transform: translateY(-4px); }
     .feature-icon { width: 48px; height: 48px; background: var(--teal-soft); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
     .feature-icon svg { width: 24px; height: 24px; stroke: var(--teal); }
     .feature-card h3 { font-size: 20px; margin-bottom: 8px; font-family: var(--font-display); font-weight: 400; }
@@ -120,7 +125,7 @@
     .testimonials-sub { text-align: center; font-size: 16px; color: var(--ink-soft); margin-bottom: 48px; }
     .testimonials-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
     .testimonial-card { background: var(--paper); border: 1px solid var(--line-soft); border-radius: 16px; padding: 28px; display: flex; flex-direction: column; gap: 16px; transition: all .3s; }
-    .testimonial-card:hover { border-color: var(--teal); box-shadow: 0 8px 32px rgba(42,102,112,.08); transform: translateY(-4px); }
+    .testimonial-card:hover { border-color: var(--teal); box-shadow: 0 8px 32px rgba(31,107,110,.08); transform: translateY(-4px); }
     .testimonial-stars { color: var(--accent); font-size: 16px; letter-spacing: 2px; }
     .testimonial-quote { font-size: 15px; line-height: 1.65; color: var(--ink); flex: 1; font-family: var(--font-display); font-weight: 300; }
     .testimonial-author { display: flex; align-items: center; gap: 12px; }
@@ -136,8 +141,11 @@
     .footer-col a:hover { color: var(--paper); }
     .footer-brand { display: flex; flex-direction: column; gap: 12px; }
     .footer-brand .wordmark { font-size: 28px; color: var(--paper); }
-    .footer-brand .wordmark .wordmark__point { color: var(--teal-soft); }
-    .footer-brand .wordmark .wordmark__chevron { stroke: var(--teal-soft); }
+    /* Signature wordmark = sauge (DA V1.0). Sur teal-deep on prend sage-soft
+       (#B8C9B9) pour la lisibilité ; sage brut passerait mais est trop
+       proche du teal en valeur. */
+    .footer-brand .wordmark .wordmark__point { color: var(--bh-sage-soft); }
+    .footer-brand .wordmark .wordmark__chevron { stroke: var(--bh-sage-soft); }
     .footer-baseline { font-family: var(--font-display); font-weight: 300; color: var(--teal-soft); font-size: 16px; }
     .footer-tagline { font-size: 14px; line-height: 1.6; color: var(--teal-soft); max-width: 320px; }
     .footer-social { display: flex; gap: 12px; margin-top: 12px; }
@@ -147,14 +155,14 @@
     .footer-bottom p { font-size: 12px; color: var(--teal-soft); opacity: 0.6; }
 
     /* AUTH MODAL */
-    .lou-overlay{position:fixed;inset:0;background:rgba(26,70,80,.6);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(4px)}
+    .lou-overlay{position:fixed;inset:0;background:rgba(23,78,81,.6);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(4px)}
     .lou-auth-box{background:var(--paper);border-radius:16px;padding:36px;width:400px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,.2);position:relative;color:var(--ink)}
     .lou-auth-box .close-btn{position:absolute;top:12px;right:16px;background:none;border:none;font-size:22px;cursor:pointer;color:var(--ink-mute)}
     .lou-auth-box .close-btn:hover{color:var(--ink)}
     .lou-auth-box h2{font-size:26px;margin:0 0 4px;font-family:var(--font-display);font-weight:400}
     .lou-auth-box .sub{font-size:14px;color:var(--ink-soft);margin-bottom:20px}
     .lou-auth-box input{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:10px;margin-bottom:12px;font-size:14px;box-sizing:border-box;outline:none;font-family:var(--font-body);background:var(--paper);color:var(--ink)}
-    .lou-auth-box input:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(42,102,112,.12)}
+    .lou-auth-box input:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(31,107,110,.12)}
     .auth-submit{width:100%;padding:13px;border:none;border-radius:var(--r-pill);background:var(--teal);color:var(--paper);font-size:15px;font-weight:500;cursor:pointer;transition:background .2s;font-family:var(--font-body)}
     .auth-submit:hover{background:var(--teal-deep)}
     .lou-auth-switch{text-align:center;margin-top:14px;font-size:13px;color:var(--ink-soft)}
@@ -174,7 +182,7 @@
     }
     @media (max-width: 768px) {
       .nav-toggle { display: flex; }
-      .nav-links { display: none; position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; align-items: stretch; gap: 0; padding: 12px 5% 20px; background: var(--paper); border-top: 1px solid var(--line-soft); box-shadow: 0 12px 24px rgba(26,70,80,.08); z-index: 50; }
+      .nav-links { display: none; position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; align-items: stretch; gap: 0; padding: 12px 5% 20px; background: var(--paper); border-top: 1px solid var(--line-soft); box-shadow: 0 12px 24px rgba(23,78,81,.08); z-index: 50; }
       .nav-links.open { display: flex; }
       .nav-links a { padding: 14px 8px; border-bottom: 1px solid var(--line-soft); font-size: 16px; }
       .nav-links a:last-child { border-bottom: 0; }

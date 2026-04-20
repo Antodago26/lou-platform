@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" role="img" aria-label="bonhome — trouver un chez-soi, plus doucement">
+  <defs>
+    
+  </defs>
+
+  
+  <rect width="1200" height="630" fill="#F5F1EA"></rect>
+
+  
+  <line x1="80" y1="80" x2="1120" y2="80" stroke="#D4CEC2" stroke-width="1"></line>
+
+  
+  <text class="og-meta" x="80" y="120" font-size="14" fill="#4A5568">bonhome.ch · beta</text>
+
+  
+  <g transform="translate(600, 310)">
+    
+    <path d="M34 -100 L66 -130 L98 -100" stroke="#6B8A74" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round" transform="translate(-170, 0)"></path>
+    <text class="og-wm" text-anchor="middle" y="0" font-size="180" fill="#1A2332">bonhome</text>
+    <text class="og-wm" text-anchor="middle" x="340" y="0" font-size="180" fill="#6B8A74">.</text>
+  </g>
+
+  
+  <text class="og-sub" x="600" y="440" font-size="42" fill="#4A5568" text-anchor="middle">trouver un chez-soi, plus doucement</text>
+
+  
+  <g transform="translate(80, 560)">
+    <text class="og-meta" x="0" y="0" font-size="13" fill="#1F6B6E">NEUCHÂTEL</text>
+    <text class="og-meta" x="180" y="0" font-size="13" fill="#1F6B6E">LOCATION</text>
+    <text class="og-meta" x="360" y="0" font-size="13" fill="#1F6B6E">ACHAT</text>
+  </g>
+
+  
+  <circle cx="1120" cy="560" r="6" fill="#C15A3E"></circle>
+
+  
+  <line x1="80" y1="540" x2="1120" y2="540" stroke="#D4CEC2" stroke-width="1"></line>
+</svg>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <rect width="32" height="32" fill="#F5F1EA" rx="4"></rect>
+  <text x="6" y="26" font-family="Fraunces, Georgia, serif" font-size="28" font-weight="400" letter-spacing="-0.035em" fill="#1A2332" style="font-variation-settings: &#39;opsz&#39; 144;">b</text>
+  <path d="M9 10 L14 6 L19 10" stroke="#6B8A74" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>

@@ -1,0 +1,1975 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"/>
+<title>bonhome · D1 V4 · livraison</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,300;1,9..144,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #eae6df; font-family: "Inter", system-ui, sans-serif; }
+  code { font-family: ui-monospace, "SF Mono", monospace; }
+  @media print {
+    body { background: white; }
+    .print-section { page-break-after: always; break-after: page; }
+    .print-section:last-child { page-break-after: auto; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<!-- inline-modules-start -->
+<script type="text/babel" data-presets="react" data-src="v5/tokens.jsx">
+// bonhome D1 V5 — tokens recalés sur la V2 validée
+// V4 → V5 : aubergine SUPPRIMÉE. Retour à la palette validée :
+//   sauge = ancre émotionnelle + accent CTA (matches, avatar, point wordmark)
+//   terracotta = signal exceptionnel (≤ 1/écran : "Nouveau", urgences, badges)
+//   pas de 3e couleur signature.
+
+// ─── LIGHT MODE (validé V2) ─────────────────────────────────
+const L = {
+  ink:      '#1F2420',  // 13.4:1 sur paper — AAA
+  inkSoft:  '#4A5350',  // 8.2:1 sur paper — AAA
+  inkMute:  '#7A827E',  // 4.7:1 sur paper — AA
+
+  paper:    '#FAF7F1',
+  cream:    '#F5F1EA',
+  line:     '#E4DFD4',
+  lineSoft: '#EEE9DE',
+
+  sage:     '#6B8A74',  // ancre émotionnelle — matches, avatar, CTA, point wordmark
+  sageDeep: '#3E5847',  // 8.3:1 — AAA
+  sageSoft: '#D6E0D4',
+
+  accent:     '#C9986A', // terracotta — signal ≤ 1/écran (badges Nouveau, urgences)
+  accentSoft: '#EED9C2',
+  accentInk:  '#7A4F2E', // 6.1:1 — AA pour texte sur soft
+};
+
+// ─── DARK MODE ──────────────────────────────────────────────
+const D = {
+  ink:      '#F0ECE4',
+  inkSoft:  '#9EA29B',
+  inkMute:  '#6E7570',
+
+  paper:    '#13161A',
+  cream:    '#1A1E1B',
+  line:     '#2A2E2A',
+  lineSoft: '#20231F',
+
+  sage:     '#9DBBA4',
+  sageDeep: '#C3D6C6',
+  sageSoft: '#2A3A30',
+
+  accent:     '#D4A27A',
+  accentSoft: '#3A2E25',
+  accentInk:  '#F0C9A6',
+};
+
+// Alias ACCENTS — terracotta seule, plus d'aubergine.
+const ACCENTS = {
+  terracotta: {
+    name: 'Terracotta douce',
+    hex: L.accent,
+    soft: L.accentSoft,
+    ink: L.accentInk,
+    contrastNote: 'Contraste 6.1:1 (AA) sur accent-soft — usage signal uniquement',
+    vibe: 'Chaleur, signal exceptionnel. Maximum 1 occurrence par écran.',
+  },
+};
+
+const CSS_LIGHT_VARS = `:root {
+  /* Neutrals */
+  --ink: ${L.ink};
+  --ink-soft: ${L.inkSoft};
+  --ink-mute: ${L.inkMute};
+  --paper: ${L.paper};
+  --cream: ${L.cream};
+  --line: ${L.line};
+  --line-soft: ${L.lineSoft};
+
+  /* Sauge — ancre émotionnelle + CTA primaire */
+  --sage: ${L.sage};
+  --sage-deep: ${L.sageDeep};
+  --sage-soft: ${L.sageSoft};
+
+  /* Terracotta — signal exceptionnel (≤ 1/écran) */
+  --accent: ${L.accent};
+  --accent-soft: ${L.accentSoft};
+  --accent-ink: ${L.accentInk};
+
+  /* Type */
+  --font-display: "Fraunces", "Cormorant Garamond", Georgia, serif;
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: ${D.ink};
+    --ink-soft: ${D.inkSoft};
+    --ink-mute: ${D.inkMute};
+    --paper: ${D.paper};
+    --cream: ${D.cream};
+    --line: ${D.line};
+    --line-soft: ${D.lineSoft};
+    --sage: ${D.sage};
+    --sage-deep: ${D.sageDeep};
+    --sage-soft: ${D.sageSoft};
+    --accent: ${D.accent};
+    --accent-soft: ${D.accentSoft};
+    --accent-ink: ${D.accentInk};
+  }
+}`;
+
+Object.assign(window, { L, D, ACCENTS, CSS_LIGHT_VARS });
+
+</script>
+<script type="text/babel" data-presets="react" data-src="v5/primitives.jsx">
+// V5 primitives — wordmark VALIDÉ (depuis itérations.html · D1Logo)
+// Fraunces 400, chevron SVG sur le 2e "o", point final sauge.
+// Aucun "o" italique coloré, aucun chevron Inter — strictement la V2 validée.
+
+function Wordmark({ size = 48, color, markColor, pointColor, showChevron = true }) {
+  const ink = color;
+  const sage = markColor;
+  const point = pointColor || sage;
+  return (
+    <span style={{
+      fontFamily: '"Fraunces", "Cormorant Garamond", Georgia, serif',
+      fontSize: size,
+      fontWeight: 400,
+      letterSpacing: '-0.035em',
+      color: ink,
+      lineHeight: 1,
+      display: 'inline-flex',
+      alignItems: 'baseline',
+      whiteSpace: 'nowrap',
+    }}>
+      <span>b</span>
+      <span>o</span>
+      <span>n</span>
+      <span>h</span>
+      <span style={{ position: 'relative', display: 'inline-block' }}>
+        <span>o</span>
+        {showChevron && (
+          <svg
+            viewBox="0 0 24 24"
+            width={size * 0.32}
+            height={size * 0.32}
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: `-${size * 0.18}px`,
+              transform: 'translateX(-50%)',
+              pointerEvents: 'none',
+            }}
+          >
+            <path d="M2 12 L12 3 L22 12" stroke={sage} strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        )}
+      </span>
+      <span>m</span>
+      <span>e</span>
+      <span style={{ color: point }}>.</span>
+    </span>
+  );
+}
+
+function Chevron({ size = 14, color, strokeWidth = 2, style = {} }) {
+  return (
+    <svg width={size} height={size * 0.6} viewBox="0 0 20 12" style={{ display: 'inline-block', ...style }}>
+      <path d="M2 10 L10 3 L18 10" stroke={color} strokeWidth={strokeWidth} fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+function ChevronBullet({ color, children, size = 13 }) {
+  return (
+    <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', fontSize: size, lineHeight: 1.55 }}>
+      <Chevron size={10} color={color} style={{ position: 'relative', top: -1, flexShrink: 0 }}/>
+      <span>{children}</span>
+    </div>
+  );
+}
+
+function ChevronDivider({ color, opacity = 0.4, width = 180 }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      gap: 8, margin: '20px 0', opacity,
+    }}>
+      <div style={{ height: 1, flex: 1, maxWidth: width, background: color }}/>
+      <Chevron size={12} color={color}/>
+      <div style={{ height: 1, flex: 1, maxWidth: width, background: color }}/>
+    </div>
+  );
+}
+
+function Monogram({ size = 64, color, accent }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64">
+      <path
+        d="M12 34 L32 16 L52 34"
+        stroke={color} strokeWidth="2.4"
+        fill="none" strokeLinecap="round" strokeLinejoin="round"
+      />
+      <path
+        d="M16 34 L16 52 L48 52 L48 34"
+        stroke={color} strokeWidth="2.4"
+        fill="none" strokeLinecap="round" strokeLinejoin="round"
+      />
+      {accent && <circle cx="32" cy="42" r="2.4" fill={accent}/>}
+    </svg>
+  );
+}
+
+function LouAvatar({ size = 32, bg, fg }) {
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%',
+      background: bg,
+      color: fg,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: size * 0.5, fontFamily: '"Fraunces", Georgia, serif',
+      fontWeight: 400,
+      flexShrink: 0,
+    }}>L</div>
+  );
+}
+
+Object.assign(window, { Wordmark, Chevron, ChevronBullet, ChevronDivider, Monogram, LouAvatar });
+
+</script>
+<script type="text/babel" data-presets="react" data-src="v5/layout.jsx">
+// V3 layout — print-native, stacked sections, each its own A3 landscape page.
+
+const DC = {
+  bg: '#e8e4dd',
+  title: '#1F2420',
+  subtitle: '#6B6B6B',
+  label: '#A09886',
+  postitBg: '#FCEDA7',
+  postitText: '#3A3620',
+};
+
+// Print wrapper — one root
+function PrintRoot({ children }) {
+  return (
+    <div style={{
+      background: '#fff',
+      fontFamily: '"Inter", system-ui, sans-serif',
+      padding: 40,
+    }}>{children}</div>
+  );
+}
+
+// Section — one page (A3 landscape ≈ 1550 × 1080 at 96dpi with margin)
+function Section({ number, title, subtitle, children, pageBreak = true }) {
+  return (
+    <div className={pageBreak ? 'print-section' : ''} style={{
+      marginBottom: 80,
+      position: 'relative',
+      padding: '0 40px',
+      minHeight: 960,
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'baseline', gap: 18,
+        marginBottom: 20,
+        borderBottom: `1px solid ${L.line}`,
+        paddingBottom: 14,
+      }}>
+        {number && (
+          <div style={{
+            fontFamily: 'ui-monospace, monospace',
+            fontSize: 11, color: L.sageDeep,
+            letterSpacing: '0.2em', textTransform: 'uppercase',
+            fontWeight: 600,
+          }}>{number}</div>
+        )}
+        <div style={{ flex: 1 }}>
+          <div style={{
+            fontFamily: '"Fraunces", Georgia, serif',
+            fontSize: 34, fontWeight: 300, color: L.ink,
+            letterSpacing: '-0.025em', lineHeight: 1.05,
+          }}>{title}</div>
+          {subtitle && (
+            <div style={{ fontSize: 13, color: L.inkSoft, marginTop: 4 }}>{subtitle}</div>
+          )}
+        </div>
+      </div>
+
+      {children}
+    </div>
+  );
+}
+
+// Artboard — scaled card, portrait or landscape
+function Artboard({ label, children, width, height, maxW = 1100, style = {} }) {
+  const scale = width > maxW ? maxW / width : 1;
+  return (
+    <div className="print-artboard" style={{
+      position: 'relative', flexShrink: 0,
+      marginBottom: 28,
+    }}>
+      {label && (
+        <div style={{
+          marginBottom: 6,
+          fontSize: 10, fontWeight: 600, color: L.inkSoft,
+          letterSpacing: '0.12em', textTransform: 'uppercase',
+        }}>{label}</div>
+      )}
+      <div style={{
+        width: width * scale, height: height * scale, overflow: 'hidden',
+      }}>
+        <div style={{
+          transform: `scale(${scale})`, transformOrigin: '0 0',
+          width, height,
+          borderRadius: 4,
+          border: `1px solid ${L.line}`,
+          boxShadow: '0 2px 4px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06)',
+          overflow: 'hidden',
+          background: '#fff',
+          ...style,
+        }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// Post-it — inline block, rotated, breaks avoided
+function PostIt({ children, rotate = -2, width = 240 }) {
+  return (
+    <div style={{
+      display: 'inline-block', width,
+      background: DC.postitBg, padding: '14px 16px',
+      fontFamily: '"Comic Sans MS", "Marker Felt", "Segoe Print", cursive',
+      fontSize: 13, lineHeight: 1.45, color: DC.postitText,
+      boxShadow: '0 2px 8px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08)',
+      transform: `rotate(${rotate * 0.35}deg)`,
+      breakInside: 'avoid',
+    }}>{children}</div>
+  );
+}
+
+// Grid — flexible row/col container
+function Row({ children, gap = 24, align = 'flex-start', wrap = true, style = {} }) {
+  return (
+    <div style={{
+      display: 'flex', gap, alignItems: align,
+      flexWrap: wrap ? 'wrap' : 'nowrap',
+      ...style,
+    }}>{children}</div>
+  );
+}
+
+function Col({ children, gap = 12, style = {} }) {
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap, ...style,
+    }}>{children}</div>
+  );
+}
+
+Object.assign(window, { PrintRoot, Section, Artboard, PostIt, Row, Col, DC });
+
+</script>
+<script type="text/babel" data-presets="react" data-src="v5/mockups.jsx">
+// V3 mockups — parameterized by theme (T = light or dark tokens) + optional accent
+// Used by Axe 1 (light vs dark side-by-side) and Axe 3 (signature variants)
+
+// ─── Chat avec Lou ──────────────────────────────────────────
+function ChatMockup({ T, accent, usesChevron = false }) {
+  const accentColor = accent ? accent.hex : T.accent;
+  const accentSoft = accent ? accent.soft : T.accentSoft;
+
+  return (
+    <div style={{
+      width: '100%', height: '100%', background: T.paper,
+      display: 'flex', flexDirection: 'column',
+      fontFamily: '"Inter", sans-serif',
+      color: T.ink,
+    }}>
+      {/* Top bar */}
+      <div style={{
+        padding: '16px 24px', borderBottom: `1px solid ${T.line}`,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        background: T.cream,
+      }}>
+        <Wordmark size={22} color={T.ink} markColor={T.sage}/>
+        <div style={{ display: 'flex', gap: 22, fontSize: 12, color: T.inkSoft }}>
+          <span style={{ fontWeight: 500, color: T.ink }}>Ma recherche</span>
+          <span>Biens</span><span>Favoris</span>
+        </div>
+        <div style={{
+          width: 28, height: 28, borderRadius: '50%', background: T.sageSoft,
+          color: T.sageDeep, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 11, fontWeight: 600,
+        }}>C</div>
+      </div>
+
+      {/* Body */}
+      <div style={{ flex: 1, padding: 24, display: 'flex', flexDirection: 'column', gap: 12, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+          <LouAvatar size={30} bg={T.sage} fg={T.paper}/>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Lou</div>
+            <div style={{ fontSize: 10, color: T.sageDeep, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: T.sage }}/>en ligne
+            </div>
+          </div>
+        </div>
+
+        <ChatBubble from="lou" T={T}>Salut Camille. Dis-moi ce que tu cherches, j'écoute.</ChatBubble>
+        <ChatBubble from="user" T={T}>4,5 pièces avec balcon, Cortaillod ou Boudry, max 2 400, proche d'une école.</ChatBubble>
+        <ChatBubble from="lou" T={T}>Noté. Je surveille 7 portails.<br/>3 biens matchent déjà — je te les montre.</ChatBubble>
+
+        {/* Notif — utilise accent signature si fourni, sinon terracotta */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '10px 14px',
+          background: accent ? accent.soft : T.cream,
+          borderLeft: `2px solid ${accentColor}`,
+          borderRadius: 3,
+          fontSize: 12,
+        }}>
+          <span style={{
+            width: 6, height: 6, borderRadius: '50%',
+            background: accentColor, boxShadow: `0 0 0 4px ${accentColor}22`,
+            flexShrink: 0,
+          }}/>
+          <span>
+            {accent && usesChevron ? <Chevron size={8} color={accentColor} style={{ marginRight: 5 }}/> : null}
+            <b>Nouveau</b> · 4,5 p Cortaillod · 2 280 CHF · il y a 12 s
+          </span>
+        </div>
+
+        <div style={{ flex: 1 }}/>
+
+        {/* Input */}
+        <div style={{
+          border: `1px solid ${T.line}`, borderRadius: 100,
+          padding: '9px 16px', display: 'flex', alignItems: 'center',
+          fontSize: 12, color: T.inkMute, background: T.cream,
+        }}>
+          {usesChevron && <Chevron size={9} color={T.inkMute} style={{ marginRight: 8 }}/>}
+          Écris à Lou…
+          <div style={{ flex: 1 }}/>
+          <div style={{
+            width: 24, height: 24, borderRadius: '50%', background: T.sage,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: T.paper, fontSize: 11,
+          }}>↑</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChatBubble({ from, T, children }) {
+  if (from === 'lou') {
+    return (
+      <div style={{
+        background: T.sageSoft, color: T.ink,
+        padding: '10px 14px', borderRadius: '14px 14px 14px 4px',
+        fontSize: 12.5, lineHeight: 1.5, maxWidth: '78%',
+        alignSelf: 'flex-start',
+      }}>{children}</div>
+    );
+  }
+  return (
+    <div style={{
+      background: T.ink, color: T.paper,
+      padding: '10px 14px', borderRadius: '14px 14px 4px 14px',
+      fontSize: 12.5, lineHeight: 1.5, maxWidth: '78%',
+      alignSelf: 'flex-end',
+    }}>{children}</div>
+  );
+}
+
+// ─── Feed de biens ──────────────────────────────────────────
+function FeedMockup({ T, accent, usesChevron = false, asymmetric = false }) {
+  const accentColor = accent ? accent.hex : T.accent;
+  const items = [
+    { title: '4,5 p · Cortaillod', price: '2 280', m2: '112', tags: ['Balcon', 'École à 3 min'], match: 96, isNew: true },
+    { title: '4 p · Boudry',       price: '2 150', m2: '98',  tags: ['Terrasse', 'Calme'], match: 82, isNew: false },
+    { title: '4,5 p · Areuse',     price: '2 390', m2: '105', tags: ['Balcon', 'Parking'], match: 74, isNew: false },
+  ];
+
+  return (
+    <div style={{
+      width: '100%', height: '100%', background: T.paper, color: T.ink,
+      fontFamily: '"Inter", sans-serif', display: 'flex', flexDirection: 'column',
+    }}>
+      <div style={{
+        padding: '16px 24px', borderBottom: `1px solid ${T.line}`,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        background: T.cream,
+      }}>
+        <Wordmark size={22} color={T.ink} markColor={T.sage}/>
+        <div style={{ display: 'flex', gap: 22, fontSize: 12, color: T.inkSoft }}>
+          <span>Ma recherche</span>
+          <span style={{ fontWeight: 500, color: T.ink }}>Biens</span>
+          <span>Favoris</span>
+        </div>
+        <div style={{
+          width: 28, height: 28, borderRadius: '50%', background: T.sageSoft,
+          color: T.sageDeep, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 11, fontWeight: 600,
+        }}>C</div>
+      </div>
+
+      {/* header with optional asymmetric 60/40 */}
+      <div style={{
+        display: asymmetric ? 'grid' : 'block',
+        gridTemplateColumns: asymmetric ? '60% 40%' : undefined,
+        padding: asymmetric ? '24px 24px 16px' : '18px 24px 12px',
+        borderBottom: `1px solid ${T.lineSoft}`,
+      }}>
+        <div>
+          <div style={{
+            fontFamily: '"Fraunces", Georgia, serif', fontSize: 24, fontWeight: 400,
+            letterSpacing: '-0.02em', marginBottom: 4,
+          }}>
+            3 biens pour toi
+          </div>
+          <div style={{ fontSize: 11, color: T.inkSoft, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: T.sage }}/>
+            Lou surveille 7 portails
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10, flex: 1, overflow: 'hidden' }}>
+        {items.map((it, i) => (
+          <div key={i} style={{
+            padding: 14,
+            background: T.cream,
+            border: `1px solid ${it.isNew ? accentColor + '55' : T.line}`,
+            borderRadius: 6,
+            display: 'grid', gridTemplateColumns: '72px 1fr auto', gap: 14,
+            alignItems: 'center',
+          }}>
+            <div style={{
+              width: 72, height: 60, borderRadius: 3,
+              background: `linear-gradient(135deg, ${T.sageSoft}, ${T.sage}33)`,
+            }}/>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                {it.isNew && (
+                  <span style={{
+                    fontSize: 9, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase',
+                    color: accentColor, padding: '2px 6px',
+                    border: `1px solid ${accentColor}66`, borderRadius: 2,
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                  }}>
+                    {usesChevron && <Chevron size={8} color={accentColor}/>}
+                    Nouveau
+                  </span>
+                )}
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{it.title}</div>
+              </div>
+              <div style={{ fontSize: 11, color: T.inkSoft, marginBottom: 4 }}>{it.m2} m²</div>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {it.tags.map(t => (
+                  <span key={t} style={{
+                    fontSize: 10, padding: '1px 6px',
+                    background: T.sageSoft, color: T.sageDeep,
+                    borderRadius: 100,
+                  }}>{t}</span>
+                ))}
+              </div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{
+                fontFamily: '"Fraunces", Georgia, serif', fontSize: 19, fontWeight: 400,
+                color: T.ink, marginBottom: 2,
+              }}>{it.price}</div>
+              <div style={{ fontSize: 10, color: T.sageDeep, fontWeight: 500 }}>
+                Match {it.match}%
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Fiche annonce ──────────────────────────────────────────
+function ListingMockup({ T, accent, usesChevron = false }) {
+  const accentColor = accent ? accent.hex : T.accent;
+  return (
+    <div style={{
+      width: '100%', height: '100%', background: T.paper, color: T.ink,
+      fontFamily: '"Inter", sans-serif', display: 'flex', flexDirection: 'column',
+    }}>
+      <div style={{
+        padding: '12px 20px', borderBottom: `1px solid ${T.line}`,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        background: T.cream, fontSize: 12,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: T.inkSoft }}>
+          <Chevron size={10} color={T.inkSoft} style={{ transform: 'rotate(-90deg)' }}/>
+          <span>Retour</span>
+        </div>
+        <Wordmark size={18} color={T.ink} markColor={T.sage}/>
+        <div style={{ color: T.inkSoft }}>♡</div>
+      </div>
+
+      {/* Hero image */}
+      <div style={{
+        height: 180, background: `linear-gradient(135deg, ${T.sageSoft}, ${T.sage}66)`,
+        position: 'relative', flexShrink: 0,
+      }}>
+        <div style={{
+          position: 'absolute', top: 12, left: 12,
+          fontSize: 9, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase',
+          color: T.paper, background: accentColor, padding: '3px 8px', borderRadius: 2,
+          display: 'flex', alignItems: 'center', gap: 5,
+        }}>
+          {usesChevron && <Chevron size={8} color={T.paper}/>}
+          Nouveau · 12 min
+        </div>
+      </div>
+
+      <div style={{ padding: 18, flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div>
+          <div style={{
+            fontFamily: '"Fraunces", Georgia, serif', fontSize: 22, fontWeight: 400,
+            letterSpacing: '-0.02em', marginBottom: 3,
+          }}>4,5 pièces · Cortaillod</div>
+          <div style={{ fontSize: 12, color: T.inkSoft }}>112 m² · 2 balcons · 2 salles de bain</div>
+        </div>
+
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+          padding: '10px 0', borderTop: `1px solid ${T.lineSoft}`, borderBottom: `1px solid ${T.lineSoft}`,
+        }}>
+          <div style={{
+            fontFamily: '"Fraunces", Georgia, serif', fontSize: 26, fontWeight: 400,
+          }}>2 280<span style={{ fontSize: 12, color: T.inkSoft, marginLeft: 4 }}>CHF/mois</span></div>
+          <div style={{ fontSize: 11, color: T.sageDeep, fontWeight: 600 }}>● Match 96%</div>
+        </div>
+
+        {/* Lou says */}
+        <div style={{
+          background: T.sageSoft, padding: 12, borderRadius: 6,
+          display: 'flex', gap: 10, alignItems: 'flex-start',
+        }}>
+          <LouAvatar size={26} bg={T.sage} fg={T.paper}/>
+          <div style={{ fontSize: 12, lineHeight: 1.55, color: T.ink }}>
+            <b>Lou :</b> École à 3 min, balcon sud, c'est ton match. Postule vite — il vient d'être publié.
+          </div>
+        </div>
+
+        {/* Highlights with chevron bullets */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          {[
+            'Balcon sud, vue dégagée',
+            'École primaire à 220 m',
+            'Publié sur homegate il y a 12 min',
+          ].map((t, i) => (
+            <ChevronBullet key={i} color={T.sageDeep} size={12}>
+              {t}
+            </ChevronBullet>
+          ))}
+        </div>
+
+        <div style={{ flex: 1 }}/>
+
+        {/* CTA — sage (jamais accent signature) */}
+        <div style={{
+          padding: '12px', background: T.sageDeep, color: T.paper,
+          borderRadius: 100, textAlign: 'center', fontSize: 13, fontWeight: 500,
+        }}>Voir l'annonce sur homegate</div>
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { ChatMockup, FeedMockup, ListingMockup });
+
+</script>
+<script type="text/babel" data-presets="react" data-src="v5/page-cover.jsx">
+// V5 · Cover — recalé sur la V2 validée (sauge + terracotta uniquement)
+
+function PageCoverV4() {
+  return (
+    <div style={{
+      minHeight: 960,
+      padding: '60px 60px',
+      display: 'flex', flexDirection: 'column',
+      position: 'relative',
+      background: L.paper,
+      marginBottom: 80,
+    }} className="print-section">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <Wordmark size={44} color={L.ink} markColor={L.sage}/>
+        <div style={{
+          fontFamily: 'ui-monospace, monospace', fontSize: 11, color: L.inkSoft,
+          letterSpacing: '0.2em', textTransform: 'uppercase',
+        }}>Avril 2026 · Neuchâtel · V5</div>
+      </div>
+
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', maxWidth: 900 }}>
+        <div style={{
+          fontFamily: 'ui-monospace, monospace', fontSize: 11, color: L.sageDeep,
+          letterSpacing: '0.22em', textTransform: 'uppercase', marginBottom: 14,
+          fontWeight: 600,
+        }}>D1 · V5 · Recalage</div>
+        <div style={{
+          fontFamily: '"Fraunces", Georgia, serif', fontSize: 88, fontWeight: 300,
+          letterSpacing: '-0.035em', lineHeight: 1, color: L.ink, marginBottom: 22,
+        }}>
+          Retour aux validés.<br/>
+          <span style={{ fontStyle: 'italic', color: L.sageDeep }}>Wordmark, fonts, palette.</span>
+        </div>
+        <div style={{ fontSize: 16, color: L.inkSoft, lineHeight: 1.55, maxWidth: 720 }}>
+          La V4 avait dérivé sur trois axes : wordmark sans chevron SVG, palette aubergine non-validée, fonts altérées.
+          La V5 ramène strictement la version V2 validée : Fraunces 400 + chevron SVG sur le 2<sup>e</sup> «&nbsp;o&nbsp;» + point sauge.
+          Palette : sauge (ancre) + terracotta (signal ≤ 1/écran). Pas de 3<sup>e</sup> couleur.
+        </div>
+      </div>
+
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 24,
+        borderTop: `1px solid ${L.line}`, paddingTop: 28,
+      }}>
+        {[
+          { n: 'C1', title: 'Wordmark V2', sub: 'Chevron SVG sur 2e « o »' },
+          { n: 'C2', title: 'Baseline · α β γ', sub: '3 options · vote motivé' },
+          { n: 'C3', title: 'Copy fixes', sub: '4 résiduels alignés' },
+          { n: 'T1', title: 'tokens-light.css', sub: 'Sauge + terracotta · signé' },
+          { n: 'E1', title: 'Kit social', sub: '6 exports PNG' },
+        ].map(a => (
+          <div key={a.n}>
+            <div style={{
+              fontFamily: 'ui-monospace, monospace', fontSize: 10, color: L.sageDeep,
+              letterSpacing: '0.2em', marginBottom: 6, fontWeight: 600,
+            }}>{a.n}</div>
+            <div style={{
+              fontFamily: '"Fraunces", Georgia, serif', fontSize: 19, color: L.ink,
+              fontWeight: 400, letterSpacing: '-0.01em', marginBottom: 4,
+            }}>{a.title}</div>
+            <div style={{ fontSize: 11, color: L.inkSoft, lineHeight: 1.4 }}>{a.sub}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PageLockedV3() {
+  const locked = [
+    { n: '1', title: 'Sauge ancre', value: 'CTA, avatar Lou, point wordmark' },
+    { n: '2', title: 'Terracotta signal', value: 'Badges, urgences · ≤ 1/écran' },
+    { n: '3', title: 'Chevron SVG', value: 'Sur le 2e « o » du wordmark' },
+    { n: '4', title: 'Light mode auto', value: 'prefers-color-scheme · pas de toggle' },
+    { n: '5', title: 'Fraunces + Inter', value: 'Display serif + body sans' },
+    { n: '6', title: 'Monogram Alt A', value: 'Maison + chevron · inchangé' },
+    { n: '7', title: 'Tagline', value: '« bonhome. — au bon moment »' },
+    { n: '8', title: 'Ton Lou', value: 'Tu (bêta) · Vous (ouverture)' },
+  ];
+
+  return (
+    <Section number="Récap" title="Décisions verrouillées par Antony" subtitle="8 points figés · re-confirmés en V5 après dérive V4">
+      <Row gap={0} wrap={true} style={{
+        border: `1px solid ${L.line}`,
+        borderRadius: 4,
+        overflow: 'hidden',
+      }}>
+        {locked.map((it, i) => (
+          <div key={it.n} style={{
+            width: '25%',
+            padding: '20px 22px',
+            borderRight: (i % 4 !== 3) ? `1px solid ${L.line}` : 'none',
+            borderBottom: i < 4 ? `1px solid ${L.line}` : 'none',
+            background: L.paper,
+          }}>
+            <div style={{
+              fontFamily: 'ui-monospace, monospace', fontSize: 10, color: L.sageDeep,
+              letterSpacing: '0.18em', fontWeight: 600, marginBottom: 6,
+            }}>Validé · {it.n}</div>
+            <div style={{
+              fontFamily: '"Fraunces", Georgia, serif', fontSize: 15, color: L.ink,
+              fontWeight: 500, marginBottom: 4, letterSpacing: '-0.01em',
+            }}>{it.title}</div>
+            <div style={{ fontSize: 12, color: L.inkSoft, lineHeight: 1.45 }}>{it.value}</div>
+          </div>
+        ))}
+      </Row>
+
+      <div style={{ marginTop: 36 }}>
+        <PostIt rotate={-1.5} width={400}>
+          La V4 avait introduit l'aubergine #5B2C6F en signature. <b>Annulé en V5</b> — pas validé, retour à la palette sauge + terracotta seulement.
+        </PostIt>
+      </div>
+    </Section>
+  );
+}
+
+Object.assign(window, { PageCoverV4, PageLockedV3 });
+
+</script>
+<script type="text/babel" data-presets="react" data-src="v5/page-c1-wordmark.jsx">
+// V5 · C1 — Wordmark recalé sur le D1Logo validé (Fraunces 400, chevron SVG sur 2e o, point sauge)
+// V4 avait introduit un caractère « ^ » Inter à la place du SVG — corrigé.
+
+// Version V4 (à déprécier) — chevron Inter "^" au lieu du SVG, sinon similaire
+function WordmarkV3Deprecated({ size = 48, ink, sage, point }) {
+  return (
+    <span style={{
+      fontFamily: '"Fraunces", Georgia, serif',
+      fontSize: size,
+      fontWeight: 300,
+      color: ink,
+      letterSpacing: '-0.03em',
+      lineHeight: 1,
+      display: 'inline-flex',
+      alignItems: 'baseline',
+      whiteSpace: 'nowrap',
+    }}>
+      <span>bonh</span>
+      <span style={{ position: 'relative' }}>
+        <span style={{
+          position: 'absolute',
+          top: `-${size * 0.20}px`,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          fontSize: size * 0.38,
+          color: sage,
+          lineHeight: 1,
+          fontFamily: '"Inter", sans-serif',
+          fontWeight: 500,
+        }}>^</span>
+        <span>o</span>
+      </span>
+      <span>me</span>
+      <span style={{ color: point, fontWeight: 400 }}>.</span>
+    </span>
+  );
+}
+
+function TouchCount({ count, color }) {
+  return (
+    <div style={{ display: 'flex', gap: 4 }}>
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div key={i} style={{
+          width: 8, height: 8, borderRadius: '50%',
+          background: i < count ? color : 'transparent',
+          border: `1px solid ${i < count ? color : L.line}`,
+        }}/>
+      ))}
+    </div>
+  );
+}
+
+function PageWordmarkFix() {
+  return (
+    <Section number="C1 · Correction" title="Wordmark · retour au traitement V2"
+      subtitle="Deux micro-touches, pas quatre. Les « o » colorés faisaient daté.">
+      <Row gap={32} align="flex-start">
+        {/* V3 deprecated */}
+        <div style={{
+          flex: 1, minWidth: 420, padding: 32,
+          border: `1px dashed ${L.accent}`,
+          background: L.accentSoft + '30',
+          borderRadius: 4,
+          position: 'relative',
+        }}>
+          <div style={{
+            position: 'absolute', top: 16, right: 16,
+            fontFamily: 'ui-monospace, monospace', fontSize: 10,
+            color: L.accent, fontWeight: 700, letterSpacing: '0.2em',
+            textTransform: 'uppercase',
+          }}>✗ V4 · dérive</div>
+          <div style={{
+            fontFamily: 'ui-monospace, monospace', fontSize: 10, color: L.inkSoft,
+            letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 28,
+          }}>Version V4 · chevron Inter « ^ »</div>
+          <div style={{ padding: '40px 0', display: 'flex', justifyContent: 'center', background: L.paper, borderRadius: 4, marginBottom: 20 }}>
+            <WordmarkV3Deprecated size={72} ink={L.ink} sage={L.sage} point={L.sage}/>
+          </div>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 14 }}>
+            <TouchCount count={2} color={L.accent}/>
+            <span style={{ fontSize: 11, color: L.ink, fontWeight: 600 }}>chevron texte « ^ » Inter</span>
+          </div>
+          <div style={{ fontSize: 12, color: L.inkSoft, lineHeight: 1.55 }}>
+            La V4 utilisait un caractère « ^ » Inter au-dessus du « o ». Plus léger à coder mais perd la précision géométrique du chevron SVG — et donc la signature.
+          </div>
+        </div>
+
+        {/* V4 verrouillée */}
+        <div style={{
+          flex: 1, minWidth: 420, padding: 32,
+          border: `2px solid ${L.sageDeep}`,
+          background: L.sageSoft + '40',
+          borderRadius: 4,
+          position: 'relative',
+        }}>
+          <div style={{
+            position: 'absolute', top: 16, right: 16,
+            fontFamily: 'ui-monospace, monospace', fontSize: 10,
+            color: L.sageDeep, fontWeight: 700, letterSpacing: '0.2em',
+            textTransform: 'uppercase',
+          }}>✓ V5 · validé (D1Logo)</div>
+          <div style={{
+            fontFamily: 'ui-monospace, monospace', fontSize: 10, color: L.inkSoft,
+            letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 28,
+          }}>Version V5 · chevron SVG (D1Logo validé)</div>
+          <div style={{ padding: '40px 0', display: 'flex', justifyContent: 'center', background: L.paper, borderRadius: 4, marginBottom: 20 }}>
+            <Wordmark size={72} color={L.ink} markColor={L.sage}/>
+          </div>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 14 }}>
+            <TouchCount count={2} color={L.sageDeep}/>
+            <span style={{ fontSize: 11, color: L.ink, fontWeight: 600 }}>chevron SVG géométrique</span>
+          </div>
+          <div style={{ fontSize: 12, color: L.inkSoft, lineHeight: 1.55 }}>
+            Wordmark entier en <b>ink</b>, Fraunces 400. Chevron SVG dessiné au-dessus du 2<sup>e</sup> « o », point final sauge. Strictement le D1Logo validé en V2.
+          </div>
+        </div>
+      </Row>
+
+      {/* Échelle */}
+      <div style={{ marginTop: 44 }}>
+        <div style={{
+          fontFamily: 'ui-monospace, monospace', fontSize: 10, color: L.sageDeep,
+          letterSpacing: '0.2em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 14,
+        }}>Échelle V5 · 16 → 88px</div>
+        <div style={{
+          padding: '36px 40px', background: L.paper,
+          border: `1px solid ${L.line}`, borderRadius: 4,
+          display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 32, flexWrap: 'wrap',
+        }}>
+          {[16, 22, 32, 48, 72, 88].map(s => (
+            <div key={s} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+              <Wordmark size={s} color={L.ink} markColor={L.sage}/>
+              <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 10, color: L.inkSoft }}>{s}px</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Contextes d'application */}
+      <div style={{ marginTop: 36 }}>
+        <div style={{
+          fontFamily: 'ui-monospace, monospace', fontSize: 10, color: L.sageDeep,
+          letterSpacing: '0.2em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 14,
+        }}>Application dans les mockups · point final partout</div>
+        <Row gap={24}>
+          {/* Header site */}
+          <div style={{ flex: 1, minWidth: 320 }}>
+            <div style={{ fontSize: 10, color: L.inkSoft, marginBottom: 8, fontFamily: 'ui-monospace, monospace', letterSpacing: '0.14em', textTransform: 'uppercase' }}>Header site</div>
+            <div style={{
+              padding: '18px 24px', background: L.paper, border: `1px solid ${L.line}`,
+              borderRadius: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
+              <Wordmark size={22} color={L.ink} markColor={L.sage}/>
+              <div style={{ fontSize: 11, color: L.inkSoft, display: 'flex', gap: 18 }}>
+                <span>Biens</span><span>Comment ça marche</span><span style={{ color: L.accent, fontWeight: 600 }}>Rejoindre</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div style={{ flex: 1, minWidth: 320 }}>
+            <div style={{ fontSize: 10, color: L.inkSoft, marginBottom: 8, fontFamily: 'ui-monospace, monospace', letterSpacing: '0.14em', textTransform: 'uppercase' }}>Footer</div>
+            <div style={{
+              padding: '18px 24px', background: L.ink, borderRadius: 4,
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
+              <Wordmark size={20} color={L.paper} markColor={D.sage}/>
+              <div style={{ fontSize: 10, color: D.inkSoft, fontFamily: 'ui-monospace, monospace', letterSpacing: '0.1em' }}>bonhome.ch · 2026</div>
+            </div>
+          </div>
+        </Row>
+      </div>
+
+      <div style={{ marginTop: 28 }}>
+        <PostIt rotate={2} width={340}>
+          Tous les mockups V5 sont recalés sur ce wordmark. Le point final sauge est présent <b>partout</b> : header, footer, signature email, OG.
+        </PostIt>
+      </div>
+    </Section>
+  );
+}
+
+Object.assign(window, { PageWordmarkFix, WordmarkV3Deprecated });
+
+</script>
+<script type="text/babel" data-presets="react" data-src="v5/page-c2-baseline.jsx">
+// V4 · C2 — Baseline explorée en 3 options côte-à-côte sur 3 contextes
+// α · Fraunces roman (garder le mot, retirer l'italic)
+// β · Retirer "bonhome" — "— au bon moment" seul, OU descriptif canton
+// γ · Inter italic (sans-serif contraste)
+
+// ─── 3 variantes de baseline ──────────────────────────────────
+// Chaque variante rendue sur 3 contextes : header site, signature email, OG card.
+
+function BaselineAlpha({ size = 13, color, accentColor, onDark = false }) {
+  // Fraunces roman · "— au bon moment" (italic retiré mais garde le mot bonhome? Non, la V3 avait "bonhome au bon moment" avec b italic)
+  // α = Fraunces roman, mot bonhome répété mais en roman (pas italic)
+  return (
+    <span style={{
+      fontFamily: '"Fraunces", Georgia, serif',
+      fontSize: size, fontWeight: 300, color,
+      letterSpacing: '-0.01em', lineHeight: 1.3,
+      fontStyle: 'normal',
+    }}>
+      bonhome<span style={{ color: accentColor, margin: '0 0.4em' }}>—</span>au bon moment
+    </span>
+  );
+}
+
+function BaselineBeta1({ size = 13, color, accentColor }) {
+  // β1 = "— au bon moment" seul (retire bonhome)
+  return (
+    <span style={{
+      fontFamily: '"Fraunces", Georgia, serif',
+      fontSize: size, fontWeight: 300, color,
+      letterSpacing: '-0.005em', lineHeight: 1.3,
+      fontStyle: 'italic',
+    }}>
+      <span style={{ color: accentColor, marginRight: '0.3em', fontStyle: 'normal' }}>—</span>au bon moment
+    </span>
+  );
+}
+
+function BaselineBeta2({ size = 13, color }) {
+  // β2 = descriptif canton
+  return (
+    <span style={{
+      fontFamily: '"Inter", system-ui, sans-serif',
+      fontSize: size * 0.9, fontWeight: 400, color,
+      letterSpacing: 0, lineHeight: 1.4,
+    }}>
+      L'agrégateur immobilier du canton de Neuchâtel
+    </span>
+  );
+}
+
+function BaselineGamma({ size = 13, color, accentColor }) {
+  // γ = Inter italic
+  return (
+    <span style={{
+      fontFamily: '"Inter", system-ui, sans-serif',
+      fontSize: size * 0.92, fontWeight: 400, color,
+      letterSpacing: 0, lineHeight: 1.35,
+      fontStyle: 'italic',
+    }}>
+      bonhome<span style={{ color: accentColor, margin: '0 0.35em', fontStyle: 'normal' }}>—</span>au bon moment
+    </span>
+  );
+}
+
+// ─── Contextes d'application ──────────────────────────────────
+function CtxHeader({ BaselineComp }) {
+  return (
+    <div style={{
+      padding: '18px 28px', background: L.paper, border: `1px solid ${L.line}`,
+      borderRadius: 4,
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <Wordmark size={24} color={L.ink} markColor={L.sage}/>
+        <div style={{ paddingLeft: 1 }}>
+          <BaselineComp size={11} color={L.inkSoft} accentColor={L.sage}/>
+        </div>
+      </div>
+      <div style={{ fontSize: 11, color: L.inkSoft, display: 'flex', gap: 16 }}>
+        <span>Biens</span><span>Comment ça marche</span><span style={{ color: L.accent, fontWeight: 600 }}>Rejoindre</span>
+      </div>
+    </div>
+  );
+}
+
+function CtxEmail({ BaselineComp }) {
+  return (
+    <div style={{
+      padding: '20px 24px', background: '#fff',
+      border: `1px solid ${L.line}`, borderRadius: 4,
+      fontFamily: '"Inter", system-ui, sans-serif', fontSize: 12, color: '#555', lineHeight: 1.5,
+    }}>
+      <div style={{ color: L.ink, fontSize: 13, fontWeight: 500, marginBottom: 2 }}>
+        Antony D'Agostino
+      </div>
+      <div style={{ color: L.inkSoft, fontSize: 11, marginBottom: 14 }}>
+        Fondateur · bonhome
+      </div>
+      <div style={{ marginBottom: 4, paddingLeft: 1 }}>
+        <Wordmark size={22} color={L.ink} markColor={L.sage}/>
+      </div>
+      <div style={{ marginBottom: 12, paddingLeft: 1 }}>
+        <BaselineComp size={11} color={L.inkSoft} accentColor={L.sage}/>
+      </div>
+      <div style={{ fontSize: 10.5, color: L.inkMute, fontFamily: 'ui-monospace, monospace' }}>
+        bonhome.ch&nbsp;&nbsp;·&nbsp;&nbsp;antony@bonhome.ch
+      </div>
+    </div>
+  );
+}
+
+function CtxOG({ BaselineComp }) {
+  return (
+    <div style={{
+      width: 1200, height: 630, background: L.ink, color: L.paper,
+      fontFamily: '"Inter", sans-serif', padding: 80,
+      display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <Wordmark size={44} color={L.paper} markColor={D.sage}/>
+          <div style={{ marginTop: 8 }}>
+            <BaselineComp size={18} color={D.inkSoft} accentColor={D.sage} onDark/>
+          </div>
+        </div>
+        <div style={{
+          fontSize: 13, fontFamily: 'ui-monospace, monospace', color: 'rgba(245,241,234,0.55)',
+          letterSpacing: '0.18em', textTransform: 'uppercase',
+        }}>Bêta privée · Neuchâtel</div>
+      </div>
+      <div style={{
+        fontFamily: '"Fraunces", Georgia, serif', fontSize: 82, fontWeight: 300,
+        letterSpacing: '-0.035em', lineHeight: 1.02,
+      }}>
+        Neuchâtel moderne,<br/>
+        <span style={{ fontStyle: 'italic', color: D.sage }}>on creuse.</span>
+      </div>
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 40,
+        paddingTop: 28, borderTop: '1px solid rgba(245,241,234,0.15)',
+      }}>
+        {[
+          { n: '7', label: 'portails surveillés' },
+          { n: '< 15 min', label: 'entre publi et notif' },
+          { n: '0', label: 'recherche à faire' },
+        ].map((s, i) => (
+          <div key={i}>
+            <div style={{
+              fontFamily: '"Fraunces", Georgia, serif', fontSize: 48, fontWeight: 300,
+              color: D.sage, letterSpacing: '-0.02em', lineHeight: 1, marginBottom: 6,
+            }}>{s.n}</div>
+            <div style={{ fontSize: 14, fontWeight: 500 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Colonne d'une variante ───────────────────────────────────
+function BaselineColumn({ code, name, note, BaselineComp, isVote = false }) {
+  return (
+    <div style={{
+      padding: 22, borderRadius: 4,
+      border: `${isVote ? '2px' : '1px'} solid ${isVote ? L.sageDeep : L.line}`,
+      background: isVote ? L.sageSoft + '30' : L.paper,
+      breakInside: 'avoid',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+        <div style={{
+          fontFamily: 'ui-monospace, monospace', fontSize: 11, color: L.accentInk,
+          letterSpacing: '0.22em', textTransform: 'uppercase', fontWeight: 700,
+        }}>Option {code}</div>
+        {isVote && (
+          <div style={{
+            fontFamily: 'ui-monospace, monospace', fontSize: 9, color: L.sageDeep,
+            letterSpacing: '0.2em', fontWeight: 700,
+            padding: '3px 8px', border: `1px solid ${L.sageDeep}`, borderRadius: 2,
+          }}>★ MON VOTE</div>
+        )}
+      </div>
+      <div style={{
+        fontFamily: '"Fraunces", Georgia, serif', fontSize: 22, fontWeight: 400,
+        color: L.ink, marginBottom: 6, letterSpacing: '-0.01em',
+      }}>{name}</div>
+      <div style={{ fontSize: 12, color: L.inkSoft, lineHeight: 1.5, marginBottom: 20 }}>{note}</div>
+
+      {/* Header */}
+      <div style={{ fontSize: 9, color: L.inkMute, fontFamily: 'ui-monospace, monospace', letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 6 }}>Header site</div>
+      <CtxHeader BaselineComp={BaselineComp}/>
+
+      {/* Email */}
+      <div style={{ fontSize: 9, color: L.inkMute, fontFamily: 'ui-monospace, monospace', letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 6, marginTop: 16 }}>Signature email</div>
+      <CtxEmail BaselineComp={BaselineComp}/>
+
+      {/* OG */}
+      <div style={{ fontSize: 9, color: L.inkMute, fontFamily: 'ui-monospace, monospace', letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 6, marginTop: 16 }}>OG 1200×630</div>
+      <Artboard label="" width={1200} height={630} maxW={320} style={{ background: L.ink }}>
+        <CtxOG BaselineComp={BaselineComp}/>
+      </Artboard>
+    </div>
+  );
+}
+
+function PageBaseline() {
+  return (
+    <Section number="C2 · Exploration" title="Baseline · 3 options côte-à-côte"
+      subtitle="Le « b » italic Fraunces gêne. « bonhome » répété sous le wordmark est redondant. Voici les 3 pistes.">
+
+      {/* Problème V3 */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 380px', gap: 32,
+        marginBottom: 32, alignItems: 'flex-start',
+      }}>
+        <div style={{
+          padding: 24, background: L.accentSoft + '30',
+          border: `1px dashed ${L.accent}`, borderRadius: 4,
+        }}>
+          <div style={{
+            fontFamily: 'ui-monospace, monospace', fontSize: 10, color: L.accent,
+            letterSpacing: '0.2em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 14,
+          }}>Problème V3</div>
+          <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <Wordmark size={34} color={L.ink} markColor={L.sage}/>
+            <span style={{
+              fontFamily: '"Fraunces", Georgia, serif', fontSize: 15, fontWeight: 300,
+              color: L.inkSoft, letterSpacing: '-0.005em',
+            }}>
+              <span style={{ fontStyle: 'italic' }}>b</span>onhome <span style={{ color: L.sage }}>—</span> au bon moment
+            </span>
+          </div>
+          <div style={{ fontSize: 12.5, color: L.inkSoft, lineHeight: 1.55 }}>
+            Le <b>b italic</b> décroche graphiquement — une lettre seule italique au milieu d'un roman fait tic graphique. Et « bonhome » juste sous le wordmark est redondant : l'œil vient de le lire 2 cm au-dessus.
+          </div>
+        </div>
+        <PostIt rotate={2} width={360}>
+          Même la baseline <b>doit</b> résoudre ces deux choses : (1) pas de lettre italic isolée, (2) zéro redondance avec le wordmark.
+        </PostIt>
+      </div>
+
+      {/* Les 3 options */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20,
+        marginBottom: 40,
+      }}>
+        <BaselineColumn
+          code="α"
+          name="Fraunces roman"
+          note="Garde le mot, retire l'italic. Cohérent avec le wordmark qui est en Fraunces light. Le problème de lettre isolée disparaît."
+          BaselineComp={BaselineAlpha}
+        />
+        <BaselineColumn
+          code="β"
+          name="— au bon moment"
+          note="Retire « bonhome » (le wordmark le porte déjà). Plus court, plus tendu. Italic assumé car le mot italic initial disparaît."
+          BaselineComp={BaselineBeta1}
+          isVote
+        />
+        <BaselineColumn
+          code="γ"
+          name="Inter italic"
+          note="Passe en sans-serif pour contraster avec le wordmark serif. Risque : casse l'unité typographique de la marque."
+          BaselineComp={BaselineGamma}
+        />
+      </div>
+
+      {/* β-bis descriptif canton */}
+      <div style={{ marginBottom: 40 }}>
+        <div style={{
+          fontFamily: 'ui-monospace, monospace', fontSize: 10, color: L.accentInk,
+          letterSpacing: '0.2em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 14,
+        }}>β-bis · alternative descriptive</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 20 }}>
+          <div style={{ padding: 20, border: `1px solid ${L.line}`, borderRadius: 4, background: L.paper }}>
+            <div style={{ fontSize: 9, color: L.inkMute, fontFamily: 'ui-monospace, monospace', letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 8 }}>Header site</div>
+            <CtxHeader BaselineComp={BaselineBeta2}/>
+          </div>
+          <div style={{ padding: 20, border: `1px solid ${L.line}`, borderRadius: 4, background: L.paper }}>
+            <div style={{ fontSize: 9, color: L.inkMute, fontFamily: 'ui-monospace, monospace', letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 8 }}>Signature email</div>
+            <CtxEmail BaselineComp={BaselineBeta2}/>
+          </div>
+          <div style={{ padding: 20, border: `1px solid ${L.line}`, borderRadius: 4, background: L.paper }}>
+            <div style={{ fontSize: 9, color: L.inkMute, fontFamily: 'ui-monospace, monospace', letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 8 }}>OG 1200×630</div>
+            <Artboard label="" width={1200} height={630} maxW={260} style={{ background: L.ink }}>
+              <CtxOG BaselineComp={BaselineBeta2}/>
+            </Artboard>
+          </div>
+        </div>
+        <div style={{ marginTop: 14, fontSize: 12, color: L.inkSoft, lineHeight: 1.55, maxWidth: 760 }}>
+          Utile sur LinkedIn ou un press-kit où le <b>quoi</b> doit être évident sans cliquer. Mais trop fonctionnel pour le header principal — on y perd le ton.
+        </div>
+      </div>
+
+      {/* Vote motivé */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 360px', gap: 40, alignItems: 'flex-start',
+      }}>
+        <div style={{
+          padding: 28, background: L.ink, color: L.paper, borderRadius: 4,
+        }}>
+          <div style={{
+            fontFamily: 'ui-monospace, monospace', fontSize: 10, color: L.accent,
+            letterSpacing: '0.22em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 12,
+          }}>Mon vote · motivé</div>
+          <div style={{
+            fontFamily: '"Fraunces", Georgia, serif', fontSize: 34, fontWeight: 300,
+            letterSpacing: '-0.025em', lineHeight: 1.15, marginBottom: 22,
+            fontStyle: 'italic', color: D.sage,
+          }}>
+            β — « au bon moment »
+          </div>
+          <div style={{ fontSize: 13.5, color: D.inkSoft, lineHeight: 1.65, marginBottom: 18 }}>
+            Trois raisons :
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {[
+              ['01', 'Non-redondance', 'Le wordmark dit « bonhome ». La baseline n\'a pas à le répéter. Elle complète, elle ne répète pas.'],
+              ['02', 'Italic respirée', 'L\'italic de « au bon moment » devient un écho à la respiration du wordmark (les courbes Fraunces), sans lettre italic orpheline.'],
+              ['03', 'Tension narrative', 'Le tiret cadratin fait pont : wordmark (l\'acteur) — baseline (la promesse). C\'est le minimum qui fait maximum.'],
+            ].map(([n, t, d]) => (
+              <div key={n} style={{ display: 'grid', gridTemplateColumns: '28px 1fr', gap: 14 }}>
+                <div style={{
+                  fontFamily: 'ui-monospace, monospace', fontSize: 10, color: L.accent,
+                  fontWeight: 700, letterSpacing: '0.1em',
+                }}>{n}</div>
+                <div>
+                  <div style={{ fontSize: 13, color: D.ink, fontWeight: 600, marginBottom: 2 }}>{t}</div>
+                  <div style={{ fontSize: 12, color: D.inkSoft, lineHeight: 1.55 }}>{d}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <PostIt rotate={-2} width={340}>
+          α reste un solide plan B — moins risqué visuellement. γ à écarter : Inter italic pour une baseline de marque serif, c'est payer pour casser la cohérence qu'on vient de construire.
+        </PostIt>
+      </div>
+    </Section>
+  );
+}
+
+Object.assign(window, {
+  PageBaseline,
+  BaselineAlpha, BaselineBeta1, BaselineBeta2, BaselineGamma,
+});
+
+</script>
+<script type="text/babel" data-presets="react" data-src="v5/page-c3-copy.jsx">
+// V4 · C3 — Copy fixes : 4 résiduels alignés
+
+function DiffRow({ label, before, after, note }) {
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: '160px 1fr 1fr',
+      gap: 20,
+      padding: '18px 20px',
+      borderBottom: `1px solid ${L.lineSoft}`,
+      alignItems: 'flex-start',
+      breakInside: 'avoid',
+    }}>
+      <div>
+        <div style={{
+          fontFamily: 'ui-monospace, monospace', fontSize: 10, color: L.sageDeep,
+          letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 4,
+        }}>{label}</div>
+        <div style={{ fontSize: 11, color: L.inkSoft, lineHeight: 1.5 }}>{note}</div>
+      </div>
+      <div style={{
+        padding: 14, background: L.accentSoft + '30', border: `1px dashed ${L.accent}`,
+        borderRadius: 3, position: 'relative',
+      }}>
+        <div style={{
+          fontFamily: 'ui-monospace, monospace', fontSize: 9, color: L.accent,
+          letterSpacing: '0.2em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 8,
+        }}>Avant V4</div>
+        <div style={{ fontSize: 13, color: L.ink, lineHeight: 1.5 }}>{before}</div>
+      </div>
+      <div style={{
+        padding: 14, background: L.sageSoft + '40', border: `1px solid ${L.sageDeep}`,
+        borderRadius: 3,
+      }}>
+        <div style={{
+          fontFamily: 'ui-monospace, monospace', fontSize: 9, color: L.sageDeep,
+          letterSpacing: '0.2em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 8,
+        }}>Après V5</div>
+        <div style={{ fontSize: 13, color: L.ink, lineHeight: 1.5 }}>{after}</div>
+      </div>
+    </div>
+  );
+}
+
+function PageCopyFixes() {
+  return (
+    <Section number="C3 · Copy fixes" title="Quatre résiduels alignés V5"
+      subtitle="Les derniers endroits où la V3 portait encore du texte obsolète — maintenant cohérents partout">
+      <div style={{
+        border: `1px solid ${L.line}`, borderRadius: 4, overflow: 'hidden',
+        background: L.paper,
+      }}>
+        <div style={{
+          display: 'grid', gridTemplateColumns: '160px 1fr 1fr', gap: 20,
+          padding: '12px 20px', background: L.cream,
+          borderBottom: `2px solid ${L.ink}`,
+          fontFamily: 'ui-monospace, monospace', fontSize: 9.5,
+          color: L.inkSoft, letterSpacing: '0.15em', textTransform: 'uppercase', fontWeight: 700,
+        }}>
+          <div>Surface</div>
+          <div>Avant</div>
+          <div>Après</div>
+        </div>
+
+        <DiffRow
+          label="CTA fiche annonce"
+          note="Lou ne postule pas à la place. Elle trouve, l'utilisateur clique. « Voir l'annonce sur {portail} » est dynamique si possible."
+          before='"Postuler via Lou"'
+          after={<>
+            "Voir l'annonce sur homegate"
+            <div style={{ marginTop: 6, fontSize: 11, color: L.inkSoft, fontStyle: 'italic' }}>
+              ou dynamique : « Voir sur {'{portail}'} »
+            </div>
+          </>}
+        />
+
+        <DiffRow
+          label="Onboarding bullet"
+          note="Moins juridique, plus humain. Répartit la charge : Lou bosse, toi tu juges."
+          before={'"Rien n\'est envoyé sans ton feu vert"'}
+          after={'"Lou filtre, tu décides"'}
+        />
+
+        <DiffRow
+          label="Signature email"
+          note="Nom du fondateur réel, cohérent partout (pitch deck, press kit, signature)."
+          before={<>"Camille Robert<br/>Fondatrice"</>}
+          after={<>"Antony D'Agostino<br/>Fondateur"</>}
+        />
+
+        <DiffRow
+          label="Wordmark · point final"
+          note="Règle V2 verrouillée appliquée partout : header, footer, signature email, OG, favicon. Cohérence totale."
+          before={<>Point sauge sur OG seulement.<br/>Inconstant ailleurs.</>}
+          after={<>Point sauge <b>partout</b>.<br/>Signature systématique.</>}
+        />
+      </div>
+
+      {/* Signature email avant/après side-by-side */}
+      <div style={{ marginTop: 44 }}>
+        <div style={{
+          fontFamily: 'ui-monospace, monospace', fontSize: 10, color: L.sageDeep,
+          letterSpacing: '0.2em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 14,
+        }}>Application · signature email</div>
+        <Row gap={20}>
+          {/* Before */}
+          <div style={{ flex: 1, minWidth: 380, opacity: 0.7 }}>
+            <div style={{
+              fontFamily: 'ui-monospace, monospace', fontSize: 9, color: L.accent,
+              letterSpacing: '0.2em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 8,
+            }}>Avant V3</div>
+            <div style={{
+              padding: '22px 26px', background: '#fff',
+              border: `1px dashed ${L.accent}`, borderRadius: 4,
+              fontFamily: '"Inter", system-ui, sans-serif', fontSize: 12, color: '#555',
+            }}>
+              <div style={{ color: L.ink, fontSize: 13, fontWeight: 500, marginBottom: 2 }}>Camille Robert</div>
+              <div style={{ color: L.inkSoft, fontSize: 11, marginBottom: 14 }}>Fondatrice · bonhome</div>
+              <div style={{ fontFamily: '"Fraunces", Georgia, serif', fontSize: 22, fontWeight: 400, color: L.ink, marginBottom: 3 }}>
+                bonhome<span style={{ color: L.sage }}>.</span>
+              </div>
+              <div style={{ fontSize: 11, color: L.inkSoft, marginBottom: 12, fontStyle: 'italic', fontFamily: '"Fraunces", Georgia, serif' }}>
+                <span style={{ fontStyle: 'italic' }}>b</span>onhome — au bon moment
+              </div>
+              <div style={{ fontSize: 10.5, color: L.inkMute, fontFamily: 'ui-monospace, monospace' }}>
+                bonhome.ch · camille@bonhome.ch
+              </div>
+            </div>
+          </div>
+
+          {/* After */}
+          <div style={{ flex: 1, minWidth: 380 }}>
+            <div style={{
+              fontFamily: 'ui-monospace, monospace', fontSize: 9, color: L.sageDeep,
+              letterSpacing: '0.2em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 8,
+            }}>Après V5 · baseline β</div>
+            <div style={{
+              padding: '22px 26px', background: '#fff',
+              border: `2px solid ${L.sageDeep}`, borderRadius: 4,
+              fontFamily: '"Inter", system-ui, sans-serif', fontSize: 12, color: '#555',
+            }}>
+              <div style={{ color: L.ink, fontSize: 13, fontWeight: 500, marginBottom: 2 }}>Antony D'Agostino</div>
+              <div style={{ color: L.inkSoft, fontSize: 11, marginBottom: 14 }}>Fondateur · bonhome</div>
+              <div style={{ marginBottom: 6 }}>
+                <Wordmark size={24} color={L.ink} markColor={L.sage}/>
+              </div>
+              <div style={{ fontSize: 11, color: L.inkSoft, marginBottom: 12, fontStyle: 'italic', fontFamily: '"Fraunces", Georgia, serif' }}>
+                <span style={{ color: L.sage, fontStyle: 'normal' }}>—</span> au bon moment
+              </div>
+              <div style={{ fontSize: 10.5, color: L.inkMute, fontFamily: 'ui-monospace, monospace' }}>
+                bonhome.ch · antony@bonhome.ch
+              </div>
+            </div>
+          </div>
+        </Row>
+      </div>
+
+      {/* Fiche annonce avant/après */}
+      <div style={{ marginTop: 44 }}>
+        <div style={{
+          fontFamily: 'ui-monospace, monospace', fontSize: 10, color: L.sageDeep,
+          letterSpacing: '0.2em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 14,
+        }}>Application · fiche annonce (CTA corrigé + wordmark V4 + point)</div>
+        <Row gap={24}>
+          <Artboard label="Light · V5" width={420} height={600} maxW={360} style={{ background: L.paper }}>
+            <ListingMockup T={L} accent={ACCENTS.terracotta} usesChevron={true}/>
+          </Artboard>
+          <div style={{ flex: 1, minWidth: 320, paddingTop: 30 }}>
+            <div style={{ fontSize: 13.5, color: L.inkSoft, lineHeight: 1.65, marginBottom: 20 }}>
+              Le CTA est désormais <b>"Voir l'annonce sur homegate"</b>. Lou orchestre, l'utilisateur clique et atterrit sur le portail d'origine — plus de confusion sur qui postule.
+            </div>
+            <div style={{ fontSize: 13.5, color: L.inkSoft, lineHeight: 1.65 }}>
+              Le wordmark header porte le <b>point final sauge</b>. La terracotta n'apparaît que dans le badge « Nouveau » — 1 seule occurrence sur l'écran, dans les règles.
+            </div>
+          </div>
+        </Row>
+      </div>
+    </Section>
+  );
+}
+
+Object.assign(window, { PageCopyFixes, DiffRow });
+
+</script>
+<script type="text/babel" data-presets="react" data-src="v5/page-exports.jsx">
+// V4 · T1 — tokens-light.css signé + E1 — kit social plan
+
+function PageTokensSigned() {
+  const css = `:root {
+  /* Neutrals */
+  --ink: #1F2420;           /* 13.4:1 AAA */
+  --ink-soft: #4A5350;      /*  8.2:1 AAA */
+  --ink-mute: #7A827E;      /*  4.7:1 AA  */
+  --paper: #FAF7F1;
+  --cream: #F5F1EA;
+  --line: #E4DFD4;
+  --line-soft: #EEE9DE;
+
+  /* Sauge · ancre émotionnelle */
+  --sage: #6B8A74;
+  --sage-deep: #3E5847;     /* 8.3:1 AAA */
+  --sage-soft: #D6E0D4;
+
+  /* Terracotta · signal ≤ 1/écran */
+  --accent: #C9986A;
+  --accent-soft: #EED9C2;
+
+    /* Type */
+  --font-display: "Fraunces", Georgia, serif;
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", monospace;
+
+  /* Espacements · rayons · focus */
+  --space-1: 4px;   --space-2: 8px;   --space-3: 12px;
+  --space-4: 16px;  --space-5: 24px;  --space-6: 32px;
+  --space-7: 48px;  --space-8: 72px;
+  --radius-sm: 2px; --radius-md: 4px; --radius-lg: 6px;
+  --radius-pill: 100px;
+  --focus-ring: 0 0 0 3px rgba(107, 138, 116, 0.3);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #F0ECE4;   --ink-soft: #9EA29B;   --ink-mute: #6E7570;
+    --paper: #13161A; --cream: #1A1E1B;
+    --line: #2A2E2A;  --line-soft: #20231F;
+    --sage: #9DBBA4;  --sage-deep: #C3D6C6;  --sage-soft: #2A3A30;
+    --accent: #D4A27A; --accent-soft: #3A2E25;
+      }
+}`;
+
+  return (
+    <Section number="T1 · Livrable" title="tokens-light.css · signé V4"
+      subtitle="Fichier prêt à livrer · 1 source de vérité pour l'écosystème">
+      <Row gap={28} align="flex-start">
+        <div style={{ flex: 1, minWidth: 520 }}>
+          <div style={{
+            fontFamily: 'ui-monospace, monospace', fontSize: 10, color: L.sageDeep,
+            letterSpacing: '0.2em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 10,
+          }}>v4/tokens-light.css</div>
+          <pre style={{
+            background: L.ink, color: '#D0E5D4', padding: 22,
+            fontFamily: 'ui-monospace, monospace', fontSize: 10.5, lineHeight: 1.55,
+            borderRadius: 4, margin: 0, whiteSpace: 'pre-wrap',
+          }}>{css}</pre>
+        </div>
+        <Col gap={14} style={{ width: 320 }}>
+          <div style={{ padding: 18, background: L.sageSoft, borderRadius: 4 }}>
+            <div style={{
+              fontFamily: 'ui-monospace, monospace', fontSize: 9.5, color: L.sageDeep,
+              letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 8,
+            }}>Changements V4 → V5</div>
+            <div style={{ fontSize: 12, color: L.ink, lineHeight: 1.55 }}>
+              Aubergine V4 supprimée. Palette validée restaurée : sauge (ancre + CTA) et terracotta (signal exceptionnel). Dark mode auto via <code style={{ fontSize: 11 }}>@media prefers-color-scheme</code>. Espacements, rayons, focus-ring exposés.
+            </div>
+          </div>
+          <PostIt rotate={-2} width={300}>
+            Figma / Tokens Studio : même noms, même ordre. Code branche directement via CSS vars.
+          </PostIt>
+        </Col>
+      </Row>
+    </Section>
+  );
+}
+
+function SocialCard({ title, dims, format, children }) {
+  return (
+    <div style={{ breakInside: 'avoid' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+        <div style={{
+          fontFamily: 'ui-monospace, monospace', fontSize: 10, color: L.sageDeep,
+          letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 600,
+        }}>{title}</div>
+        <div style={{ fontSize: 10, color: L.inkSoft, fontFamily: 'ui-monospace, monospace' }}>{dims} · {format}</div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// Minimal OG family using V4 wordmark + baseline β
+function OGTechno() {
+  return (
+    <div style={{
+      width: 1200, height: 630, background: L.ink, color: L.paper,
+      fontFamily: '"Inter", sans-serif', padding: 80,
+      display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <Wordmark size={44} color={L.paper} markColor={D.sage}/>
+          <div style={{
+            fontSize: 18, color: D.inkSoft, marginTop: 6, fontFamily: '"Fraunces", Georgia, serif',
+            fontStyle: 'italic', fontWeight: 300,
+          }}>
+            <span style={{ color: D.sage, fontStyle: 'normal', marginRight: '0.3em' }}>—</span>au bon moment
+          </div>
+        </div>
+        <div style={{
+          fontSize: 13, fontFamily: 'ui-monospace, monospace', color: 'rgba(245,241,234,0.55)',
+          letterSpacing: '0.18em', textTransform: 'uppercase',
+        }}>Bêta privée · Neuchâtel</div>
+      </div>
+      <div style={{
+        fontFamily: '"Fraunces", Georgia, serif', fontSize: 86, fontWeight: 300,
+        letterSpacing: '-0.035em', lineHeight: 1.02,
+      }}>
+        Neuchâtel moderne,<br/>
+        <span style={{ fontStyle: 'italic', color: D.sage }}>on creuse.</span>
+      </div>
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 40,
+        paddingTop: 26, borderTop: '1px solid rgba(245,241,234,0.15)',
+      }}>
+        {[['7', 'portails surveillés 24/7'],
+          ['< 15 min', 'entre publi et notif'],
+          ['0', 'recherche à faire']].map(([n, l], i) => (
+          <div key={i}>
+            <div style={{
+              fontFamily: '"Fraunces", Georgia, serif', fontSize: 48, fontWeight: 300,
+              color: D.sage, letterSpacing: '-0.02em', lineHeight: 1, marginBottom: 6,
+            }}>{n}</div>
+            <div style={{ fontSize: 14, fontWeight: 500 }}>{l}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function OGHumain() {
+  return (
+    <div style={{
+      width: 1200, height: 630, background: L.ink, color: L.paper,
+      fontFamily: '"Inter", sans-serif', padding: 80,
+      display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <Wordmark size={44} color={L.paper} markColor={D.sage}/>
+        <div style={{
+          fontSize: 13, fontFamily: 'ui-monospace, monospace', color: L.accent,
+          letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 600,
+        }}>Bêta · Neuchâtel</div>
+      </div>
+      <div style={{
+        fontFamily: '"Fraunces", Georgia, serif', fontSize: 94, fontWeight: 300,
+        letterSpacing: '-0.04em', lineHeight: 0.98,
+      }}>
+        Lou cherche.<br/>
+        <span style={{ fontStyle: 'italic', color: D.sage }}>Tu vis.</span>
+      </div>
+      <div style={{ fontSize: 19, color: D.inkSoft, maxWidth: 760, lineHeight: 1.4 }}>
+        Elle surveille 7 portails. Elle note ce qui compte. Tu reçois ce qui matche — rien d'autre.
+      </div>
+    </div>
+  );
+}
+
+function OGProduit() {
+  return (
+    <div style={{
+      width: 1200, height: 630, background: L.ink, color: L.paper,
+      fontFamily: '"Inter", sans-serif', padding: 80,
+      display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <Wordmark size={44} color={L.paper} markColor={D.sage}/>
+        <div style={{
+          fontSize: 13, fontFamily: 'ui-monospace, monospace', color: 'rgba(245,241,234,0.55)',
+          letterSpacing: '0.18em', textTransform: 'uppercase',
+        }}>Neuchâtel · canton entier</div>
+      </div>
+      <div style={{
+        fontFamily: '"Fraunces", Georgia, serif', fontSize: 74, fontWeight: 300,
+        letterSpacing: '-0.035em', lineHeight: 1.05,
+      }}>
+        Pour toute la vie,<br/>
+        <span style={{ fontStyle: 'italic', color: D.sage }}>pas juste un bail.</span>
+      </div>
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 40,
+        paddingTop: 26, borderTop: '1px solid rgba(245,241,234,0.15)',
+      }}>
+        {[['Vente + loc.', 'même app'],
+          ['Cortaillod → Brenets', 'tout le canton'],
+          ['1 recherche', 'toute la famille']].map(([n, l], i) => (
+          <div key={i}>
+            <div style={{
+              fontFamily: '"Fraunces", Georgia, serif', fontSize: 28, fontWeight: 400,
+              color: D.sage, letterSpacing: '-0.01em', lineHeight: 1.1, marginBottom: 6,
+            }}>{n}</div>
+            <div style={{ fontSize: 14, color: D.inkSoft }}>{l}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function IGSquare() {
+  return (
+    <div style={{
+      width: 1080, height: 1080, background: L.ink, color: L.paper,
+      fontFamily: '"Inter", sans-serif', padding: 80,
+      display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+    }}>
+      <Wordmark size={42} color={L.paper} markColor={D.sage}/>
+      <div>
+        <div style={{
+          fontFamily: '"Fraunces", Georgia, serif', fontSize: 118, fontWeight: 300,
+          letterSpacing: '-0.04em', lineHeight: 0.96, marginBottom: 22,
+        }}>
+          Lou<br/>cherche.<br/>
+          <span style={{ fontStyle: 'italic', color: D.sage }}>Tu vis.</span>
+        </div>
+        <div style={{ fontSize: 20, color: D.inkSoft, maxWidth: 700 }}>
+          7 portails · &lt; 15 min · 0 recherche à faire.
+        </div>
+      </div>
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end',
+        paddingTop: 32, borderTop: '1px solid rgba(245,241,234,0.15)',
+      }}>
+        <div style={{
+          fontFamily: '"Fraunces", Georgia, serif', fontSize: 18, fontStyle: 'italic',
+          color: D.inkSoft,
+        }}>
+          <span style={{ color: D.sage, fontStyle: 'normal', marginRight: '0.25em' }}>—</span>au bon moment
+        </div>
+        <div style={{
+          fontSize: 13, fontFamily: 'ui-monospace, monospace',
+          color: 'rgba(245,241,234,0.55)', letterSpacing: '0.18em', textTransform: 'uppercase',
+        }}>bonhome.ch</div>
+      </div>
+    </div>
+  );
+}
+
+function Story() {
+  return (
+    <div style={{
+      width: 1080, height: 1920, background: L.ink, color: L.paper,
+      fontFamily: '"Inter", sans-serif', padding: '110px 80px',
+      display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+    }}>
+      <Wordmark size={56} color={L.paper} markColor={D.sage}/>
+      <div>
+        <div style={{
+          fontFamily: 'ui-monospace, monospace', fontSize: 19, color: L.accent,
+          letterSpacing: '0.22em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 38,
+        }}>Bêta privée · Neuchâtel</div>
+        <div style={{
+          fontFamily: '"Fraunces", Georgia, serif', fontSize: 200, fontWeight: 300,
+          letterSpacing: '-0.04em', lineHeight: 0.95, marginBottom: 32,
+        }}>
+          L'appart<br/>
+          <span style={{ fontStyle: 'italic', color: D.sage }}>qui te va.</span>
+        </div>
+        <div style={{ fontSize: 28, color: D.inkSoft, lineHeight: 1.35, maxWidth: 820 }}>
+          Lou cherche. Tu vis.
+        </div>
+      </div>
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        paddingTop: 40, borderTop: '1px solid rgba(245,241,234,0.15)',
+      }}>
+        <div style={{
+          fontSize: 20, fontFamily: 'ui-monospace, monospace',
+          color: D.inkSoft, letterSpacing: '0.2em', textTransform: 'uppercase',
+        }}>bonhome.ch</div>
+        <div style={{
+          padding: '14px 28px', border: `1.5px solid ${D.sage}`,
+          color: D.sage, fontSize: 18, fontWeight: 500, borderRadius: 100,
+        }}>Rejoindre →</div>
+      </div>
+    </div>
+  );
+}
+
+function Banner() {
+  return (
+    <div style={{
+      width: 1500, height: 500, background: L.ink, color: L.paper,
+      fontFamily: '"Inter", sans-serif', padding: '60px 80px',
+      display: 'grid', gridTemplateColumns: '1fr 1fr', alignItems: 'center', gap: 60,
+    }}>
+      <div>
+        <Wordmark size={52} color={L.paper} markColor={D.sage}/>
+        <div style={{
+          fontFamily: '"Fraunces", Georgia, serif', fontSize: 60, fontWeight: 300,
+          letterSpacing: '-0.035em', lineHeight: 1.02, marginTop: 22,
+        }}>
+          L'appart <span style={{ fontStyle: 'italic', color: D.sage }}>qui te va.</span>
+        </div>
+        <div style={{
+          fontSize: 16, color: D.inkSoft, marginTop: 14,
+          fontFamily: '"Fraunces", Georgia, serif', fontStyle: 'italic', fontWeight: 300,
+        }}>
+          <span style={{ color: D.sage, fontStyle: 'normal', marginRight: '0.3em' }}>—</span>au bon moment
+        </div>
+      </div>
+      <div style={{
+        background: 'rgba(245,241,234,0.04)', border: '1px solid rgba(245,241,234,0.12)',
+        padding: '32px 36px', borderRadius: 6,
+      }}>
+        <div style={{
+          fontFamily: 'ui-monospace, monospace', fontSize: 10, color: L.accent,
+          letterSpacing: '0.22em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 12,
+        }}>Pendant que tu vis</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 15 }}>
+          {['7 portails surveillés 24/7',
+            '< 15 min entre publication et notif',
+            'Lou filtre, tu décides'].map((t, i) => (
+            <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
+              <Chevron size={11} color={D.sage}/>
+              <span>{t}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PageSocialKit() {
+  return (
+    <Section number="E1 · Livrable" title="Kit social · 6 exports"
+      subtitle="Baseline β · wordmark V4 · terracotta en signal sur story/bannière">
+      <Col gap={28}>
+        <SocialCard title="OG · techno (principale)" dims="1200×630" format="PNG · WhatsApp, Slack, LinkedIn">
+          <Artboard label="" width={1200} height={630} maxW={1100}><OGTechno/></Artboard>
+        </SocialCard>
+
+        <Row gap={24}>
+          <div style={{ flex: 1, minWidth: 460 }}>
+            <SocialCard title="OG · humain" dims="1200×630" format="Instagram, Facebook">
+              <Artboard label="" width={1200} height={630} maxW={540}><OGHumain/></Artboard>
+            </SocialCard>
+          </div>
+          <div style={{ flex: 1, minWidth: 460 }}>
+            <SocialCard title="OG · produit (réserve)" dims="1200×630" format="LinkedIn canton">
+              <Artboard label="" width={1200} height={630} maxW={540}><OGProduit/></Artboard>
+            </SocialCard>
+          </div>
+        </Row>
+
+        <Row gap={28} align="flex-start">
+          <div style={{ width: 360 }}>
+            <SocialCard title="IG feed" dims="1080×1080" format="Instagram post">
+              <Artboard label="" width={1080} height={1080} maxW={340}><IGSquare/></Artboard>
+            </SocialCard>
+          </div>
+          <div style={{ width: 220 }}>
+            <SocialCard title="Story" dims="1080×1920" format="IG/TikTok story">
+              <Artboard label="" width={1080} height={1920} maxW={200}><Story/></Artboard>
+            </SocialCard>
+          </div>
+          <div style={{ flex: 1, minWidth: 480 }}>
+            <SocialCard title="LinkedIn bannière" dims="1500×500" format="Bannière profil">
+              <Artboard label="" width={1500} height={500} maxW={520}><Banner/></Artboard>
+            </SocialCard>
+          </div>
+        </Row>
+
+        <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 340px', gap: 32 }}>
+          <div style={{
+            padding: 22, background: L.sageSoft + '40',
+            border: `1px solid ${L.sageDeep}`, borderRadius: 4,
+          }}>
+            <div style={{
+              fontFamily: 'ui-monospace, monospace', fontSize: 10, color: L.sageDeep,
+              letterSpacing: '0.2em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 12,
+            }}>Livraison · export PNG</div>
+            <div style={{ fontSize: 12.5, color: L.ink, lineHeight: 1.6 }}>
+              Les 6 PNG sont générés depuis <code style={{ fontSize: 11 }}>v4/Branding bonhome D1 V4.html</code> en mode print.
+              Noms de fichiers : <code style={{ fontSize: 11 }}>og-techno.png</code>, <code style={{ fontSize: 11 }}>og-humain.png</code>, <code style={{ fontSize: 11 }}>og-produit.png</code>, <code style={{ fontSize: 11 }}>ig-square.png</code>, <code style={{ fontSize: 11 }}>story.png</code>, <code style={{ fontSize: 11 }}>linkedin-banner.png</code>.
+              Mêmes tokens que le code — pas de drift entre design et prod.
+            </div>
+          </div>
+          <PostIt rotate={-2} width={320}>
+            Si besoin des PNG en vrai fichier · dis-le moi, je les exporte individuellement via le rendu HTML.
+          </PostIt>
+        </div>
+      </Col>
+    </Section>
+  );
+}
+
+Object.assign(window, { PageTokensSigned, PageSocialKit });
+
+</script>
+<!-- inline-modules-end -->
+
+<script type="text/babel" data-presets="react">
+function App() {
+  return (
+    <PrintRoot>
+      <PageCoverV4/>
+      <PageLockedV3/>
+      <PageWordmarkFix/>
+      <PageBaseline/>
+      <PageCopyFixes/>
+      <PageTokensSigned/>
+      <PageSocialKit/>
+    </PrintRoot>
+  );
+}
+
+function tryMount() {
+  const needed = ['PrintRoot','PageCoverV4','PageLockedV3','PageWordmarkFix','PageBaseline','PageCopyFixes','PageTokensSigned','PageSocialKit','L','ACCENTS','Wordmark','ListingMockup'];
+  const missing = needed.filter(k => !window[k]);
+  if (missing.length) {
+    console.log('[waiting]', missing.join(', '));
+    return setTimeout(tryMount, 80);
+  }
+  ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+}
+tryMount();
+</script>
+</body>
+</html>

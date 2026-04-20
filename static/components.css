@@ -1,0 +1,291 @@
+/* ==========================================================================
+   bonhome.ch — Components & legacy token aliases
+   Chargé APRÈS brand.css (qui est le 1:1 de design/tokens-v1.0.css).
+   - Section 1 : aliases legacy (--teal, --paper, --ink, …) → --bh-* DA V1.0.
+     Permet à tout le HTML inline et app.js existants de continuer à fonctionner
+     sans rewrite massif — et tous les consumers profitent auto des nouveaux
+     hex (palette NCS 2026).
+   - Section 2 : composants (wordmark, boutons, chips, cartes, bulles chat)
+     recalés sur les tokens --bh-*, avec font-variation-settings "opsz" 144
+     obligatoire pour Fraunces (sinon rendu fin type Times, cf README DA).
+   ========================================================================== */
+
+/* ── 1) Aliases legacy → tokens DA V1.0 ───────────────────────────────────── */
+:root {
+  /* Fonts */
+  --font-body:    var(--bh-font-sans);
+  --font-display: var(--bh-font-serif);
+
+  /* Encres */
+  --ink:       var(--bh-ink);
+  --ink-soft:  var(--bh-ink-soft);
+  --ink-mute:  var(--bh-ink-mute);
+
+  /* Surfaces */
+  --paper:      var(--bh-paper);
+  --paper-soft: var(--bh-paper-soft);
+  /* --cream servait de fond bulle user + section alternée. DA distingue :
+     bulle user = --bh-paper-sunk, section alt = --bh-paper-soft.
+     Mapping par défaut = paper-sunk (usage majoritaire). Les sections
+     alternées peuvent override vers --bh-paper-soft cas par cas. */
+  --cream: var(--bh-paper-sunk);
+
+  /* Lignes */
+  --line:      var(--bh-line);
+  --line-soft: var(--bh-line-soft);
+
+  /* Teal */
+  --teal:      var(--bh-teal);
+  --teal-deep: var(--bh-teal-deep);
+  --teal-soft: var(--bh-teal-soft);
+
+  /* Terracotta (signal) */
+  --accent:      var(--bh-terracotta);
+  --accent-soft: var(--bh-terracotta-soft);
+
+  /* Sauge (signature wordmark uniquement dans la DA, mais le legacy s'en
+     servait aussi pour les tags d'attribut → on expose le mapping, charge
+     aux pages de respecter la règle "sage = wordmark only"). */
+  --sage-tag:      var(--bh-sage);
+  --sage-tag-soft: var(--bh-sage-soft);
+
+  /* Radii */
+  --r-pill: var(--bh-radius-pill);
+  --r-card: var(--bh-radius-lg);
+}
+
+/* ── 2) Fraunces opsz axis — CRITIQUE ──────────────────────────────────────
+   Sans font-variation-settings "opsz" 144, Fraunces rend en Times fin.
+   On force l'axe sur tous les usages Fraunces (h1-h4 l'ont déjà via le reset
+   du tokens.css, mais .wordmark et usages inline doivent l'hériter aussi). */
+.wordmark,
+.baseline,
+.bh-display,
+.bh-serif {
+  font-variation-settings: "opsz" 144;
+}
+
+/* ── 3) Wordmark — chevron + point en SAUGE (signature) ───────────────────── */
+.wordmark {
+  position: relative;
+  font-family: var(--bh-font-serif);
+  font-weight: var(--bh-weight-regular);
+  font-variation-settings: "opsz" 144;
+  letter-spacing: var(--bh-track-tight);
+  color: var(--bh-ink);
+  line-height: 1;
+  display: inline-block;
+}
+.wordmark__chevron-wrap {
+  position: relative;
+  display: inline-block;
+}
+.wordmark__chevron {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: -0.28em;
+  width: 0.55em;
+  height: 0.33em;
+  fill: none;
+  stroke: var(--bh-sage);       /* ex-teal → sage (règle DA) */
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.wordmark__point { color: var(--bh-sage); }  /* ex-teal → sage */
+
+/* Tailles courantes (multiplicateur via font-size) */
+.wordmark--sm { font-size: 20px; }
+.wordmark--md { font-size: 28px; }
+.wordmark--lg { font-size: 48px; }
+.wordmark--xl { font-size: 88px; }
+
+/* ── 4) Boutons ───────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-block;
+  font-family: var(--bh-font-sans);
+  font-size: 15px;
+  font-weight: var(--bh-weight-medium);
+  padding: 12px 24px;
+  border-radius: var(--bh-radius-pill);
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  line-height: 1.2;
+  transition:
+    background var(--bh-duration-fast) var(--bh-ease-out),
+    transform 120ms var(--bh-ease-out),
+    box-shadow var(--bh-duration-fast) var(--bh-ease-out),
+    color var(--bh-duration-fast) var(--bh-ease-out),
+    border-color var(--bh-duration-fast) var(--bh-ease-out);
+  white-space: nowrap;
+}
+.btn-primary {
+  background: var(--bh-teal);
+  color: var(--bh-paper);
+}
+.btn-primary:hover {
+  background: var(--bh-teal-deep);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(31, 107, 110, 0.25);
+}
+.btn-primary:active { transform: translateY(0); }
+
+.btn-outline {
+  background: transparent;
+  color: var(--bh-teal);
+  border: 1.5px solid var(--bh-teal);
+  padding: 10.5px 22.5px;
+}
+.btn-outline:hover {
+  background: var(--bh-teal);
+  color: var(--bh-paper);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--bh-ink);
+  padding: 10px 18px;
+}
+.btn-ghost:hover { color: var(--bh-teal); }
+
+.btn-sm { font-size: 13px; padding: 8px 16px; }
+.btn-lg { font-size: 17px; padding: 14px 30px; }
+
+/* ── 5) Tags d'attribut (sauge) ────────────────────────────────────────────
+   ⚠️ Usage limité : la DA réserve la sauge au wordmark. Conservé ici pour
+   compat avec les pages existantes (tags "Lumineux", "Calme", etc.), mais
+   à ré-évaluer — probablement remplacer par teal-tint pour respecter la
+   DA stricte. */
+.tag {
+  display: inline-block;
+  font-family: var(--bh-font-sans);
+  font-size: 12px;
+  font-weight: var(--bh-weight-medium);
+  color: var(--bh-sage-deep);
+  background: var(--bh-sage-tint);
+  padding: 4px 10px;
+  border-radius: var(--bh-radius-pill);
+  line-height: 1.4;
+}
+
+/* ── 6) Badge "Nouveau" — terracotta ───────────────────────────────────── */
+.badge-new {
+  display: inline-block;
+  font-family: var(--bh-font-sans);
+  font-size: 11px;
+  font-weight: var(--bh-weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--bh-paper);
+  background: var(--bh-terracotta);
+  padding: 3px 10px;
+  border-radius: var(--bh-radius-pill);
+}
+
+/* ── 7) Labels appuyés ─────────────────────────────────────────────────── */
+.label-strong {
+  font-family: var(--bh-font-sans);
+  font-size: 11px;
+  font-weight: var(--bh-weight-semibold);
+  letter-spacing: var(--bh-track-caps);
+  text-transform: uppercase;
+  color: var(--bh-teal-deep);
+}
+
+/* ── 8) Bulles de chat ─────────────────────────────────────────────────── */
+.bubble {
+  display: inline-block;
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: 20px;
+  font-family: var(--bh-font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--bh-ink);
+}
+.bubble--lou {
+  background: var(--bh-teal-tint);
+  border-bottom-left-radius: 4px;
+  align-self: flex-start;
+}
+.bubble--user {
+  background: var(--bh-paper-sunk);
+  border-bottom-right-radius: 4px;
+  align-self: flex-end;
+  font-weight: var(--bh-weight-medium);
+}
+
+/* ── 9) Chevron primitive (indépendant du wordmark) ─────────────────────── */
+.chevron {
+  display: inline-block;
+  vertical-align: middle;
+  fill: none;
+  stroke: var(--bh-teal);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.chevron--sm { width: 9px;  height: 5.4px; }
+.chevron--md { width: 14px; height: 8.4px; }
+.chevron--lg { width: 20px; height: 12px; }
+
+@keyframes bh-chevron-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.15); }
+}
+.chevron--pulse { animation: bh-chevron-pulse 800ms ease-in-out infinite; }
+
+/* ── 10) Liens texte ───────────────────────────────────────────────────── */
+.bh-link {
+  color: var(--bh-teal);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 150ms var(--bh-ease-out);
+}
+.bh-link:hover { border-bottom-color: var(--bh-teal); }
+
+/* ── 11) Baseline "— au bon moment" ────────────────────────────────────── */
+.baseline {
+  font-family: var(--bh-font-serif);
+  font-weight: var(--bh-weight-light);
+  color: var(--bh-ink-soft);
+  font-style: normal;
+  font-variation-settings: "opsz" 144;
+}
+
+/* ── 12) Cartes ────────────────────────────────────────────────────────── */
+.bh-card {
+  background: var(--bh-paper-raised);
+  border: 1px solid var(--bh-line);
+  border-radius: var(--bh-radius-lg);
+  padding: 24px;
+  box-shadow: var(--bh-shadow-xs);
+}
+
+/* ── 13) Utilities ─────────────────────────────────────────────────────── */
+.bh-ink       { color: var(--bh-ink); }
+.bh-ink-soft  { color: var(--bh-ink-soft); }
+.bh-ink-mute  { color: var(--bh-ink-mute); }
+.bh-teal      { color: var(--bh-teal); }
+.bh-teal-deep { color: var(--bh-teal-deep); }
+.bh-accent    { color: var(--bh-terracotta); }
+.bh-sage      { color: var(--bh-sage); }
+
+.bg-paper     { background: var(--bh-paper); }
+.bg-paper-soft{ background: var(--bh-paper-soft); }
+.bg-cream     { background: var(--bh-paper-sunk); }  /* legacy alias */
+.bg-teal      { background: var(--bh-teal);      color: var(--bh-paper); }
+.bg-teal-deep { background: var(--bh-teal-deep); color: var(--bh-paper); }
+
+/* ── 14) Reduced motion — désactive toutes les transitions/animations ──── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

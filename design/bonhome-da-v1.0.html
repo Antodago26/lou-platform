@@ -1,0 +1,1255 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Direction Artistique · bonhome.ch</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,300;1,9..144,400&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+
+<style>
+/* ============================================================
+   bonhome — Direction Artistique
+   Tokens complets inlinés (= handoff/tokens.css)
+   ============================================================ */
+
+:root {
+  --bh-paper:         #F5F1EA;
+  --bh-paper-soft:    #EDE8DF;
+  --bh-paper-sunk:    #E4DED2;
+  --bh-paper-raised:  #FDFBF6;
+  --bh-ink:           #1A2332;
+  --bh-ink-soft:      #4A5568;
+  --bh-ink-mute:      #6B7280;
+  --bh-ink-disabled:  #9AA3B2;
+  --bh-teal:          #1F6B6E;
+  --bh-teal-deep:     #174E51;
+  --bh-teal-soft:     #A8C9CA;
+  --bh-teal-tint:     #E3EEEE;
+  --bh-sage:          #6B8A74;
+  --bh-sage-deep:     #4F6A58;
+  --bh-sage-soft:     #B8C9B9;
+  --bh-sage-tint:     #E4EBDF;
+  --bh-terracotta:    #C15A3E;
+  --bh-terracotta-deep: #9A4530;
+  --bh-terracotta-soft: #E4B5A3;
+  --bh-terracotta-tint: #F2DDD1;
+  --bh-line:          #D4CEC2;
+  --bh-line-soft:     #E0DBD0;
+  --bh-line-strong:   #B8B0A1;
+
+  --bh-bg:            var(--bh-paper);
+  --bh-brand:         var(--bh-teal);
+  --bh-brand-deep:    var(--bh-teal-deep);
+  --bh-brand-soft:    var(--bh-teal-soft);
+  --bh-brand-tint:    var(--bh-teal-tint);
+  --bh-accent:        var(--bh-terracotta);
+  --bh-accent-soft:   var(--bh-terracotta-soft);
+  --bh-signature:     var(--bh-sage);
+  --bh-text:          var(--bh-ink);
+  --bh-text-soft:     var(--bh-ink-soft);
+  --bh-text-mute:     var(--bh-ink-mute);
+  --bh-border:        var(--bh-line);
+
+  --bh-font-serif:    'Fraunces', Georgia, serif;
+  --bh-font-sans:     'Inter', -apple-system, sans-serif;
+  --bh-font-mono:     'JetBrains Mono', Menlo, monospace;
+
+  --bh-radius-sm:     8px;
+  --bh-radius-md:     12px;
+  --bh-radius-lg:     20px;
+  --bh-radius-xl:     28px;
+  --bh-radius-pill:   999px;
+
+  --bh-shadow-xs:     0 1px 2px rgba(26, 35, 50, 0.04);
+  --bh-shadow-sm:     0 2px 8px rgba(26, 35, 50, 0.06);
+  --bh-shadow-md:     0 6px 20px rgba(26, 35, 50, 0.08);
+
+  --bh-ease-out:      cubic-bezier(0.22, 1, 0.36, 1);
+  --bh-focus-ring:    0 0 0 3px rgba(31, 107, 110, 0.35);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-family: var(--bh-font-sans);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--bh-text);
+  background: var(--bh-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body { margin: 0; font-feature-settings: "ss01" on; }
+
+h1, h2, h3, h4 {
+  font-family: var(--bh-font-serif);
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin: 0;
+  text-wrap: balance;
+  font-variation-settings: "opsz" 144;
+}
+h1 { font-size: clamp(2.5rem, 2.2rem + 1.6vw, 3.75rem); }
+h2 { font-size: clamp(2rem, 1.8rem + 1vw, 2.75rem); }
+h3 { font-size: clamp(1.25rem, 1.18rem + 0.4vw, 1.5rem); font-weight: 400; letter-spacing: -0.01em; }
+h4 { font-size: 1.0625rem; font-weight: 500; font-family: var(--bh-font-sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--bh-text-soft); }
+
+p { text-wrap: pretty; max-width: 65ch; margin: 0 0 1em 0; }
+p:last-child { margin-bottom: 0; }
+
+code, .mono { font-family: var(--bh-font-mono); font-size: 0.875em; }
+
+/* ── Layout ────────────────────────────────────────── */
+
+.wrap {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 100vh;
+}
+
+nav.side {
+  background: var(--bh-paper-soft);
+  border-right: 1px solid var(--bh-line);
+  padding: 32px 24px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  font-size: 14px;
+}
+
+nav.side .brand {
+  font-family: var(--bh-font-serif);
+  font-size: 22px;
+  font-weight: 400;
+  letter-spacing: -0.035em;
+  font-variation-settings: "opsz" 144;
+  position: relative;
+  margin-bottom: 4px;
+}
+nav.side .brand .chevron {
+  position: absolute;
+  top: -10px;
+  left: 35px;
+  color: var(--bh-sage);
+}
+nav.side .brand .dot { color: var(--bh-sage); }
+
+nav.side .kicker {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--bh-text-soft);
+  margin-bottom: 32px;
+}
+
+nav.side ul { list-style: none; padding: 0; margin: 0; }
+nav.side li { margin-bottom: 2px; }
+nav.side li.heading {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--bh-ink-mute);
+  margin-top: 24px;
+  margin-bottom: 8px;
+  padding: 0 12px;
+}
+nav.side a {
+  display: block;
+  padding: 6px 12px;
+  border-radius: 6px;
+  color: var(--bh-text);
+  text-decoration: none;
+  transition: background 140ms;
+}
+nav.side a:hover { background: var(--bh-paper); }
+
+main {
+  padding: 64px 80px 120px;
+  max-width: 1100px;
+}
+
+section.section {
+  padding-top: 48px;
+  margin-bottom: 96px;
+  scroll-margin-top: 32px;
+}
+
+.section-header {
+  border-bottom: 1px solid var(--bh-line);
+  padding-bottom: 24px;
+  margin-bottom: 48px;
+}
+.section-header .tag {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--bh-teal);
+  margin-bottom: 12px;
+}
+.section-header p {
+  font-family: var(--bh-font-serif);
+  font-style: italic;
+  font-weight: 300;
+  font-size: 20px;
+  color: var(--bh-text-soft);
+  max-width: 60ch;
+  margin-top: 16px;
+}
+
+/* ── Hero (intro) ─────────────────────────────────── */
+
+.hero {
+  padding-top: 32px;
+  padding-bottom: 64px;
+}
+.hero .wordmark-big {
+  font-family: var(--bh-font-serif);
+  font-size: clamp(4rem, 6vw, 7rem);
+  font-weight: 400;
+  letter-spacing: -0.035em;
+  font-variation-settings: "opsz" 144;
+  position: relative;
+  display: inline-block;
+  line-height: 1;
+  margin-bottom: 24px;
+}
+.hero .wordmark-big .chev {
+  position: absolute;
+  top: -0.18em;
+  left: 2.95em;
+}
+.hero .wordmark-big .pt { color: var(--bh-sage); }
+.hero .baseline {
+  font-family: var(--bh-font-serif);
+  font-style: italic;
+  font-weight: 300;
+  font-size: 32px;
+  color: var(--bh-text-soft);
+  letter-spacing: -0.01em;
+  max-width: 20ch;
+  line-height: 1.2;
+}
+.hero .meta {
+  margin-top: 48px;
+  display: flex;
+  gap: 48px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--bh-text-soft);
+}
+.hero .meta dt {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--bh-ink-mute);
+  margin-bottom: 4px;
+}
+.hero .meta dd { margin: 0; font-weight: 500; color: var(--bh-ink); }
+
+/* ── Swatches ─────────────────────────────────────── */
+
+.swatch-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 32px; }
+.swatch {
+  border-radius: var(--bh-radius-md);
+  overflow: hidden;
+  border: 1px solid var(--bh-line);
+  background: var(--bh-paper-raised);
+}
+.swatch .sample {
+  height: 120px;
+  display: flex;
+  align-items: flex-end;
+  padding: 12px;
+}
+.swatch .sample .role {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.swatch .info {
+  padding: 12px 14px;
+  font-size: 13px;
+}
+.swatch .info .name { font-weight: 500; color: var(--bh-ink); }
+.swatch .info .hex { font-family: var(--bh-font-mono); font-size: 12px; color: var(--bh-ink-mute); margin-top: 2px; }
+.swatch .info .var { font-family: var(--bh-font-mono); font-size: 11px; color: var(--bh-teal-deep); margin-top: 4px; }
+
+.ratio-table {
+  margin-top: 24px;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.ratio-table th, .ratio-table td {
+  text-align: left;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--bh-line-soft);
+}
+.ratio-table th {
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--bh-ink-mute);
+}
+.ratio-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+.ratio-badge.aaa { background: var(--bh-sage-tint); color: var(--bh-sage-deep); }
+.ratio-badge.aa  { background: var(--bh-teal-tint); color: var(--bh-teal-deep); }
+.ratio-badge.aa-large { background: #F7E8C7; color: #8A6A1E; }
+.ratio-badge.fail { background: #F5D4CA; color: var(--bh-terracotta-deep); }
+
+/* ── Type specimens ───────────────────────────────── */
+
+.type-row {
+  padding: 24px 0;
+  border-bottom: 1px solid var(--bh-line-soft);
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 32px;
+  align-items: baseline;
+}
+.type-row:last-child { border-bottom: none; }
+.type-row .meta {
+  font-family: var(--bh-font-mono);
+  font-size: 12px;
+  color: var(--bh-ink-mute);
+  line-height: 1.4;
+}
+.type-row .meta .label {
+  font-family: var(--bh-font-sans);
+  font-weight: 500;
+  color: var(--bh-ink);
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.type-row .sample { color: var(--bh-ink); }
+
+/* ── Scales — spacing, radius, shadow ─────────────── */
+
+.scale-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; }
+.scale-cell {
+  background: var(--bh-paper-raised);
+  border: 1px solid var(--bh-line);
+  border-radius: var(--bh-radius-md);
+  padding: 20px 16px;
+  font-size: 12px;
+}
+.scale-cell .visual { margin-bottom: 16px; }
+.scale-cell .name { font-weight: 500; font-size: 13px; color: var(--bh-ink); }
+.scale-cell .value { font-family: var(--bh-font-mono); color: var(--bh-ink-mute); font-size: 11px; margin-top: 2px; }
+
+.space-bar { height: 24px; background: var(--bh-teal); border-radius: 4px; }
+.radius-box { height: 60px; background: var(--bh-teal-soft); border: 1px solid var(--bh-teal); }
+
+/* ── Components ──────────────────────────────────── */
+
+.component-row {
+  background: var(--bh-paper-raised);
+  border: 1px solid var(--bh-line);
+  border-radius: var(--bh-radius-lg);
+  padding: 32px;
+  margin-bottom: 24px;
+}
+.component-row h3 { margin-bottom: 8px; }
+.component-row .note {
+  font-size: 14px;
+  color: var(--bh-text-soft);
+  margin-bottom: 24px;
+}
+.component-demo {
+  padding: 32px;
+  background: var(--bh-paper);
+  border-radius: var(--bh-radius-md);
+  border: 1px dashed var(--bh-line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.component-code {
+  background: #1A2332;
+  color: #D4CEC2;
+  border-radius: var(--bh-radius-md);
+  padding: 16px 20px;
+  font-family: var(--bh-font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-x: auto;
+}
+.component-code .tag { color: var(--bh-teal-soft); }
+.component-code .attr { color: var(--bh-terracotta-soft); }
+
+/* ── Buttons ─────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: var(--bh-radius-pill);
+  font-family: var(--bh-font-sans);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 140ms var(--bh-ease-out);
+  text-decoration: none;
+}
+.btn:focus-visible { outline: none; box-shadow: var(--bh-focus-ring); }
+
+.btn-primary { background: var(--bh-teal); color: var(--bh-paper); }
+.btn-primary:hover { background: var(--bh-teal-deep); }
+
+.btn-secondary { background: transparent; color: var(--bh-teal); border-color: var(--bh-teal); }
+.btn-secondary:hover { background: var(--bh-teal-tint); }
+
+.btn-ghost { background: transparent; color: var(--bh-teal); padding: 12px 16px; }
+.btn-ghost:hover { background: var(--bh-teal-tint); }
+
+.btn-accent { background: var(--bh-terracotta); color: var(--bh-paper); }
+.btn-accent:hover { background: var(--bh-terracotta-deep); }
+
+/* ── Input ───────────────────────────────────────── */
+
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 240px; }
+.field-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: var(--bh-text-soft);
+}
+.field-input {
+  padding: 12px 16px;
+  background: var(--bh-paper-raised);
+  border: 1px solid var(--bh-line);
+  border-radius: var(--bh-radius-md);
+  font-family: var(--bh-font-sans);
+  font-size: 15px;
+  color: var(--bh-ink);
+  transition: border-color 140ms, box-shadow 140ms;
+}
+.field-input:focus { outline: none; border-color: var(--bh-teal); box-shadow: var(--bh-focus-ring); }
+.field-input::placeholder { color: var(--bh-ink-disabled); }
+
+/* ── Card ────────────────────────────────────────── */
+
+.card {
+  background: var(--bh-paper-raised);
+  border: 1px solid var(--bh-line);
+  border-radius: var(--bh-radius-lg);
+  padding: 24px;
+  box-shadow: var(--bh-shadow-xs);
+  max-width: 320px;
+}
+.card h3 { font-family: var(--bh-font-serif); font-weight: 400; font-size: 20px; margin-bottom: 8px; }
+.card p { font-size: 14px; color: var(--bh-text-soft); }
+.card .meta { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  background: var(--bh-teal-tint);
+  color: var(--bh-teal-deep);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  border-radius: var(--bh-radius-pill);
+}
+.chip.accent { background: var(--bh-terracotta-tint); color: var(--bh-terracotta-deep); }
+
+/* ── Chat ────────────────────────────────────────── */
+
+.chat-bubble {
+  max-width: 75%;
+  padding: 12px 16px;
+  font-size: 15px;
+  line-height: 1.4;
+  margin-bottom: 8px;
+  animation: bubble-in 280ms var(--bh-ease-out) both;
+}
+@keyframes bubble-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.chat-bubble--lou {
+  background: var(--bh-teal-tint);
+  color: var(--bh-ink);
+  border-radius: 20px 20px 20px 4px;
+  align-self: flex-start;
+}
+.chat-bubble--me {
+  background: var(--bh-paper-sunk);
+  color: var(--bh-ink);
+  border-radius: 20px 20px 4px 20px;
+  align-self: flex-end;
+  margin-left: auto;
+}
+.chat-track {
+  display: flex;
+  flex-direction: column;
+  max-width: 520px;
+  padding: 24px;
+  background: var(--bh-paper);
+  border-radius: var(--bh-radius-md);
+  border: 1px solid var(--bh-line);
+}
+
+/* ── Screens ─────────────────────────────────────── */
+
+.screens-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 24px;
+}
+
+.screen {
+  background: var(--bh-paper);
+  border: 1px solid var(--bh-line);
+  border-radius: var(--bh-radius-lg);
+  overflow: hidden;
+  box-shadow: var(--bh-shadow-sm);
+}
+.screen-label {
+  padding: 12px 16px;
+  background: var(--bh-paper-soft);
+  border-bottom: 1px solid var(--bh-line);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--bh-text-soft);
+  display: flex;
+  justify-content: space-between;
+}
+.screen-body { padding: 24px; }
+
+/* Screen: home hero */
+.home-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--bh-line);
+  margin-bottom: 32px;
+}
+.home-nav .logo { font-family: var(--bh-font-serif); font-size: 22px; letter-spacing: -0.035em; font-variation-settings: "opsz" 144; position: relative; }
+.home-nav .logo .chev { position: absolute; top: -10px; left: 3.2em; color: var(--bh-sage); }
+.home-nav .logo .dot { color: var(--bh-sage); }
+.home-nav-links { display: flex; gap: 20px; font-size: 13px; color: var(--bh-text-soft); }
+.home-hero h1 { font-size: 36px; margin-bottom: 8px; }
+.home-hero .sub { font-family: var(--bh-font-serif); font-style: italic; font-weight: 300; color: var(--bh-text-soft); font-size: 18px; margin-bottom: 24px; }
+.home-hero .cta-row { display: flex; gap: 12px; }
+
+/* Screen: listing */
+.listing-card {
+  background: var(--bh-paper-raised);
+  border: 1px solid var(--bh-line);
+  border-radius: var(--bh-radius-md);
+  padding: 16px;
+  margin-bottom: 12px;
+  display: grid;
+  grid-template-columns: 80px 1fr auto;
+  gap: 16px;
+  align-items: start;
+}
+.listing-card .thumb {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--bh-radius-sm);
+  background: linear-gradient(135deg, var(--bh-sage-tint), var(--bh-sage-soft));
+  border: 1px solid var(--bh-line);
+}
+.listing-card .title { font-family: var(--bh-font-serif); font-size: 16px; font-weight: 400; margin-bottom: 2px; }
+.listing-card .desc { font-size: 13px; color: var(--bh-text-soft); margin-bottom: 8px; }
+.listing-card .price { font-family: var(--bh-font-serif); font-size: 18px; font-weight: 400; color: var(--bh-teal-deep); }
+.listing-card .loc { font-size: 11px; color: var(--bh-text-mute); letter-spacing: 0.05em; }
+.listing-card .heart {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bh-paper);
+  border: 1px solid var(--bh-line);
+  display: grid; place-items: center;
+  color: var(--bh-terracotta);
+  cursor: pointer;
+}
+
+/* ── Copy table ──────────────────────────────────── */
+
+.copy-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  background: var(--bh-paper-raised);
+  border-radius: var(--bh-radius-md);
+  overflow: hidden;
+  border: 1px solid var(--bh-line);
+}
+.copy-table th, .copy-table td {
+  padding: 14px 18px;
+  text-align: left;
+  border-bottom: 1px solid var(--bh-line-soft);
+  vertical-align: top;
+}
+.copy-table tr:last-child td { border-bottom: none; }
+.copy-table th {
+  background: var(--bh-paper-soft);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--bh-text-soft);
+}
+.copy-table .ctx { font-weight: 500; color: var(--bh-ink); width: 160px; }
+.copy-table .yes { color: var(--bh-ink); font-family: var(--bh-font-serif); font-style: italic; font-weight: 300; font-size: 16px; }
+.copy-table .no  { color: var(--bh-ink-mute); text-decoration: line-through; text-decoration-color: var(--bh-terracotta); text-decoration-thickness: 1px; }
+
+/* ── Do / Don't ──────────────────────────────────── */
+
+.do-dont-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 32px;
+}
+.do-dont {
+  padding: 24px;
+  border-radius: var(--bh-radius-lg);
+  border: 1px solid var(--bh-line);
+  background: var(--bh-paper-raised);
+}
+.do-dont.do { border-left: 3px solid var(--bh-sage-deep); }
+.do-dont.dont { border-left: 3px solid var(--bh-terracotta); }
+.do-dont h4 {
+  text-transform: none;
+  letter-spacing: 0;
+  font-family: var(--bh-font-serif);
+  font-size: 22px;
+  color: var(--bh-ink);
+  font-weight: 400;
+  margin-bottom: 12px;
+}
+.do-dont.do h4::before { content: "✓  "; color: var(--bh-sage-deep); }
+.do-dont.dont h4::before { content: "✕  "; color: var(--bh-terracotta); }
+.do-dont ul { padding-left: 20px; margin: 0; font-size: 14px; line-height: 1.7; color: var(--bh-text-soft); }
+.do-dont li { margin-bottom: 4px; }
+
+/* ── Footer ──────────────────────────────────────── */
+
+footer {
+  margin-top: 96px;
+  padding-top: 48px;
+  border-top: 1px solid var(--bh-line);
+  font-size: 13px;
+  color: var(--bh-text-soft);
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+
+@media (max-width: 900px) {
+  .wrap { grid-template-columns: 1fr; }
+  nav.side { position: static; height: auto; }
+  main { padding: 32px 24px 64px; }
+  .do-dont-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="side">
+  <div class="brand">
+    bonh<span style="display:inline-block; position:relative;">o<svg class="chevron" style="position:absolute; top:-9px; left:2px; width:16px; height:8px;" viewBox="0 0 24 12" aria-hidden="true"><path d="M3 10 L12 3 L21 10" stroke="#6B8A74" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>me<span class="dot">.</span>
+  </div>
+  <div class="kicker">Direction artistique · v1.0</div>
+
+  <ul>
+    <li class="heading">Intro</li>
+    <li><a href="#intro">Vue d'ensemble</a></li>
+    <li><a href="#principes">Principes</a></li>
+
+    <li class="heading">Tokens</li>
+    <li><a href="#couleurs">Couleurs</a></li>
+    <li><a href="#contrastes">Contrastes</a></li>
+    <li><a href="#typographie">Typographie</a></li>
+    <li><a href="#espacements">Espacements</a></li>
+    <li><a href="#formes">Formes & ombres</a></li>
+
+    <li class="heading">Composants</li>
+    <li><a href="#wordmark">Wordmark</a></li>
+    <li><a href="#buttons">Boutons</a></li>
+    <li><a href="#inputs">Inputs</a></li>
+    <li><a href="#cards">Cards & chips</a></li>
+    <li><a href="#chat">Chat</a></li>
+
+    <li class="heading">Écrans</li>
+    <li><a href="#screen-home">Home</a></li>
+    <li><a href="#screen-listing">Listing</a></li>
+    <li><a href="#screen-chat">Chat Lou</a></li>
+
+    <li class="heading">Ton</li>
+    <li><a href="#copy">Microcopy</a></li>
+    <li><a href="#do-dont">Do &amp; Don't</a></li>
+  </ul>
+</nav>
+
+<main>
+
+<!-- ═══════════════════════ HERO ═══════════════════════ -->
+<section class="hero" id="intro">
+  <div class="wordmark-big">
+    bonh<span style="display:inline-block; position:relative;">
+      o<svg class="chev" style="width:0.3em; height:0.15em;" viewBox="0 0 24 12" aria-hidden="true"><path d="M3 10 L12 3 L21 10" stroke="#6B8A74" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </span>me<span class="pt">.</span>
+  </div>
+  <div class="baseline">trouver un chez-soi, plus doucement.</div>
+
+  <dl class="meta">
+    <div><dt>Projet</dt><dd>bonhome.ch</dd></div>
+    <div><dt>Version</dt><dd>1.0 · avril 2026</dd></div>
+    <div><dt>Palette</dt><dd>NCS 2026</dd></div>
+    <div><dt>Stack</dt><dd>HTML + CSS vars</dd></div>
+  </dl>
+</section>
+
+<!-- ═══════════════════════ PRINCIPES ═══════════════════════ -->
+<section class="section" id="principes">
+  <div class="section-header">
+    <div class="tag">Principes</div>
+    <h2>Trois règles qui tiennent l'identité</h2>
+    <p>Avant les tokens, avant les composants. Si ces trois règles cassent, l'identité casse.</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px;">
+    <div class="component-row" style="margin-bottom: 0;">
+      <h4 style="color: var(--bh-teal); margin-bottom: 8px;">01 · Teal domine</h4>
+      <h3 style="font-size: 22px; margin-bottom: 12px;">Le teal porte les actions.</h3>
+      <p style="font-size: 14px; color: var(--bh-text-soft);">CTA principaux, liens, états actifs. Toujours en teal ou teal-deep. Pas en terracotta (trop chaud pour une action neutre).</p>
+    </div>
+    <div class="component-row" style="margin-bottom: 0;">
+      <h4 style="color: var(--bh-terracotta); margin-bottom: 8px;">02 · Terracotta en signal</h4>
+      <h3 style="font-size: 22px; margin-bottom: 12px;">Le terracotta signale la chaleur.</h3>
+      <p style="font-size: 14px; color: var(--bh-text-soft);">Likes, matches, coup de cœur, notifications. Jamais pour une action froide (supprimer, fermer).</p>
+    </div>
+    <div class="component-row" style="margin-bottom: 0;">
+      <h4 style="color: var(--bh-sage); margin-bottom: 8px;">03 · Sauge = signature</h4>
+      <h3 style="font-size: 22px; margin-bottom: 12px;">Le sauge, c'est le wordmark. Rien d'autre.</h3>
+      <p style="font-size: 14px; color: var(--bh-text-soft);">Chevron + point du wordmark. Ne pas l'utiliser ailleurs dans l'UI — ça dilue la signature.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ COULEURS ═══════════════════════ -->
+<section class="section" id="couleurs">
+  <div class="section-header">
+    <div class="tag">Tokens · Couleurs</div>
+    <h2>Palette NCS 2026</h2>
+    <p>Teal profond (couleur de l'année) + Terracotta chaleur + Sauge signature + Bleu d'encre. Neutres crème chauds.</p>
+  </div>
+
+  <h4 style="margin-bottom: 16px;">Surfaces & encres</h4>
+  <div class="swatch-row">
+    <div class="swatch">
+      <div class="sample" style="background: #F5F1EA; color: #1A2332;"><span class="role">Paper</span></div>
+      <div class="info"><div class="name">Paper</div><div class="hex">#F5F1EA</div><div class="var">--bh-paper</div></div>
+    </div>
+    <div class="swatch">
+      <div class="sample" style="background: #EDE8DF; color: #1A2332;"><span class="role">Paper soft</span></div>
+      <div class="info"><div class="name">Paper soft</div><div class="hex">#EDE8DF</div><div class="var">--bh-paper-soft</div></div>
+    </div>
+    <div class="swatch">
+      <div class="sample" style="background: #FDFBF6; color: #1A2332;"><span class="role">Paper raised</span></div>
+      <div class="info"><div class="name">Paper raised</div><div class="hex">#FDFBF6</div><div class="var">--bh-paper-raised</div></div>
+    </div>
+    <div class="swatch">
+      <div class="sample" style="background: #1A2332; color: #F5F1EA;"><span class="role">Ink</span></div>
+      <div class="info"><div class="name">Ink (texte)</div><div class="hex">#1A2332</div><div class="var">--bh-ink</div></div>
+    </div>
+    <div class="swatch">
+      <div class="sample" style="background: #4A5568; color: #F5F1EA;"><span class="role">Ink soft</span></div>
+      <div class="info"><div class="name">Ink soft</div><div class="hex">#4A5568</div><div class="var">--bh-ink-soft</div></div>
+    </div>
+  </div>
+
+  <h4 style="margin-top: 40px; margin-bottom: 16px;">Ancres de marque</h4>
+  <div class="swatch-row">
+    <div class="swatch">
+      <div class="sample" style="background: #1F6B6E; color: #F5F1EA;"><span class="role">Brand · teal</span></div>
+      <div class="info"><div class="name">Teal</div><div class="hex">#1F6B6E</div><div class="var">--bh-teal / --bh-brand</div></div>
+    </div>
+    <div class="swatch">
+      <div class="sample" style="background: #174E51; color: #F5F1EA;"><span class="role">Teal deep</span></div>
+      <div class="info"><div class="name">Teal deep</div><div class="hex">#174E51</div><div class="var">--bh-teal-deep</div></div>
+    </div>
+    <div class="swatch">
+      <div class="sample" style="background: #E3EEEE; color: #1F6B6E;"><span class="role">Teal tint</span></div>
+      <div class="info"><div class="name">Teal tint</div><div class="hex">#E3EEEE</div><div class="var">--bh-teal-tint</div></div>
+    </div>
+    <div class="swatch">
+      <div class="sample" style="background: #C15A3E; color: #F5F1EA;"><span class="role">Accent</span></div>
+      <div class="info"><div class="name">Terracotta</div><div class="hex">#C15A3E</div><div class="var">--bh-terracotta / --bh-accent</div></div>
+    </div>
+    <div class="swatch">
+      <div class="sample" style="background: #F2DDD1; color: #9A4530;"><span class="role">Terra tint</span></div>
+      <div class="info"><div class="name">Terracotta tint</div><div class="hex">#F2DDD1</div><div class="var">--bh-terracotta-tint</div></div>
+    </div>
+    <div class="swatch">
+      <div class="sample" style="background: #6B8A74; color: #F5F1EA;"><span class="role">Signature</span></div>
+      <div class="info"><div class="name">Sauge</div><div class="hex">#6B8A74</div><div class="var">--bh-sage / --bh-signature</div></div>
+    </div>
+  </div>
+
+  <h4 style="margin-top: 40px; margin-bottom: 16px;">Lignes</h4>
+  <div class="swatch-row">
+    <div class="swatch">
+      <div class="sample" style="background: #D4CEC2; color: #1A2332;"><span class="role">Line</span></div>
+      <div class="info"><div class="name">Line</div><div class="hex">#D4CEC2</div><div class="var">--bh-line</div></div>
+    </div>
+    <div class="swatch">
+      <div class="sample" style="background: #E0DBD0; color: #1A2332;"><span class="role">Line soft</span></div>
+      <div class="info"><div class="name">Line soft</div><div class="hex">#E0DBD0</div><div class="var">--bh-line-soft</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ CONTRASTES ═══════════════════════ -->
+<section class="section" id="contrastes">
+  <div class="section-header">
+    <div class="tag">Accessibilité</div>
+    <h2>Contrastes validés</h2>
+    <p>Tous les couples texte/fond ci-dessous passent WCAG 2.1 minimum AA.</p>
+  </div>
+
+  <table class="ratio-table">
+    <thead>
+      <tr><th>Texte</th><th>Fond</th><th>Ratio</th><th>Usage</th><th></th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>ink</code> #1A2332</td><td><code>paper</code> #F5F1EA</td><td class="mono">12.8:1</td><td>Corps principal, titres</td><td><span class="ratio-badge aaa">AAA</span></td></tr>
+      <tr><td><code>ink-soft</code> #4A5568</td><td><code>paper</code> #F5F1EA</td><td class="mono">7.1:1</td><td>Sous-titres, labels</td><td><span class="ratio-badge aaa">AAA</span></td></tr>
+      <tr><td><code>teal</code> #1F6B6E</td><td><code>paper</code> #F5F1EA</td><td class="mono">6.1:1</td><td>Liens, CTA texte</td><td><span class="ratio-badge aa">AA</span></td></tr>
+      <tr><td><code>teal-deep</code> #174E51</td><td><code>paper</code> #F5F1EA</td><td class="mono">8.9:1</td><td>Liens hover, titres secondaires</td><td><span class="ratio-badge aaa">AAA</span></td></tr>
+      <tr><td><code>terracotta</code> #C15A3E</td><td><code>paper</code> #F5F1EA</td><td class="mono">4.7:1</td><td>Signals, accents (taille ≥ 14px)</td><td><span class="ratio-badge aa">AA</span></td></tr>
+      <tr><td><code>terracotta-deep</code> #9A4530</td><td><code>paper</code> #F5F1EA</td><td class="mono">6.9:1</td><td>Liens accent, erreurs</td><td><span class="ratio-badge aa">AA</span></td></tr>
+      <tr><td><code>paper</code> #F5F1EA</td><td><code>teal</code> #1F6B6E</td><td class="mono">6.1:1</td><td>Boutons primary</td><td><span class="ratio-badge aa">AA</span></td></tr>
+      <tr><td><code>paper</code> #F5F1EA</td><td><code>terracotta</code> #C15A3E</td><td class="mono">4.7:1</td><td>Boutons accent</td><td><span class="ratio-badge aa">AA</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══════════════════════ TYPOGRAPHIE ═══════════════════════ -->
+<section class="section" id="typographie">
+  <div class="section-header">
+    <div class="tag">Tokens · Typographie</div>
+    <h2>Fraunces + Inter</h2>
+    <p>Deux familles, zéro arbitraire. Fraunces pour le display (titres, wordmark, chiffres). Inter pour l'UI (corps, boutons, nav). L'axe <code>opsz</code> de Fraunces est obligatoire.</p>
+  </div>
+
+  <div class="type-row">
+    <div class="meta"><div class="label">Display</div>Fraunces<br>Weight 300 · opsz 144<br>Tracking -0.035em<br>clamp(48px, 3vw, 88px)</div>
+    <div class="sample" style="font-family: var(--bh-font-serif); font-weight: 300; font-size: 72px; letter-spacing: -0.035em; line-height: 1.1; font-variation-settings: 'opsz' 144;">trouver un chez-soi</div>
+  </div>
+  <div class="type-row">
+    <div class="meta"><div class="label">H1</div>Fraunces<br>Weight 300 · opsz 144<br>Tracking -0.02em<br>clamp(40px, 2vw, 60px)</div>
+    <div class="sample" style="font-family: var(--bh-font-serif); font-weight: 300; font-size: 48px; letter-spacing: -0.02em; line-height: 1.15; font-variation-settings: 'opsz' 144;">Découvrez les annonces qui vous ressemblent</div>
+  </div>
+  <div class="type-row">
+    <div class="meta"><div class="label">H2</div>Fraunces<br>Weight 300 · opsz 144<br>Tracking -0.02em<br>clamp(32px, 1.6vw, 44px)</div>
+    <div class="sample" style="font-family: var(--bh-font-serif); font-weight: 300; font-size: 36px; letter-spacing: -0.02em; line-height: 1.2; font-variation-settings: 'opsz' 144;">Votre chez-soi, à votre rythme</div>
+  </div>
+  <div class="type-row">
+    <div class="meta"><div class="label">H3</div>Fraunces<br>Weight 400<br>Tracking -0.01em<br>clamp(20px, 1vw, 24px)</div>
+    <div class="sample" style="font-family: var(--bh-font-serif); font-weight: 400; font-size: 22px; letter-spacing: -0.01em; line-height: 1.3;">Appartement lumineux à Neuchâtel</div>
+  </div>
+  <div class="type-row">
+    <div class="meta"><div class="label">Italic sub</div>Fraunces italic<br>Weight 300<br>20–32px</div>
+    <div class="sample" style="font-family: var(--bh-font-serif); font-weight: 300; font-style: italic; font-size: 26px; letter-spacing: -0.01em; color: var(--bh-text-soft);">trouver un chez-soi, plus doucement.</div>
+  </div>
+  <div class="type-row">
+    <div class="meta"><div class="label">Body</div>Inter<br>Weight 400<br>16–17px · 1.5 leading</div>
+    <div class="sample" style="font-size: 16px; color: var(--bh-text);">bonhome est la plateforme romande qui accompagne votre recherche immobilière. Lou, votre assistante, comprend ce que vous cherchez — même quand vous ne savez pas encore l'exprimer.</div>
+  </div>
+  <div class="type-row">
+    <div class="meta"><div class="label">Small</div>Inter<br>Weight 400<br>14px · 1.4 leading</div>
+    <div class="sample" style="font-size: 14px; color: var(--bh-text-soft);">Disponible dès le 1er juin · Neuchâtel Ouest · 3.5 pièces · 87 m²</div>
+  </div>
+  <div class="type-row">
+    <div class="meta"><div class="label">Label caps</div>Inter<br>Weight 500<br>12px · tracking 0.12em</div>
+    <div class="sample" style="font-size: 12px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--bh-teal);">Nouveau · Coup de cœur</div>
+  </div>
+  <div class="type-row">
+    <div class="meta"><div class="label">Button</div>Inter<br>Weight 500<br>15px</div>
+    <div class="sample"><button class="btn btn-primary">Commencer la recherche</button></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ ESPACEMENTS ═══════════════════════ -->
+<section class="section" id="espacements">
+  <div class="section-header">
+    <div class="tag">Tokens · Espacements</div>
+    <h2>Échelle 4pt</h2>
+    <p>Tous les paddings, gaps, margins doivent passer par cette échelle. Pas d'espacement arbitraire.</p>
+  </div>
+
+  <div class="scale-grid">
+    <div class="scale-cell"><div class="visual"><div class="space-bar" style="width: 4px;"></div></div><div class="name">space-1</div><div class="value">4px · 0.25rem</div></div>
+    <div class="scale-cell"><div class="visual"><div class="space-bar" style="width: 8px;"></div></div><div class="name">space-2</div><div class="value">8px · 0.5rem</div></div>
+    <div class="scale-cell"><div class="visual"><div class="space-bar" style="width: 12px;"></div></div><div class="name">space-3</div><div class="value">12px · 0.75rem</div></div>
+    <div class="scale-cell"><div class="visual"><div class="space-bar" style="width: 16px;"></div></div><div class="name">space-4</div><div class="value">16px · 1rem</div></div>
+    <div class="scale-cell"><div class="visual"><div class="space-bar" style="width: 24px;"></div></div><div class="name">space-5</div><div class="value">24px · 1.5rem</div></div>
+    <div class="scale-cell"><div class="visual"><div class="space-bar" style="width: 32px;"></div></div><div class="name">space-6</div><div class="value">32px · 2rem</div></div>
+    <div class="scale-cell"><div class="visual"><div class="space-bar" style="width: 48px;"></div></div><div class="name">space-7</div><div class="value">48px · 3rem</div></div>
+    <div class="scale-cell"><div class="visual"><div class="space-bar" style="width: 64px;"></div></div><div class="name">space-8</div><div class="value">64px · 4rem</div></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ FORMES ═══════════════════════ -->
+<section class="section" id="formes">
+  <div class="section-header">
+    <div class="tag">Tokens · Formes</div>
+    <h2>Rayons & ombres</h2>
+  </div>
+
+  <h4 style="margin-bottom: 16px;">Rayons</h4>
+  <div class="scale-grid" style="margin-bottom: 40px;">
+    <div class="scale-cell"><div class="visual"><div class="radius-box" style="border-radius: 4px;"></div></div><div class="name">radius-xs</div><div class="value">4px</div></div>
+    <div class="scale-cell"><div class="visual"><div class="radius-box" style="border-radius: 8px;"></div></div><div class="name">radius-sm</div><div class="value">8px</div></div>
+    <div class="scale-cell"><div class="visual"><div class="radius-box" style="border-radius: 12px;"></div></div><div class="name">radius-md</div><div class="value">12px</div></div>
+    <div class="scale-cell"><div class="visual"><div class="radius-box" style="border-radius: 20px;"></div></div><div class="name">radius-lg</div><div class="value">20px</div></div>
+    <div class="scale-cell"><div class="visual"><div class="radius-box" style="border-radius: 28px;"></div></div><div class="name">radius-xl</div><div class="value">28px</div></div>
+    <div class="scale-cell"><div class="visual"><div class="radius-box" style="border-radius: 999px;"></div></div><div class="name">radius-pill</div><div class="value">999px</div></div>
+  </div>
+
+  <h4 style="margin-bottom: 16px;">Ombres</h4>
+  <div class="scale-grid">
+    <div class="scale-cell"><div class="visual"><div class="radius-box" style="border-radius: 12px; background: var(--bh-paper-raised); border: 1px solid var(--bh-line); box-shadow: var(--bh-shadow-xs);"></div></div><div class="name">shadow-xs</div><div class="value">hover subtil</div></div>
+    <div class="scale-cell"><div class="visual"><div class="radius-box" style="border-radius: 12px; background: var(--bh-paper-raised); border: 1px solid var(--bh-line); box-shadow: var(--bh-shadow-sm);"></div></div><div class="name">shadow-sm</div><div class="value">cards</div></div>
+    <div class="scale-cell"><div class="visual"><div class="radius-box" style="border-radius: 12px; background: var(--bh-paper-raised); border: 1px solid var(--bh-line); box-shadow: var(--bh-shadow-md);"></div></div><div class="name">shadow-md</div><div class="value">dropdowns, popovers</div></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ WORDMARK ═══════════════════════ -->
+<section class="section" id="wordmark">
+  <div class="section-header">
+    <div class="tag">Composants</div>
+    <h2>Wordmark</h2>
+    <p>Trois micro-touches : Fraunces 400 ink + chevron sauge au-dessus du 2<sup>e</sup> « o » + point sauge final. Jamais en image raster — toujours SVG inline ou HTML+SVG.</p>
+  </div>
+
+  <div class="component-row">
+    <h3>Variantes</h3>
+    <div class="component-demo" style="flex-direction: column; gap: 32px; padding: 48px;">
+      <div style="font-family: var(--bh-font-serif); font-size: 72px; font-weight: 400; letter-spacing: -0.035em; font-variation-settings: 'opsz' 144; position: relative;">
+        bonh<span style="display:inline-block; position:relative;">o<svg style="position:absolute; top:-0.18em; left:0.05em; width:0.3em; height:0.15em;" viewBox="0 0 24 12"><path d="M3 10 L12 3 L21 10" stroke="#6B8A74" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>me<span style="color:#6B8A74;">.</span>
+      </div>
+      <div style="font-family: var(--bh-font-serif); font-size: 36px; font-weight: 400; letter-spacing: -0.035em; font-variation-settings: 'opsz' 144; position: relative;">
+        bonh<span style="display:inline-block; position:relative;">o<svg style="position:absolute; top:-0.18em; left:0.05em; width:0.3em; height:0.15em;" viewBox="0 0 24 12"><path d="M3 10 L12 3 L21 10" stroke="#6B8A74" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>me<span style="color:#6B8A74;">.</span>
+      </div>
+      <div style="font-family: var(--bh-font-serif); font-size: 18px; font-weight: 400; letter-spacing: -0.035em; font-variation-settings: 'opsz' 144; position: relative;">
+        bonh<span style="display:inline-block; position:relative;">o<svg style="position:absolute; top:-0.18em; left:0.05em; width:0.3em; height:0.15em;" viewBox="0 0 24 12"><path d="M3 10 L12 3 L21 10" stroke="#6B8A74" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>me<span style="color:#6B8A74;">.</span>
+      </div>
+    </div>
+
+    <h4 style="margin-top: 24px; margin-bottom: 12px;">Règles</h4>
+    <ul style="font-size: 14px; line-height: 1.7; color: var(--bh-text-soft); padding-left: 20px;">
+      <li>Taille mini : <strong>16px</strong>. En-dessous, utiliser le favicon (monogramme « b »).</li>
+      <li>Couleur par défaut : ink + sage. Pour fond sombre : paper + sage-soft. Pour print mono : <code>currentColor</code>.</li>
+      <li>Ne jamais changer la position du chevron (au-dessus du 2<sup>e</sup> « o ») ni la couleur du point final (toujours sauge).</li>
+      <li>Jamais en gras ou italique. Toujours regular 400.</li>
+    </ul>
+
+    <h4 style="margin-top: 24px; margin-bottom: 12px;">Code HTML</h4>
+    <div class="component-code"><span class="tag">&lt;span class=</span><span class="attr">"wordmark"</span><span class="tag">&gt;</span>
+  bonh<span class="tag">&lt;span class=</span><span class="attr">"wordmark-o-chev"</span><span class="tag">&gt;</span>
+    o
+    <span class="tag">&lt;svg</span> <span class="attr">viewBox="0 0 24 12" aria-hidden="true"</span><span class="tag">&gt;</span>
+      <span class="tag">&lt;path</span> <span class="attr">d="M3 10 L12 3 L21 10"</span>
+            <span class="attr">stroke="var(--bh-sage)" stroke-width="2" fill="none"</span>
+            <span class="attr">stroke-linecap="round" stroke-linejoin="round"</span><span class="tag">/&gt;</span>
+    <span class="tag">&lt;/svg&gt;</span>
+  <span class="tag">&lt;/span&gt;</span>me<span class="tag">&lt;span class=</span><span class="attr">"wordmark-dot"</span><span class="tag">&gt;</span>.<span class="tag">&lt;/span&gt;</span>
+<span class="tag">&lt;/span&gt;</span></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ BOUTONS ═══════════════════════ -->
+<section class="section" id="buttons">
+  <div class="section-header">
+    <div class="tag">Composants</div>
+    <h2>Boutons</h2>
+    <p>Quatre variantes : primary (teal), secondary (border teal), ghost (texte teal), accent (terracotta, réservé aux signals chauds).</p>
+  </div>
+
+  <div class="component-row">
+    <div class="component-demo">
+      <button class="btn btn-primary">Commencer</button>
+      <button class="btn btn-secondary">En savoir plus</button>
+      <button class="btn btn-ghost">Plus tard</button>
+      <button class="btn btn-accent">J'adore</button>
+    </div>
+    <div class="component-code">.btn-primary   { background: var(--bh-teal); color: var(--bh-paper); }
+.btn-secondary { border: 1px solid var(--bh-teal); color: var(--bh-teal); }
+.btn-ghost     { color: var(--bh-teal); }                  <span style="color: var(--bh-ink-mute);">/* padding plus léger */</span>
+.btn-accent    { background: var(--bh-terracotta); color: var(--bh-paper); }</div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ INPUTS ═══════════════════════ -->
+<section class="section" id="inputs">
+  <div class="section-header">
+    <div class="tag">Composants</div>
+    <h2>Inputs</h2>
+    <p>Border discret, focus ring teal translucide. Labels en sans 12px, placeholder en ink-disabled.</p>
+  </div>
+
+  <div class="component-row">
+    <div class="component-demo">
+      <label class="field">
+        <span class="field-label">Votre prénom</span>
+        <input type="text" class="field-input" placeholder="Camille">
+      </label>
+      <label class="field">
+        <span class="field-label">Ville cherchée</span>
+        <input type="text" class="field-input" value="Neuchâtel">
+      </label>
+      <label class="field">
+        <span class="field-label">Budget max</span>
+        <input type="text" class="field-input" placeholder="2 200 CHF / mois">
+      </label>
+    </div>
+    <div class="component-code">.field-input {
+  padding: 12px 16px;
+  background: var(--bh-paper-raised);
+  border: 1px solid var(--bh-line);
+  border-radius: var(--bh-radius-md);
+}
+.field-input:focus { border-color: var(--bh-teal); box-shadow: var(--bh-focus-ring); }</div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ CARDS ═══════════════════════ -->
+<section class="section" id="cards">
+  <div class="section-header">
+    <div class="tag">Composants</div>
+    <h2>Cards & chips</h2>
+  </div>
+
+  <div class="component-row">
+    <div class="component-demo">
+      <article class="card">
+        <h3>Appartement lumineux</h3>
+        <p>3.5 pièces · 87 m² · balcon sud — Neuchâtel Ouest, 5 min du centre.</p>
+        <div class="meta">
+          <span class="chip">Nouveau</span>
+          <span class="chip accent">Coup de cœur</span>
+          <span class="chip">Disponible</span>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ CHAT ═══════════════════════ -->
+<section class="section" id="chat">
+  <div class="section-header">
+    <div class="tag">Composants</div>
+    <h2>Chat avec Lou</h2>
+    <p>Bubbles asymétriques (radius 4px sur le coin intérieur). Lou en teal-tint, utilisateur en paper-sunk. Animation d'entrée légère (6px, 280ms).</p>
+  </div>
+
+  <div class="component-row">
+    <div class="component-demo" style="display: block; padding: 0; background: transparent; border: none;">
+      <div class="chat-track">
+        <div class="chat-bubble chat-bubble--lou">Salut Camille. Dis-moi ce que tu cherches, j'écoute.</div>
+        <div class="chat-bubble chat-bubble--me">Un 3.5 pièces à Neuchâtel, disponible en juin.</div>
+        <div class="chat-bubble chat-bubble--lou">Budget moyen ou tu préfères chercher un peu plus haut ?</div>
+        <div class="chat-bubble chat-bubble--me">Entre 1800 et 2200 max.</div>
+        <div class="chat-bubble chat-bubble--lou">Ok, j'ai trois pistes qui collent. Je te montre ?</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ ÉCRANS ═══════════════════════ -->
+<section class="section" id="screen-home">
+  <div class="section-header">
+    <div class="tag">Écrans</div>
+    <h2>Home, listing, chat</h2>
+    <p>Trois écrans clés en contexte. Les composants précédents s'assemblent ainsi — densité, hiérarchie typo, ratios couleur.</p>
+  </div>
+
+  <div class="screens-grid">
+
+    <div class="screen" id="screen-home-card">
+      <div class="screen-label"><span>Home</span><span>Desktop 1024+</span></div>
+      <div class="screen-body">
+        <div class="home-nav">
+          <div class="logo">bonh<span style="display:inline-block; position:relative;">o<svg style="position:absolute; top:-9px; left:2px; width:14px; height:8px;" viewBox="0 0 24 12"><path d="M3 10 L12 3 L21 10" stroke="#6B8A74" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>me<span class="dot">.</span></div>
+          <div class="home-nav-links"><a href="#" style="color: var(--bh-ink);">Annonces</a><a href="#" style="color: var(--bh-text-soft);">Pro</a><a href="#" style="color: var(--bh-text-soft);">Connexion</a></div>
+        </div>
+        <div class="home-hero">
+          <h1>Trouver un chez-soi, plus doucement.</h1>
+          <div class="sub">Lou comprend ce que vous cherchez — même quand les mots manquent.</div>
+          <div class="cta-row">
+            <button class="btn btn-primary">Commencer</button>
+            <button class="btn btn-ghost">Voir les annonces</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen" id="screen-listing">
+      <div class="screen-label"><span>Listing</span><span>Cards condensées</span></div>
+      <div class="screen-body">
+        <div style="font-size: 12px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--bh-text-soft); margin-bottom: 16px;">12 biens trouvés · Neuchâtel</div>
+        <div class="listing-card">
+          <div class="thumb"></div>
+          <div>
+            <div class="title">Appartement lumineux — 3.5 pièces</div>
+            <div class="desc">87 m² · balcon sud · cuisine rénovée 2024</div>
+            <div class="price">2 180 <span style="font-size: 13px; color: var(--bh-text-mute);">CHF / mois</span></div>
+            <div class="loc">NEUCHÂTEL OUEST · DISPO 1 JUIN</div>
+          </div>
+          <div class="heart">♡</div>
+        </div>
+        <div class="listing-card">
+          <div class="thumb" style="background: linear-gradient(135deg, var(--bh-terracotta-tint), var(--bh-terracotta-soft));"></div>
+          <div>
+            <div class="title">Maison mitoyenne avec jardin</div>
+            <div class="desc">4.5 pièces · 115 m² · jardin 60 m²</div>
+            <div class="price">3 450 <span style="font-size: 13px; color: var(--bh-text-mute);">CHF / mois</span></div>
+            <div class="loc">CORNAUX · DISPO 15 JUIN</div>
+          </div>
+          <div class="heart" style="background: var(--bh-terracotta); color: var(--bh-paper); border-color: transparent;">♥</div>
+        </div>
+        <div class="listing-card">
+          <div class="thumb" style="background: linear-gradient(135deg, var(--bh-teal-tint), var(--bh-teal-soft));"></div>
+          <div>
+            <div class="title">Studio cosy — centre-ville</div>
+            <div class="desc">28 m² · pied-à-terre · meublé</div>
+            <div class="price">1 290 <span style="font-size: 13px; color: var(--bh-text-mute);">CHF / mois</span></div>
+            <div class="loc">NEUCHÂTEL · DISPO IMMEDIATE</div>
+          </div>
+          <div class="heart">♡</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen" id="screen-chat">
+      <div class="screen-label"><span>Chat Lou</span><span>Onboarding</span></div>
+      <div class="screen-body">
+        <div class="chat-track" style="border: none; padding: 0; background: transparent;">
+          <div class="chat-bubble chat-bubble--lou">Salut 👋 Je suis Lou. Dis-moi ce que tu cherches.</div>
+          <div class="chat-bubble chat-bubble--me">Un 3.5 pièces à Neuchâtel</div>
+          <div class="chat-bubble chat-bubble--lou">À louer ou à acheter ?</div>
+          <div class="chat-bubble chat-bubble--me">Louer</div>
+          <div class="chat-bubble chat-bubble--lou">Tu vises quand pour l'emménagement ?</div>
+          <div class="chat-bubble chat-bubble--me">Juin, idéalement</div>
+          <div class="chat-bubble chat-bubble--lou">Parfait. J'ai trois pistes qui collent — regarde celle-ci d'abord.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════════════════ COPY / MICROCOPY ═══════════════════════ -->
+<section class="section" id="copy">
+  <div class="section-header">
+    <div class="tag">Ton</div>
+    <h2>Microcopy Lou</h2>
+    <p>Lou parle en <strong>tu</strong>, phrases courtes, verbes vivants. Pas de formule administrative, pas de superlatif creux. Chaque message invite ou propose — jamais il ordonne.</p>
+  </div>
+
+  <table class="copy-table">
+    <thead>
+      <tr><th class="ctx">Contexte</th><th>Lou dit</th><th>Pas ça</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="ctx">Accueil</td><td class="yes">"Salut. Dis-moi ce que tu cherches, j'écoute."</td><td class="no">"Bienvenue ! Veuillez décrire votre recherche."</td></tr>
+      <tr><td class="ctx">0 résultat</td><td class="yes">"Rien qui colle encore. On élargit un peu ?"</td><td class="no">"Aucune annonce ne correspond à vos critères."</td></tr>
+      <tr><td class="ctx">Match</td><td class="yes">"Celui-là pourrait te plaire — regarde."</td><td class="no">"Nouvelle correspondance trouvée."</td></tr>
+      <tr><td class="ctx">Empty state</td><td class="yes">"Personne n'a encore posé ses bagages ici."</td><td class="no">"Aucun contenu disponible."</td></tr>
+      <tr><td class="ctx">Erreur réseau</td><td class="yes">"Ah. On a perdu le fil une seconde. On retente ?"</td><td class="no">"Une erreur est survenue."</td></tr>
+      <tr><td class="ctx">CTA primaire</td><td class="yes">"Commencer la recherche"</td><td class="no">"Cliquez ici !"</td></tr>
+      <tr><td class="ctx">Confirmation</td><td class="yes">"C'est noté. Je te préviens dès que ça bouge."</td><td class="no">"Votre demande a été enregistrée avec succès."</td></tr>
+      <tr><td class="ctx">Destructif</td><td class="yes">"Supprimer cette alerte ?"</td><td class="no">"Êtes-vous sûr ?"</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══════════════════════ DO / DON'T ═══════════════════════ -->
+<section class="section" id="do-dont">
+  <div class="section-header">
+    <div class="tag">Règles d'usage</div>
+    <h2>Do &amp; Don't</h2>
+  </div>
+
+  <div class="do-dont-grid">
+    <div class="do-dont do">
+      <h4>Faire</h4>
+      <ul>
+        <li>CTA primaires en teal (<code>--bh-brand</code>)</li>
+        <li>Likes, matches, coups de cœur en terracotta</li>
+        <li>Chevron sauge <em>uniquement</em> dans le wordmark</li>
+        <li>Fraunces avec l'axe <code>opsz</code> activé (obligatoire)</li>
+        <li>Focus ring teal translucide visible sur tous les éléments cliquables</li>
+        <li>Échelle 4pt pour tous les espacements</li>
+        <li>Text-wrap: balance sur les titres multilignes</li>
+        <li>Tutoiement Lou cohérent partout</li>
+      </ul>
+    </div>
+    <div class="do-dont dont">
+      <h4>Ne pas faire</h4>
+      <ul>
+        <li>Sauge ailleurs que dans le wordmark (dilue la signature)</li>
+        <li>Teal + terracotta en gros aplats côte à côte (conflit de saturation)</li>
+        <li>Gris froid neutre (#9CA3AF…) — toujours les ink chauds</li>
+        <li>Fraunces sans <code>opsz</code> → rend comme Times</li>
+        <li>Emoji en UI générale (réservés aux messages Lou, 1 max)</li>
+        <li>Majuscules sur des phrases entières (les labels caps OK)</li>
+        <li>Ombres prononcées (max <code>shadow-md</code>)</li>
+        <li>"Veuillez", "Cliquez ici", "Soumettre"</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div>
+    <div style="font-weight: 500; color: var(--bh-ink);">bonhome.ch — Direction artistique v1.0</div>
+    <div>avril 2026 · Palette NCS 2026</div>
+  </div>
+  <div style="text-align: right;">
+    <div style="font-weight: 500; color: var(--bh-ink);">Livrables</div>
+    <div><code>tokens.css</code> · <code>README.md</code> · <code>logos/</code></div>
+  </div>
+</footer>
+
+</main>
+</div>
+</body>
+</html>

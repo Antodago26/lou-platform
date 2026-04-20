@@ -1,0 +1,781 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"/>
+<title>bonhome · V5·P · 3 palettes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,300;1,9..144,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #e8e4dc; font-family: "Inter", system-ui, sans-serif; }
+  * { box-sizing: border-box; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+
+<script type="text/babel" data-presets="react" data-src="v5p/palettes.jsx">
+// V5.P — Exploration 3 palettes, identité identique
+// Palette 1 : Sauge (actuel validé)
+// Palette 2 : Mer du Nord (bleus, fond clair)
+// Palette 3 : Aurora (dégradés métalliques fluo, moderne frais)
+// Seule la couleur change. Typo, layout, wordmark strictement identiques.
+
+const PALETTES = {
+  sage: {
+    name: 'Sauge',
+    tagline: 'Validé V5 — ancre émotionnelle, suisse',
+    ink:      '#1F2420',
+    inkSoft:  '#4A5350',
+    inkMute:  '#7A827E',
+    paper:    '#FAF7F1',
+    cream:    '#F5F1EA',
+    line:     '#E4DFD4',
+    lineSoft: '#EEE9DE',
+    anchor:   '#6B8A74',  // sage — CTA, avatar, point wordmark
+    anchorDeep:'#3E5847',
+    anchorSoft:'#D6E0D4',
+    signal:   '#C9986A',  // terracotta
+    signalSoft:'#EED9C2',
+    signalInk:'#7A4F2E',
+    // Gradient (pas utilisé en sauge, mais défini pour contrat uniforme)
+    gradient: 'linear-gradient(135deg, #6B8A74 0%, #3E5847 100%)',
+    gradientSoft: 'linear-gradient(135deg, #D6E0D4 0%, #F5F1EA 100%)',
+    heroBg: '#FAF7F1',
+    // Swatches pour la palette (display)
+    swatches: [
+      { name: 'Sauge',      hex: '#6B8A74', role: 'Ancre · CTA' },
+      { name: 'Sauge deep', hex: '#3E5847', role: 'Label · texte appuyé' },
+      { name: 'Sauge soft', hex: '#D6E0D4', role: 'Fond bulles Lou' },
+      { name: 'Terracotta', hex: '#C9986A', role: 'Signal ≤ 1/écran' },
+      { name: 'Ink',        hex: '#1F2420', role: 'Texte · wordmark' },
+      { name: 'Paper',      hex: '#FAF7F1', role: 'Fond' },
+    ],
+    personality: 'Ancrée, éditoriale, Neuchâtel. La couleur est calme.',
+  },
+
+  nord: {
+    name: 'Mer du Nord',
+    tagline: 'Bleus profonds, fond clair — précision, confiance, tech-friendly',
+    ink:      '#131820',
+    inkSoft:  '#3D4A5C',
+    inkMute:  '#6E7B8E',
+    paper:    '#F6F8FC',      // papier bleuté presque blanc
+    cream:    '#EEF2F8',
+    line:     '#D9E0EC',
+    lineSoft: '#E6EBF4',
+    anchor:   '#2E5ABF',      // bleu nuit vif — CTA
+    anchorDeep:'#1A3E8F',     // 9.2:1 — AAA
+    anchorSoft:'#D7E2F5',
+    signal:   '#E8A23F',      // ambre chaud — signal ≤ 1/écran (contraste bleu)
+    signalSoft:'#FBEAC8',
+    signalInk:'#8A5F1C',
+    gradient: 'linear-gradient(135deg, #2E5ABF 0%, #1A3E8F 100%)',
+    gradientSoft: 'linear-gradient(135deg, #D7E2F5 0%, #F6F8FC 100%)',
+    heroBg: '#F6F8FC',
+    swatches: [
+      { name: 'Bleu nuit',  hex: '#2E5ABF', role: 'Ancre · CTA' },
+      { name: 'Bleu deep',  hex: '#1A3E8F', role: 'Label · texte appuyé' },
+      { name: 'Bleu soft',  hex: '#D7E2F5', role: 'Fond bulles Lou' },
+      { name: 'Ambre',      hex: '#E8A23F', role: 'Signal ≤ 1/écran' },
+      { name: 'Ink',        hex: '#131820', role: 'Texte · wordmark' },
+      { name: 'Paper',      hex: '#F6F8FC', role: 'Fond bleuté' },
+    ],
+    personality: 'Plus froide, plus tech. Les bleus portent la rigueur, l\'ambre garde la chaleur.',
+  },
+
+  aurora: {
+    name: 'Aurora',
+    tagline: 'Dégradés métalliques, lilas-turquoise-pêche — moderne, frais, 2026',
+    ink:      '#0F0F1A',
+    inkSoft:  '#3A3A52',
+    inkMute:  '#7A7A93',
+    paper:    '#FBFAFD',
+    cream:    '#F3F1F9',
+    line:     '#E3DFEF',
+    lineSoft: '#EDEAF5',
+    // Anchor = bleu-lilas métallique profond
+    anchor:   '#5B4FBF',
+    anchorDeep:'#3D3496',
+    anchorSoft:'#E1DCF5',
+    // Signal = pêche fluo
+    signal:   '#FF6B9E',
+    signalSoft:'#FFD9E4',
+    signalInk:'#A8225A',
+    // Gradient signature : lilas → turquoise → pêche
+    gradient:     'linear-gradient(135deg, #5B4FBF 0%, #2FCAD4 48%, #FF9E7A 100%)',
+    gradientSoft: 'linear-gradient(135deg, #E1DCF5 0%, #D4F3F6 50%, #FFE5D4 100%)',
+    heroBg: '#FBFAFD',
+    swatches: [
+      { name: 'Lilas métal', hex: '#5B4FBF', role: 'Ancre · CTA' },
+      { name: 'Lilas deep',  hex: '#3D3496', role: 'Label · texte appuyé' },
+      { name: 'Turquoise',   hex: '#2FCAD4', role: 'Milieu gradient · hover' },
+      { name: 'Pêche fluo',  hex: '#FF9E7A', role: 'Fin gradient · accent' },
+      { name: 'Rose fluo',   hex: '#FF6B9E', role: 'Signal ≤ 1/écran' },
+      { name: 'Ink violet',  hex: '#0F0F1A', role: 'Texte · wordmark' },
+    ],
+    personality: 'Plus audacieuse, plus moderne. Le dégradé porte l\'identité, les neutres la calment.',
+  },
+
+  ncs: {
+    name: 'NCS 2026',
+    tagline: 'Teal profond · Terracotta · Vert sauge · Bleu d\'encre — palette couleur de l\'année',
+    ink:      '#1E2A44',      // Bleu d'encre NCS S 5030-R80B
+    inkSoft:  '#3E4A65',
+    inkMute:  '#6F7990',
+    paper:    '#F7F4EE',      // papier chaud pour apaiser les 4 saturations
+    cream:    '#F1EDE4',
+    line:     '#DDD7C9',
+    lineSoft: '#E8E3D6',
+    anchor:   '#2A6670',      // Teal profond NCS S 4030-B50G — CTA, wordmark chevron
+    anchorDeep:'#1A4650',
+    anchorSoft:'#CEDFE1',
+    signal:   '#C96A44',      // Terracotta NCS S 3040-Y60R — signal exceptionnel
+    signalSoft:'#F2D6C4',
+    signalInk:'#7A3A1E',
+    // Couleur nature complémentaire
+    nature:   '#8FA780',      // Vert sauge NCS S 3010-G10Y
+    natureSoft:'#D9E0D0',
+    // Gradient signature : teal → sauge → terracotta (couleur de l'année)
+    gradient: 'linear-gradient(135deg, #2A6670 0%, #8FA780 55%, #C96A44 100%)',
+    gradientSoft: 'linear-gradient(135deg, #CEDFE1 0%, #D9E0D0 55%, #F2D6C4 100%)',
+    heroBg: '#F7F4EE',
+    swatches: [
+      { name: 'Teal profond',   hex: '#2A6670', role: 'Ancre · CTA · chevron' },
+      { name: 'Teal deep',      hex: '#1A4650', role: 'Label · texte appuyé' },
+      { name: 'Teal soft',      hex: '#CEDFE1', role: 'Fond bulles Lou' },
+      { name: 'Terracotta',     hex: '#C96A44', role: 'Signal ≤ 1/écran' },
+      { name: 'Vert sauge',     hex: '#8FA780', role: 'Nature · tags' },
+      { name: 'Bleu d\'encre',  hex: '#1E2A44', role: 'Texte · wordmark' },
+    ],
+    personality: 'Quatre couleurs saturées équilibrées par un papier chaud. Le teal ancre, la terracotta signale, la sauge respire, le bleu d\'encre porte le texte.',
+  },
+};
+
+Object.assign(window, { PALETTES });
+
+</script>
+<script type="text/babel" data-presets="react" data-src="v5p/wordmark.jsx">
+// Wordmark paramétrable par palette — structure identique au D1Logo validé
+// Fraunces opsz chunky + chevron SVG au-dessus 2e "o" + point anchor
+
+function WordmarkP({ size = 72, P, showChevron = true, showDot = true, color, markColor, dotColor }) {
+  const ink = color ?? P.ink;
+  const mark = markColor ?? P.anchor;
+  const dot  = dotColor ?? P.anchor;
+  const chevW = size * 0.48;
+  const chevH = size * 0.22;
+  return (
+    <span style={{
+      fontFamily: '"Fraunces", Georgia, serif',
+      fontSize: size,
+      fontWeight: 400,
+      fontVariationSettings: `"opsz" ${Math.min(144, size)}`,
+      color: ink,
+      letterSpacing: '-0.03em',
+      lineHeight: 1,
+      display: 'inline-flex',
+      alignItems: 'baseline',
+      whiteSpace: 'nowrap',
+    }}>
+      <span>b</span><span>o</span><span>n</span><span>h</span>
+      <span style={{ position: 'relative', display: 'inline-block' }}>
+        <span>o</span>
+        {showChevron && (
+          <svg
+            width={chevW}
+            height={chevH}
+            viewBox="0 0 24 12"
+            style={{
+              position: 'absolute',
+              top: `-${size * 0.30}px`,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              overflow: 'visible',
+            }}
+          >
+            <path d="M2 10 L12 2 L22 10" stroke={mark} strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        )}
+      </span>
+      <span>m</span><span>e</span>
+      {showDot && <span style={{ color: dot, fontWeight: 500 }}>.</span>}
+    </span>
+  );
+}
+
+// Version "gradient" : le chevron et le point portent un dégradé (pour Aurora).
+// Fallback à couleur pleine si pas de gradient passé.
+function WordmarkPGrad({ size = 72, P, gradientId = 'wgrad' }) {
+  const chevW = size * 0.48;
+  const chevH = size * 0.22;
+  // Parser le linear-gradient pour en sortir les stops
+  const stops = parseLinearGradient(P.gradient);
+  return (
+    <span style={{
+      fontFamily: '"Fraunces", Georgia, serif',
+      fontSize: size,
+      fontWeight: 400,
+      fontVariationSettings: `"opsz" ${Math.min(144, size)}`,
+      color: P.ink,
+      letterSpacing: '-0.03em',
+      lineHeight: 1,
+      display: 'inline-flex',
+      alignItems: 'baseline',
+      whiteSpace: 'nowrap',
+    }}>
+      <span>b</span><span>o</span><span>n</span><span>h</span>
+      <span style={{ position: 'relative', display: 'inline-block' }}>
+        <span>o</span>
+        <svg
+          width={chevW}
+          height={chevH}
+          viewBox="0 0 24 12"
+          style={{
+            position: 'absolute',
+            top: `-${size * 0.30}px`,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            overflow: 'visible',
+          }}
+        >
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="0">
+              {stops.map((s, i) => (
+                <stop key={i} offset={s.offset} stopColor={s.color}/>
+              ))}
+            </linearGradient>
+          </defs>
+          <path d="M2 10 L12 2 L22 10" stroke={`url(#${gradientId})`} strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </span>
+      <span>m</span><span>e</span>
+      <span style={{
+        background: P.gradient,
+        WebkitBackgroundClip: 'text',
+        WebkitTextFillColor: 'transparent',
+        backgroundClip: 'text',
+        fontWeight: 500,
+      }}>.</span>
+    </span>
+  );
+}
+
+// Minimal parser: "linear-gradient(135deg, #A 0%, #B 50%, #C 100%)"
+function parseLinearGradient(g) {
+  const m = g.match(/linear-gradient\([^,]+,\s*(.+)\)$/);
+  if (!m) return [{ offset: '0%', color: '#000' }, { offset: '100%', color: '#000' }];
+  const parts = m[1].split(/,(?![^(]*\))/).map(s => s.trim());
+  return parts.map(p => {
+    const [color, off] = p.split(/\s+/);
+    return { color, offset: off || '0%' };
+  });
+}
+
+Object.assign(window, { WordmarkP, WordmarkPGrad });
+
+</script>
+<script type="text/babel" data-presets="react" data-src="v5p/mockups.jsx">
+// Mockups recolorables — un seul composant prend un objet palette P
+// 3 surfaces : header app · card de listing · chat Lou
+
+function HeaderMockup({ P, useGradientOnActive = false }) {
+  return (
+    <div style={{
+      width: '100%',
+      padding: '16px 28px',
+      borderBottom: `1px solid ${P.line}`,
+      background: P.paper,
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      fontFamily: '"Inter", sans-serif',
+    }}>
+      <WordmarkP size={22} P={P}/>
+      <div style={{ display: 'flex', gap: 22, fontSize: 12.5, color: P.inkSoft, alignItems: 'center' }}>
+        <span style={{
+          color: P.ink,
+          fontWeight: 500,
+          position: 'relative',
+        }}>
+          Ma recherche
+          <div style={{
+            position: 'absolute',
+            left: 0, right: 0, bottom: -16,
+            height: 2,
+            background: useGradientOnActive ? P.gradient : P.anchor,
+            borderRadius: 2,
+          }}/>
+        </span>
+        <span>Biens</span>
+        <span>Favoris</span>
+        <span>Lou</span>
+        <div style={{
+          width: 30, height: 30, borderRadius: '50%',
+          background: P.anchor, color: P.paper,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
+          marginLeft: 6,
+        }}>M</div>
+      </div>
+    </div>
+  );
+}
+
+function ListingCard({ P, useGradientOnCTA = false }) {
+  return (
+    <div style={{
+      width: '100%',
+      background: P.paper,
+      border: `1px solid ${P.line}`,
+      borderRadius: 12,
+      overflow: 'hidden',
+      fontFamily: '"Inter", sans-serif',
+    }}>
+      {/* Photo placeholder : surface unie teintée, pour montrer la palette */}
+      <div style={{
+        height: 220,
+        background: P.gradientSoft,
+        position: 'relative',
+      }}>
+        <div style={{
+          position: 'absolute',
+          top: 14, left: 14,
+          padding: '5px 10px',
+          background: P.paper,
+          borderRadius: 20,
+          fontSize: 10,
+          fontWeight: 600,
+          color: P.anchorDeep,
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+        }}>Nouveau · il y a 2 h</div>
+        <div style={{
+          position: 'absolute',
+          top: 14, right: 14,
+          width: 32, height: 32, borderRadius: '50%',
+          background: P.paper,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 14,
+        }}>♡</div>
+      </div>
+      <div style={{ padding: '16px 18px 18px' }}>
+        <div style={{
+          fontFamily: '"Fraunces", Georgia, serif',
+          fontVariationSettings: '"opsz" 48',
+          fontSize: 22, fontWeight: 400, color: P.ink,
+          letterSpacing: '-0.02em',
+          marginBottom: 4,
+        }}>3,5 pièces · Serrières</div>
+        <div style={{ fontSize: 13, color: P.inkSoft, marginBottom: 14 }}>
+          Rue des Battieux · 78 m² · balcon sud
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          {['Lumineux', 'Calme', 'Transports'].map(t => (
+            <span key={t} style={{
+              fontSize: 10.5,
+              padding: '4px 9px',
+              background: P.anchorSoft,
+              color: P.anchorDeep,
+              borderRadius: 12,
+              fontWeight: 500,
+              letterSpacing: '0.01em',
+            }}>{t}</span>
+          ))}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 14, borderTop: `1px solid ${P.lineSoft}` }}>
+          <div>
+            <div style={{
+              fontFamily: '"Fraunces", Georgia, serif',
+              fontVariationSettings: '"opsz" 48',
+              fontSize: 20, color: P.ink, fontWeight: 500,
+            }}>CHF 1 980<span style={{ fontSize: 12, color: P.inkSoft, fontWeight: 400 }}> /mois</span></div>
+          </div>
+          <button style={{
+            padding: '9px 16px',
+            background: useGradientOnCTA ? P.gradient : P.anchor,
+            color: P.paper,
+            border: 'none',
+            borderRadius: 8,
+            fontSize: 12.5,
+            fontWeight: 600,
+            fontFamily: 'inherit',
+            cursor: 'pointer',
+            letterSpacing: '0.01em',
+          }}>Voir le bien</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChatBubbles({ P }) {
+  return (
+    <div style={{
+      width: '100%',
+      background: P.paper,
+      border: `1px solid ${P.line}`,
+      borderRadius: 12,
+      padding: 18,
+      fontFamily: '"Inter", sans-serif',
+      display: 'flex', flexDirection: 'column', gap: 10,
+    }}>
+      <div style={{
+        fontSize: 10, color: P.inkMute, letterSpacing: '0.12em',
+        textTransform: 'uppercase', fontWeight: 600,
+        marginBottom: 4,
+      }}>Lou · ton assistante</div>
+
+      <div style={{
+        alignSelf: 'flex-start',
+        background: P.anchorSoft,
+        color: P.anchorDeep,
+        padding: '10px 14px',
+        borderRadius: '14px 14px 14px 4px',
+        fontSize: 13.5,
+        maxWidth: '82%',
+        lineHeight: 1.45,
+      }}>
+        J'ai vu un 3,5 pièces à Serrières, lumineux, à 1 980.– Ça te parle&nbsp;?
+      </div>
+
+      <div style={{
+        alignSelf: 'flex-end',
+        background: P.cream,
+        color: P.ink,
+        padding: '10px 14px',
+        borderRadius: '14px 14px 4px 14px',
+        fontSize: 13.5,
+        maxWidth: '82%',
+        lineHeight: 1.45,
+        border: `1px solid ${P.line}`,
+      }}>
+        Oui, mais plutôt rez-de-jardin si possible.
+      </div>
+
+      <div style={{
+        alignSelf: 'flex-start',
+        background: P.anchorSoft,
+        color: P.anchorDeep,
+        padding: '10px 14px',
+        borderRadius: '14px 14px 14px 4px',
+        fontSize: 13.5,
+        maxWidth: '82%',
+        lineHeight: 1.45,
+      }}>
+        Noté. Je filtre sur jardin et je reviens demain matin.
+      </div>
+
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        marginTop: 4,
+        padding: '10px 14px',
+        background: P.cream,
+        borderRadius: 999,
+        border: `1px solid ${P.line}`,
+      }}>
+        <span style={{ flex: 1, fontSize: 12.5, color: P.inkMute }}>Parle à Lou…</span>
+        <div style={{
+          width: 28, height: 28, borderRadius: '50%',
+          background: P.anchor,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: P.paper, fontSize: 12, fontWeight: 600,
+        }}>↑</div>
+      </div>
+    </div>
+  );
+}
+
+function BannerMockup({ P, useGradient = false }) {
+  return (
+    <div style={{
+      width: '100%',
+      height: 200,
+      background: useGradient ? P.gradient : P.anchor,
+      color: P.paper,
+      borderRadius: 12,
+      padding: 28,
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'space-between',
+      fontFamily: '"Inter", sans-serif',
+      position: 'relative',
+      overflow: 'hidden',
+    }}>
+      <WordmarkP size={20} P={P} color={P.paper} markColor={P.paper} dotColor={useGradient ? P.paper : P.signal}/>
+      <div>
+        <div style={{
+          fontFamily: '"Fraunces", Georgia, serif',
+          fontVariationSettings: '"opsz" 144',
+          fontSize: 34, fontWeight: 400,
+          letterSpacing: '-0.025em', lineHeight: 1.05,
+          marginBottom: 10,
+        }}>L'appart qui te va.</div>
+        <div style={{ fontSize: 12, opacity: 0.85, letterSpacing: '0.02em' }}>Bêta privée · Neuchâtel · Printemps 2026</div>
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { HeaderMockup, ListingCard, ChatBubbles, BannerMockup });
+
+</script>
+<script type="text/babel" data-presets="react" data-src="v5p/page.jsx">
+// Page comparative — 3 palettes empilées, mêmes composants
+
+function PaletteBlock({ P, useGradient, isAurora, variant }) {
+  return (
+    <section style={{
+      background: P.heroBg,
+      padding: '60px 56px 72px',
+      borderTop: variant === 'first' ? 'none' : `1px solid ${P.line}`,
+      fontFamily: '"Inter", sans-serif',
+      color: P.ink,
+    }}>
+      {/* Header identité */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 40 }}>
+        <div style={{ maxWidth: 560 }}>
+          <div style={{
+            fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase',
+            color: P.inkMute, fontWeight: 600, marginBottom: 14,
+            fontFamily: 'ui-monospace, monospace',
+          }}>Palette {variant === 'first' ? '01' : variant === 'second' ? '02' : variant === 'third' ? '03' : '04'} · {P.name}</div>
+          <div style={{ marginBottom: 18 }}>
+            {isAurora
+              ? <WordmarkPGrad size={92} P={P} gradientId={`wgrad-${P.name}`}/>
+              : <WordmarkP size={92} P={P}/>}
+          </div>
+          <div style={{
+            fontFamily: '"Fraunces", Georgia, serif',
+            fontVariationSettings: '"opsz" 72',
+            fontSize: 22, fontWeight: 400, letterSpacing: '-0.015em',
+            color: P.ink, lineHeight: 1.3, marginBottom: 8,
+          }}>{P.tagline}</div>
+          <div style={{ fontSize: 13, color: P.inkSoft, lineHeight: 1.55, maxWidth: 480 }}>
+            {P.personality}
+          </div>
+        </div>
+
+        {/* Swatches */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: 10,
+          width: 460,
+        }}>
+          {P.swatches.map(s => (
+            <div key={s.name} style={{
+              background: P.paper,
+              border: `1px solid ${P.line}`,
+              borderRadius: 8,
+              padding: '10px 12px',
+            }}>
+              <div style={{
+                width: '100%', height: 36, borderRadius: 4,
+                background: s.hex,
+                marginBottom: 8,
+                border: s.hex.toLowerCase() === P.paper.toLowerCase() ? `1px solid ${P.line}` : 'none',
+              }}/>
+              <div style={{ fontSize: 10.5, fontWeight: 600, color: P.ink, marginBottom: 2 }}>{s.name}</div>
+              <div style={{ fontSize: 9, fontFamily: 'ui-monospace, monospace', color: P.inkMute, letterSpacing: '0.04em' }}>{s.hex}</div>
+              <div style={{ fontSize: 9.5, color: P.inkSoft, marginTop: 4, lineHeight: 1.3 }}>{s.role}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Gradient showcase (si Aurora) */}
+      {isAurora && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 16,
+          marginBottom: 36,
+        }}>
+          <div style={{
+            height: 80,
+            background: P.gradient,
+            borderRadius: 10,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '0 22px',
+            color: P.paper,
+          }}>
+            <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', fontFamily: 'ui-monospace, monospace' }}>Gradient · signature</span>
+            <span style={{ fontSize: 10, opacity: 0.9, fontFamily: 'ui-monospace, monospace' }}>135° · lilas → turquoise → pêche</span>
+          </div>
+          <div style={{
+            height: 80,
+            background: P.gradientSoft,
+            borderRadius: 10,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '0 22px',
+            color: P.ink,
+          }}>
+            <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', fontFamily: 'ui-monospace, monospace' }}>Gradient · soft (fonds)</span>
+            <span style={{ fontSize: 10, color: P.inkMute, fontFamily: 'ui-monospace, monospace' }}>Pour photos, bulles, surfaces</span>
+          </div>
+        </div>
+      )}
+
+      {/* Mockups row */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1.3fr 1fr 1fr',
+        gap: 18,
+        alignItems: 'start',
+      }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <HeaderMockup P={P} useGradientOnActive={useGradient}/>
+          <ListingCard P={P} useGradientOnCTA={useGradient}/>
+        </div>
+        <ChatBubbles P={P}/>
+        <BannerMockup P={P} useGradient={useGradient}/>
+      </div>
+
+      {/* Dot list — où la couleur apparaît */}
+      <div style={{
+        marginTop: 32,
+        padding: '18px 22px',
+        background: P.paper,
+        border: `1px solid ${P.line}`,
+        borderRadius: 10,
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        gap: 18,
+      }}>
+        {[
+          { label: 'Wordmark', val: `Chevron + point : ${P.anchor}${isAurora ? ' (gradient sur point)' : ''}` },
+          { label: 'CTA principal', val: useGradient ? 'Gradient 135° lilas→pêche' : `Bouton : ${P.anchor}` },
+          { label: 'Avatar / badges', val: `Fond : ${P.anchor} · texte : ${P.paper}` },
+          { label: 'Signal (≤ 1/écran)', val: `${P.signal} — ex: badge « Nouveau »` },
+        ].map(item => (
+          <div key={item.label}>
+            <div style={{
+              fontSize: 9.5, letterSpacing: '0.14em', textTransform: 'uppercase',
+              color: P.inkMute, fontWeight: 600, marginBottom: 6,
+              fontFamily: 'ui-monospace, monospace',
+            }}>{item.label}</div>
+            <div style={{ fontSize: 12, color: P.inkSoft, lineHeight: 1.4 }}>{item.val}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PageCover() {
+  const { sage } = window.PALETTES;
+  return (
+    <section style={{
+      background: sage.paper,
+      padding: '72px 56px 48px',
+      fontFamily: '"Inter", sans-serif',
+      color: sage.ink,
+      borderBottom: `1px solid ${sage.line}`,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 80 }}>
+        <WordmarkP size={44} P={sage}/>
+        <div style={{
+          fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase',
+          color: sage.inkMute, fontWeight: 500,
+          fontFamily: 'ui-monospace, monospace',
+        }}>Avril 2026 · Neuchâtel · V5·P</div>
+      </div>
+
+      <div style={{ maxWidth: 900 }}>
+        <div style={{
+          fontSize: 11, letterSpacing: '0.22em', textTransform: 'uppercase',
+          color: sage.inkMute, fontWeight: 600,
+          fontFamily: 'ui-monospace, monospace',
+          marginBottom: 22,
+        }}>Exploration · 4 palettes · même identité</div>
+        <div style={{
+          fontFamily: '"Fraunces", Georgia, serif',
+          fontVariationSettings: '"opsz" 144',
+          fontSize: 88, fontWeight: 300,
+          letterSpacing: '-0.04em', lineHeight: 1.02,
+          color: sage.ink,
+          marginBottom: 28,
+        }}>
+          Une seule marque,<br/>
+          <span style={{ fontStyle: 'italic', color: sage.anchorDeep }}>quatre températures.</span>
+        </div>
+        <div style={{
+          fontSize: 17, lineHeight: 1.55, color: sage.inkSoft, maxWidth: 720,
+        }}>
+          Wordmark identique. Typographie identique. Layout identique.
+          Seule la couleur change — et avec elle, la personnalité de la marque.
+        </div>
+      </div>
+
+      <div style={{
+        marginTop: 64,
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        gap: 16,
+      }}>
+        {[
+          { t: 'Sauge · V5 validé', bg: sage.anchor },
+          { t: 'Mer du Nord · bleus', bg: '#2E5ABF' },
+          { t: 'Aurora · gradient fluo', bg: 'linear-gradient(135deg, #5B4FBF 0%, #2FCAD4 50%, #FF9E7A 100%)' },
+          { t: 'NCS 2026 · couleur de l\'année', bg: 'linear-gradient(135deg, #2A6670 0%, #8FA780 55%, #C96A44 100%)' },
+        ].map((item, i) => (
+          <div key={item.t} style={{
+            padding: '14px 16px',
+            background: sage.paper,
+            border: `1px solid ${sage.line}`,
+            borderRadius: 10,
+            display: 'flex', alignItems: 'center', gap: 12,
+          }}>
+            <div style={{
+              width: 34, height: 34, borderRadius: 8,
+              background: item.bg, flexShrink: 0,
+            }}/>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: sage.inkMute, fontWeight: 600, fontFamily: 'ui-monospace, monospace', marginBottom: 3 }}>0{i+1}</div>
+              <div style={{ fontSize: 12, color: sage.ink, fontWeight: 500, lineHeight: 1.3 }}>{item.t}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function App() {
+  const { sage, nord, aurora, ncs } = window.PALETTES;
+  return (
+    <div style={{
+      maxWidth: 1320,
+      margin: '0 auto',
+      background: '#FFF',
+      boxShadow: '0 1px 0 rgba(0,0,0,0.04)',
+    }}>
+      <PageCover/>
+      <PaletteBlock P={sage}   useGradient={false} isAurora={false} variant="first"/>
+      <PaletteBlock P={nord}   useGradient={false} isAurora={false} variant="second"/>
+      <PaletteBlock P={aurora} useGradient={true}  isAurora={true}  variant="third"/>
+      <PaletteBlock P={ncs}    useGradient={false} isAurora={false} variant="fourth"/>
+    </div>
+  );
+}
+
+Object.assign(window, { App, PaletteBlock, PageCover });
+
+</script>
+<script type="text/babel" data-presets="react">
+function tryMount() {
+  const needed = ['PALETTES','WordmarkP','WordmarkPGrad','HeaderMockup','ListingCard','ChatBubbles','BannerMockup','App'];
+  const missing = needed.filter(k => !window[k]);
+  if (missing.length) { setTimeout(tryMount, 50); return; }
+  ReactDOM.createRoot(document.getElementById('root')).render(<window.App/>);
+}
+tryMount();
+</script>
+</body>
+</html>
