@@ -1,0 +1,65 @@
+name: monitor-p0-ssl
+
+# Watches for regressions of the P0 SSL "bad record mac" fix (commit 69a53f8)
+# for 48h post-deploy. Runs every 2h. Fails red on SSL pattern hits, yellow
+# (warn) on QA endpoint flakes without log evidence.
+#
+# FIRST MANUAL RUN: trigger "Run workflow" from the Actions tab with
+# window=48h to scan the historical window back to the 19/04 21h41 crash
+# and the overnight crons. Scheduled runs use window=2h.
+#
+# Disable (or change cron to daily) after 48h of clean runs.
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'   # every 2h UTC, top of the hour
+  workflow_dispatch:
+    inputs:
+      window:
+        description: 'Log lookback window (e.g. 2h, 48h, 30m)'
+        required: false
+        default: '2h'
+
+concurrency:
+  group: monitor-p0-ssl
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install requests
+        run: pip install --quiet 'requests==2.32.3'
+
+      - name: Run monitor
+        env:
+          RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+          QA_TOKEN:          ${{ secrets.QA_TOKEN }}
+          GITHUB_SHA:        ${{ github.sha }}
+          BONHOME_HOST:      https://bonhome.ch
+        run: |
+          set -o pipefail
+          WINDOW="${{ github.event.inputs.window }}"
+          WINDOW="${WINDOW:-2h}"
+          python scripts/monitor_p0.py --window "$WINDOW"
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: monitor-report-${{ github.run_id }}
+          path: monitor-report.json
+          retention-days: 30
