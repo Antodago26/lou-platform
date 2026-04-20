@@ -2,13 +2,19 @@
 """
 monitor_p0.py — watchdog P0 SSL "bad record mac" (fix commit 69a53f8).
 
+Périmètre temporaire : Peseux uniquement.
+Cortaillod a été retiré le 20/04/2026 : son live scraping timeout à 480s
+générait du bruit d'alerte non lié au fix SSL. À réintégrer une fois P1
+(cache nocturne) déployé, quand le live scraping ne sera plus le chemin
+critique de l'endpoint QA.
+
 Two checks per run:
   1. Render logs API, filtered client-side by case-insensitive regex on
      the P0 patterns, over a sliding --window (default 2h).
-  2. QA endpoint /api/stats/listings-qa on Cortaillod (sanity) + Peseux
-     TWICE sequentially with a short delay — reproduces the original
-     crash scenario (1st call possibly OK, 2nd hits the retry digue if
-     any stale SSL conn lingers). Both Peseux calls must return 200.
+  2. QA endpoint /api/stats/listings-qa on Peseux TWICE sequentially with
+     a short delay — reproduces the original crash scenario (1st call
+     possibly OK, 2nd hits the retry digue if any stale SSL conn lingers).
+     Both Peseux calls must return 200.
 
 Exit codes:
   0  OK            — no SSL pattern AND every QA call returned 200 ok=True.
@@ -276,15 +282,10 @@ def main():
     report["logs"] = scan_logs(api_key, service_id, window)
     _flush_report()
 
-    # 2) QA pings — SÉQUENTIEL strict.
-    # Le run #2 avait tenté Peseux||Cortaillod en parallèle pour sauver du
-    # temps wall-clock : raté, les 2 calls concurrents saturent bonhome
-    # (scraping ScrapingBee × 2 villes × 2 portails × 2 tx = 8 workers
-    # simultanés, l'endpoint coupe à ~270s sur le timeout edge Render).
-    # Ordre : Cortaillod (sanity, ~60s quand l'endpoint n'est pas saturé)
-    # → Peseux#1 → sleep(peseux_delay) → Peseux#2 (reproduction digue).
-    report["qa_calls"].append(call_qa(args.host, qa_token, "cortaillod"))
-    _flush_report()
+    # 2) QA pings — Peseux ×2 séquentiels, délai peseux_delay entre les 2.
+    # Cortaillod retiré le 20/04/2026 : timeout 480s du live scraping non lié
+    # au fix SSL → bruit WARN toutes les 2h. À réintégrer post-déploiement P1
+    # (cache nocturne) quand l'endpoint ne sera plus bound sur ScrapingBee.
     report["qa_calls"].append(call_qa(args.host, qa_token, "peseux"))
     _flush_report()
     time.sleep(args.peseux_delay)

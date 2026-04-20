@@ -18,10 +18,14 @@ also runnable locally for debug.
    (`bad record mac`, `ssl error`, `operationalerror`, `decryption failed`,
    `server closed the connection`, `db_query_failed`).
 2. Hits `GET /api/stats/listings-qa` with `X-QA-Token` on:
-   - `cortaillod` — sanity check, must pass.
    - `peseux` twice sequentially with ~8s delay — reproduces the original
      crash scenario; the 2nd call tests the retry digue if any stale conn
      was left behind.
+
+   > **Cortaillod retiré temporairement (20/04/2026).** Son live scraping
+   > timeout à 480s sans rapport avec le fix SSL faisait sortir chaque
+   > run en `WARN` et noyait les vraies alertes. Réintégration prévue
+   > une fois P1 (cache nocturne) déployé.
 3. Writes a structured report to stdout **and** to `./monitor-report.json`
    (picked up by the workflow as an artifact).
 
