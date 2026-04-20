@@ -22,6 +22,7 @@ import hmac
 import logging
 from datetime import datetime, timezone
 
+import psycopg2
 from flask import Blueprint, request, jsonify
 
 from db import get_db, return_db
@@ -132,93 +133,117 @@ def listings_qa():
     t_start = time.time()
 
     # --- 1) Bonhome indexed (DB COUNT + breakdown) ------------------------
-    bonhome = {
-        "total": 0,
-        "by_transaction": {"location": 0, "achat": 0},
-        "by_source": {},
-        "ids_by_portal": {"homegate": set(), "immoscout24": set()},
-    }
-    conn = None
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        # Match sur city display OU slug (la colonne contient le nom d'affichage)
-        # pour tolérer les 2 orthographes "Neuchâtel" / "neuchatel".
-        cur.execute("""
-            SELECT COALESCE(transaction,'') AS transaction,
-                   COUNT(*) AS n
-            FROM properties
-            WHERE is_active = TRUE
-              AND LOWER(COALESCE(city,'')) IN (%s, %s)
-            GROUP BY transaction
-        """, (city_display.lower(), city_slug))
-        for r in cur.fetchall():
-            tx = r['transaction'] if isinstance(r, dict) else r[0]
-            n = r['n'] if isinstance(r, dict) else r[1]
-            if tx in ('location', 'achat'):
-                bonhome["by_transaction"][tx] = int(n)
-            bonhome["total"] += int(n)
+    # v6.3.4 (P0 digue) : 1-shot retry si la 1re conn renvoie OperationalError
+    # ou InterfaceError (= SSL state corrompu côté Neon, cf fix _CACHE_CONN
+    # thread-local dans scrapers.py). La conn fautive est detruite avant retry.
+    bonhome = None
+    last_err = None
+    for attempt in (1, 2):
+        bonhome = {
+            "total": 0,
+            "by_transaction": {"location": 0, "achat": 0},
+            "by_source": {},
+            "ids_by_portal": {"homegate": set(), "immoscout24": set()},
+        }
+        conn = None
+        try:
+            conn = get_db()
+            cur = conn.cursor()
+            # Match sur city display OU slug (la colonne contient le nom d'affichage)
+            # pour tolérer les 2 orthographes "Neuchâtel" / "neuchatel".
+            cur.execute("""
+                SELECT COALESCE(transaction,'') AS transaction,
+                       COUNT(*) AS n
+                FROM properties
+                WHERE is_active = TRUE
+                  AND LOWER(COALESCE(city,'')) IN (%s, %s)
+                GROUP BY transaction
+            """, (city_display.lower(), city_slug))
+            for r in cur.fetchall():
+                tx = r['transaction'] if isinstance(r, dict) else r[0]
+                n = r['n'] if isinstance(r, dict) else r[1]
+                if tx in ('location', 'achat'):
+                    bonhome["by_transaction"][tx] = int(n)
+                bonhome["total"] += int(n)
 
-        # Breakdown par source (via property_sources).
-        # NOTE (QA2) : la colonne source est stockée en PascalCase dans la DB
-        # ('Homegate', 'ImmoScout24', etc.). On normalise en lowercase côté
-        # sortie pour matcher la convention slug de l'endpoint.
-        cur.execute("""
-            SELECT ps.source, COUNT(DISTINCT p.id) AS n
-            FROM properties p
-            LEFT JOIN property_sources ps ON ps.property_id = p.id
-            WHERE p.is_active = TRUE
-              AND LOWER(COALESCE(p.city,'')) IN (%s, %s)
-            GROUP BY ps.source
-        """, (city_display.lower(), city_slug))
-        for r in cur.fetchall():
-            src = r['source'] if isinstance(r, dict) else r[0]
-            n = r['n'] if isinstance(r, dict) else r[1]
-            if src:
-                bonhome["by_source"][src.lower()] = int(n)
+            # Breakdown par source (via property_sources).
+            # NOTE (QA2) : la colonne source est stockée en PascalCase dans la DB
+            # ('Homegate', 'ImmoScout24', etc.). On normalise en lowercase côté
+            # sortie pour matcher la convention slug de l'endpoint.
+            cur.execute("""
+                SELECT ps.source, COUNT(DISTINCT p.id) AS n
+                FROM properties p
+                LEFT JOIN property_sources ps ON ps.property_id = p.id
+                WHERE p.is_active = TRUE
+                  AND LOWER(COALESCE(p.city,'')) IN (%s, %s)
+                GROUP BY ps.source
+            """, (city_display.lower(), city_slug))
+            for r in cur.fetchall():
+                src = r['source'] if isinstance(r, dict) else r[0]
+                n = r['n'] if isinstance(r, dict) else r[1]
+                if src:
+                    bonhome["by_source"][src.lower()] = int(n)
 
-        # IDs externes connus par portail (pour recall).
-        # LOWER(source) pour rattraper le mismatch 'ImmoScout24' vs 'immoscout24'.
-        cur.execute("""
-            SELECT LOWER(p.source) AS source, p.external_id
-            FROM properties p
-            WHERE p.is_active = TRUE
-              AND LOWER(COALESCE(p.city,'')) IN (%s, %s)
-              AND LOWER(p.source) IN ('homegate', 'immoscout24')
-              AND p.external_id IS NOT NULL
-        """, (city_display.lower(), city_slug))
-        for r in cur.fetchall():
-            src = r['source'] if isinstance(r, dict) else r[0]
-            eid = r['external_id'] if isinstance(r, dict) else r[1]
-            if src in bonhome["ids_by_portal"]:
-                bonhome["ids_by_portal"][src].add(str(eid))
+            # IDs externes connus par portail (pour recall).
+            # LOWER(source) pour rattraper le mismatch 'ImmoScout24' vs 'immoscout24'.
+            cur.execute("""
+                SELECT LOWER(p.source) AS source, p.external_id
+                FROM properties p
+                WHERE p.is_active = TRUE
+                  AND LOWER(COALESCE(p.city,'')) IN (%s, %s)
+                  AND LOWER(p.source) IN ('homegate', 'immoscout24')
+                  AND p.external_id IS NOT NULL
+            """, (city_display.lower(), city_slug))
+            for r in cur.fetchall():
+                src = r['source'] if isinstance(r, dict) else r[0]
+                eid = r['external_id'] if isinstance(r, dict) else r[1]
+                if src in bonhome["ids_by_portal"]:
+                    bonhome["ids_by_portal"][src].add(str(eid))
 
-        # Aussi via property_sources (cross-portal dedup)
-        cur.execute("""
-            SELECT LOWER(ps.source) AS source, ps.external_id
-            FROM property_sources ps
-            JOIN properties p ON p.id = ps.property_id
-            WHERE p.is_active = TRUE
-              AND LOWER(COALESCE(p.city,'')) IN (%s, %s)
-              AND LOWER(ps.source) IN ('homegate', 'immoscout24')
-              AND ps.external_id IS NOT NULL
-        """, (city_display.lower(), city_slug))
-        for r in cur.fetchall():
-            src = r['source'] if isinstance(r, dict) else r[0]
-            eid = r['external_id'] if isinstance(r, dict) else r[1]
-            if src in bonhome["ids_by_portal"]:
-                bonhome["ids_by_portal"][src].add(str(eid))
+            # Aussi via property_sources (cross-portal dedup)
+            cur.execute("""
+                SELECT LOWER(ps.source) AS source, ps.external_id
+                FROM property_sources ps
+                JOIN properties p ON p.id = ps.property_id
+                WHERE p.is_active = TRUE
+                  AND LOWER(COALESCE(p.city,'')) IN (%s, %s)
+                  AND LOWER(ps.source) IN ('homegate', 'immoscout24')
+                  AND ps.external_id IS NOT NULL
+            """, (city_display.lower(), city_slug))
+            for r in cur.fetchall():
+                src = r['source'] if isinstance(r, dict) else r[0]
+                eid = r['external_id'] if isinstance(r, dict) else r[1]
+                if src in bonhome["ids_by_portal"]:
+                    bonhome["ids_by_portal"][src].add(str(eid))
 
-        cur.close()
-    except Exception as e:
-        log.exception(f"listings-qa DB query failed: {e}")
-        return jsonify({"error": "db_query_failed", "detail": str(e)[:200]}), 500
-    finally:
-        if conn is not None:
-            try:
-                return_db(conn)
-            except Exception:
-                pass
+            cur.close()
+            last_err = None
+            break  # succès → sort du retry loop
+        except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+            # Typiquement : SSL bad record mac, server closed the connection,
+            # connection already closed. On détruit la conn (pas de putconn
+            # propre — elle est possiblement corrompue) et on retry UNE fois.
+            last_err = e
+            log.warning(f"listings-qa DB transient error (attempt {attempt}/2): {e}")
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                conn = None
+            if attempt == 2:
+                log.exception("listings-qa DB query failed after retry")
+                return jsonify({"error": "db_query_failed", "detail": str(e)[:200]}), 500
+            # sinon : on boucle pour attempt 2
+        except Exception as e:
+            log.exception(f"listings-qa DB query failed: {e}")
+            return jsonify({"error": "db_query_failed", "detail": str(e)[:200]}), 500
+        finally:
+            if conn is not None:
+                try:
+                    return_db(conn)
+                except Exception:
+                    pass
 
     # --- 2) Scrape live Homegate + ImmoScout24 (vente + location) ---------
     # QA1 : bypass du cache DB de _sb_get — sinon on rejoue du cache posé par

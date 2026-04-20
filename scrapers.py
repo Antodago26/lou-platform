@@ -114,26 +114,29 @@ SCRAPINGBEE_URL = 'https://app.scrapingbee.com/api/v1'
 SCRAPE_CACHE_TTL_HOURS = int(os.environ.get('SCRAPE_CACHE_TTL_HOURS', '12'))
 SCRAPE_CACHE_DISABLED = os.environ.get('SCRAPE_CACHE_DISABLE', '').lower() in ('1', 'true', 'yes')
 
-_CACHE_CONN = None
-_CACHE_CONN_FAILED = False
+# v6.3.4 (P0 SSL "bad record mac" fix — 2026-04-20) :
+# La conn cache était AUPARAVANT un singleton module-level (_CACHE_CONN) partagé
+# entre tous les threads gthread (4/worker) + les ThreadPoolExecutor des scrapers.
+# psycopg2 connections NE SONT PAS thread-safe pour usage concurrent : deux
+# `cur.execute()` simultanés sur la même conn entrelacent les octets sur la
+# socket TLS → "SSL error: decryption failed or bad record mac" sur la lecture
+# suivante. Fix : thread-local conn + auto-reconnect sur erreur + un schema
+# init flag partagé (CREATE TABLE IF NOT EXISTS, une seule fois par worker).
+import threading as _cache_threading
+_CACHE_TLS = _cache_threading.local()
+_CACHE_SCHEMA_READY = False
+_CACHE_SCHEMA_LOCK = _cache_threading.Lock()
+_CACHE_GLOBAL_FAILED = False  # set True si DATABASE_URL absent → on skip définitivement
 
 
-def _cache_conn():
-    """Return a dedicated (autocommit) psycopg2 conn for the scrape cache.
-    None if DATABASE_URL isn't set or the last init failed (best-effort)."""
-    global _CACHE_CONN, _CACHE_CONN_FAILED
-    if SCRAPE_CACHE_DISABLED or _CACHE_CONN_FAILED:
-        return None
-    if _CACHE_CONN is not None:
-        return _CACHE_CONN
-    dsn = os.environ.get('DATABASE_URL')
-    if not dsn:
-        _CACHE_CONN_FAILED = True
-        return None
-    try:
-        import psycopg2 as _pg
-        conn = _pg.connect(dsn)
-        conn.autocommit = True
+def _cache_ensure_schema(conn):
+    """CREATE TABLE IF NOT EXISTS, idempotent, une fois par process."""
+    global _CACHE_SCHEMA_READY
+    if _CACHE_SCHEMA_READY:
+        return
+    with _CACHE_SCHEMA_LOCK:
+        if _CACHE_SCHEMA_READY:
+            return
         cur = conn.cursor()
         cur.execute("""
             CREATE TABLE IF NOT EXISTS scrape_cache (
@@ -143,12 +146,56 @@ def _cache_conn():
             )
         """)
         cur.close()
-        _CACHE_CONN = conn
-        return _CACHE_CONN
-    except Exception as e:
-        log.warning(f"scrape_cache init failed, caching disabled: {e}")
-        _CACHE_CONN_FAILED = True
+        _CACHE_SCHEMA_READY = True
+
+
+def _cache_conn():
+    """Return a thread-local autocommit psycopg2 conn for the scrape cache.
+    Each thread gets its OWN connection → zero concurrent-use on a single
+    SSL socket. Reconnects automatically if the previous conn is dead."""
+    global _CACHE_GLOBAL_FAILED
+    if SCRAPE_CACHE_DISABLED or _CACHE_GLOBAL_FAILED:
         return None
+    conn = getattr(_CACHE_TLS, 'conn', None)
+    if conn is not None:
+        # Cheap liveness check : psycopg2 sets .closed non-zero when the
+        # backend has gone away. Real health is validated by autocommit
+        # semantics — si la conn est vraiment HS, l'appelant va catcher et
+        # déclencher _cache_drop_conn() qui invalide le tls pour ce thread.
+        if getattr(conn, 'closed', 0) == 0:
+            return conn
+        # Conn dropped — clear and reopen below
+        _cache_drop_conn()
+    dsn = os.environ.get('DATABASE_URL')
+    if not dsn:
+        _CACHE_GLOBAL_FAILED = True
+        return None
+    try:
+        import psycopg2 as _pg
+        conn = _pg.connect(dsn)
+        conn.autocommit = True
+        _cache_ensure_schema(conn)
+        _CACHE_TLS.conn = conn
+        return conn
+    except Exception as e:
+        log.warning(f"scrape_cache connect failed (thread={_cache_threading.get_ident()}): {e}")
+        return None
+
+
+def _cache_drop_conn():
+    """Close + forget the thread-local cache conn so the next call reconnects.
+    Called by _cache_is_fresh / _cache_mark when a query raises (any error =
+    suspect SSL state, don't reuse)."""
+    conn = getattr(_CACHE_TLS, 'conn', None)
+    if conn is not None:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    try:
+        del _CACHE_TLS.conn
+    except AttributeError:
+        pass
 
 
 def _url_hash(url):
@@ -156,7 +203,9 @@ def _url_hash(url):
 
 
 def _cache_is_fresh(url):
-    """True if we scraped this URL successfully less than TTL hours ago."""
+    """True if we scraped this URL successfully less than TTL hours ago.
+    Sur toute exception, on dégage la conn thread-local (SSL state suspect)
+    pour qu'un futur appel reconnecte proprement."""
     conn = _cache_conn()
     if not conn:
         return False
@@ -170,12 +219,14 @@ def _cache_is_fresh(url):
         cur.close()
         return hit
     except Exception as e:
-        log.debug(f"scrape_cache read failed: {e}")
+        log.warning(f"scrape_cache read failed (dropping conn): {e}")
+        _cache_drop_conn()
         return False
 
 
 def _cache_mark(url, html):
-    """Upsert a cache entry after a successful scrape."""
+    """Upsert a cache entry after a successful scrape.
+    Sur toute exception, on dégage la conn thread-local (cf _cache_is_fresh)."""
     conn = _cache_conn()
     if not conn:
         return
@@ -190,7 +241,8 @@ def _cache_mark(url, html):
         """, (_url_hash(url), hashlib.sha256((html or '').encode('utf-8', errors='ignore')).hexdigest()))
         cur.close()
     except Exception as e:
-        log.debug(f"scrape_cache write failed: {e}")
+        log.warning(f"scrape_cache write failed (dropping conn): {e}")
+        _cache_drop_conn()
 
 # Swiss city → canton mapping
 CITY_CANTONS = {
