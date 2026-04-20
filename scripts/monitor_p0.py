@@ -28,11 +28,13 @@ Local debug:
     python3 scripts/monitor_p0.py --window 48h   # historical first run
 """
 import argparse
+import atexit
 import json
 import os
 import re
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 try:
@@ -219,16 +221,49 @@ def main():
         "logs": None,
         "qa_calls": [],
         "verdict": "pending",
+        "partial": True,  # flipé à False juste avant exit propre
     }
 
-    # 1) Render logs
-    report["logs"] = scan_logs(api_key, service_id, window)
+    # Dump atomique sur disque — appelé après chaque étape + via atexit si
+    # le process est tué (GitHub Actions timeout, SIGTERM, exception non
+    # attrapée). Garantit qu'on a toujours monitor-report.json lisible
+    # dans l'artefact même sur run cancelled.
+    def _flush_report():
+        try:
+            with open(args.report_path, "w") as fh:
+                json.dump(report, fh, indent=2, default=str)
+        except Exception as e:
+            print(f"::warning::could not write {args.report_path}: {e}", file=sys.stderr)
 
-    # 2) QA pings — Cortaillod (sanity) then Peseux ×2 (crash reproduction)
-    report["qa_calls"].append(call_qa(args.host, qa_token, "cortaillod"))
-    report["qa_calls"].append(call_qa(args.host, qa_token, "peseux"))
-    time.sleep(args.peseux_delay)
-    report["qa_calls"].append(call_qa(args.host, qa_token, "peseux"))
+    atexit.register(_flush_report)
+
+    # 1) Render logs (séquentiel, ~5-10s)
+    report["logs"] = scan_logs(api_key, service_id, window)
+    _flush_report()
+
+    # 2) QA pings — parallélisés en 2 threads :
+    #   thread A : Peseux call 1 → sleep(peseux_delay) → Peseux call 2
+    #              (séquence OBLIGATOIRE, c'est le scénario reproduction
+    #              du crash — un retry sur conn SSL stale côté serveur).
+    #   thread B : Cortaillod (sanity check indépendant).
+    # Gain : ~/2 sur les window=48h qui ont cancelled le run #1.
+    def _peseux_sequence():
+        out = [call_qa(args.host, qa_token, "peseux")]
+        time.sleep(args.peseux_delay)
+        out.append(call_qa(args.host, qa_token, "peseux"))
+        return out
+
+    def _cortaillod_sequence():
+        return [call_qa(args.host, qa_token, "cortaillod")]
+
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        fut_peseux = ex.submit(_peseux_sequence)
+        fut_cortaillod = ex.submit(_cortaillod_sequence)
+        # Ordre préservé dans le rapport : cortaillod, peseux#1, peseux#2.
+        report["qa_calls"].extend(fut_cortaillod.result())
+        _flush_report()
+        report["qa_calls"].extend(fut_peseux.result())
+        _flush_report()
 
     # Verdict
     ssl_hit = bool(report["logs"]["hits"])
@@ -245,14 +280,13 @@ def main():
         report["verdict"] = "OK"
         exit_code = 0
 
-    # Output: JSON to stdout + persist to disk for the workflow artifact
-    payload = json.dumps(report, indent=2, default=str)
-    print(payload)
-    try:
-        with open(args.report_path, "w") as fh:
-            fh.write(payload)
-    except Exception as e:
-        print(f"::warning::could not write {args.report_path}: {e}", file=sys.stderr)
+    # Run complet → on retire le flag partial. Le atexit flushera la version
+    # finale; on dump aussi explicitement ici pour couper court à toute race.
+    report["partial"] = False
+    _flush_report()
+
+    # Output: JSON to stdout
+    print(json.dumps(report, indent=2, default=str))
 
     # GitHub-Actions annotations
     if ssl_hit:
