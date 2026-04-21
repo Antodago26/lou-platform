@@ -92,6 +92,67 @@ log = logging.getLogger('lou-app')
 
 
 # ============================================================
+# Neon cold-start warmup (v6.3.4.1)
+# ============================================================
+def _neon_warmup(max_attempts=3, sleep_s=2.0):
+    """Chauffe le pool DB avant les gros jobs de boot (rescore).
+
+    Neon (Postgres serverless) peut être en cold-start au boot de l'app : les
+    premières vraies requêtes sur des conns fraîchement ouvertes tombent sur
+    des erreurs de transport TLS transitoires pendant la fenêtre ~1-3s où le
+    backend se réveille. Boucler un SELECT 1 avec retry (a) laisse à Neon le
+    temps de se réveiller, et (b) évince via close=True toute conn formée
+    durant la fenêtre cold-start — filet complémentaire au fix conn_broken
+    dans _rescore_all_on_boot.
+
+    VOLONTAIREMENT les messages ne contiennent PAS l'exception brute : le
+    watchdog scripts/monitor_p0.py grep le log Render pour 'bad record mac',
+    'OperationalError', 'ssl error', etc. et déclencherait un FAIL rouge si
+    on loggait l'erreur textuelle ici (ce sont des erreurs attendues pendant
+    le cold-start, pas une régression P0). On garde les exceptions pour
+    Sentry via exc_info=False mais label neutre 'transient'.
+
+    Returns: True si un SELECT 1 a réussi dans max_attempts, False sinon.
+    En cas de False, l'appelant SKIPPE le travail lourd — la prochaine
+    requête utilisateur réveillera la DB naturellement."""
+    import time as _time
+    import psycopg2 as _pg
+    for attempt in range(1, max_attempts + 1):
+        conn = None
+        ok = False
+        conn_broken = False
+        try:
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute('SELECT 1')
+            cur.fetchone()
+            cur.close()
+            ok = True
+        except (_pg.OperationalError, _pg.InterfaceError):
+            conn_broken = True
+        except Exception:
+            # Erreur inconnue : on considère aussi la conn suspecte
+            conn_broken = True
+        finally:
+            if conn is not None:
+                try:
+                    return_db(conn, close=conn_broken)
+                except Exception:
+                    pass
+        if ok:
+            log.info(f"Neon warmup: OK on attempt {attempt}/{max_attempts}")
+            return True
+        if attempt < max_attempts:
+            log.info(f"Neon warmup: attempt {attempt}/{max_attempts} transient, retry in {sleep_s}s")
+            _time.sleep(sleep_s)
+    log.warning(
+        f"Neon warmup: {max_attempts} attempts did not succeed, skipping boot rescore "
+        "(first user request will wake the DB)"
+    )
+    return False
+
+
+# ============================================================
 # MIGRATIONS (idempotent)
 # ============================================================
 def _run_migrations():
@@ -336,6 +397,12 @@ if os.environ.get('DATABASE_URL', ''):
         import time
         import psycopg2 as _pg
         time.sleep(5)  # let gunicorn finish booting
+        # v6.3.4.1 : warm-up Neon (cold-start) AVANT d'attaquer le rescore.
+        # Si Neon n'est pas prêt après 3× SELECT 1 espacés de 2s, on skip
+        # proprement — pas de crash, pas de conn pourrie dans le pool. La
+        # prochaine requête utilisateur réveillera la DB.
+        if not _neon_warmup():
+            return
         db = None
         lock_acquired = False
         conn_broken = False
