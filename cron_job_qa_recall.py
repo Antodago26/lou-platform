@@ -33,7 +33,19 @@ logging.basicConfig(
 )
 log = logging.getLogger('lou-qa-cron')
 
-_DEFAULT_CITIES = 'peseux,neuchatel,la-chaux-de-fonds,lausanne,geneve'
+# v6.4.1 : focus canton Neuchâtel uniquement (décision produit, Antony
+# 21/04). Lausanne/Genève dropped — trop gros volume pour le budget
+# ScrapingBee et hors scope beta. 8 villes NE représentatives.
+#
+# Slugs reconnus par qa_recall_worker._CITY_SLUG_TO_DISPLAY :
+# - peseux, neuchatel, la-chaux-de-fonds, boudry, cortaillod : slugs directs
+# - colombier → display "Colombier", scraper ajoute -ne via CITY_CANTONS
+# - marin     → display "Marin-Epagnier" (URL Homegate post-fusion 2009)
+# - saint-blaise → display "Saint-Blaise", scraper ajoute -ne
+_DEFAULT_CITIES = (
+    'peseux,neuchatel,la-chaux-de-fonds,boudry,cortaillod,'
+    'colombier,marin,saint-blaise'
+)
 
 
 def _parse_cities() -> list:

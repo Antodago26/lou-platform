@@ -77,7 +77,8 @@ class RunRecallSnapshotForCityTest(unittest.TestCase):
                           side_effect=lambda city, transaction, max_pages: self._fake_listings(transaction)), \
              patch.object(worker, 'scrape_immoscout',
                           side_effect=lambda city, transaction, max_pages: self._fake_listings(transaction)), \
-             patch.object(worker, 'sb_budget', MagicMock()):
+             patch.object(worker, 'sb_budget', MagicMock()), \
+             patch.object(worker, 'sb_bypass_cache', MagicMock()):
             result = worker.run_recall_snapshot_for_city('peseux')
 
         # Compteurs
@@ -104,6 +105,99 @@ class RunRecallSnapshotForCityTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 worker.run_recall_snapshot_for_city('ville-inexistante-xyz')
             get_db_mock.assert_not_called()
+
+    def test_recall_pct_above_100_no_crash(self):
+        """Fix v6.4.1 BUG 1 : quand our_total >> source_total (DB riche mais
+        scraper trouve peu d'annonces live), le top-level recall_pct dépasse
+        100%. Ex : 10 live/combo × 4 = 40 source ; 100 DB/combo × 4 = 400 our
+        → recall = 400/40*100 = 1000%. Doit stocker la valeur réelle
+        (NUMERIC(7,2) après migration v641) sans crash."""
+        import qa_recall_worker as worker
+
+        def fake_scrape(city, transaction, max_pages):
+            # 10 IDs live par combo, dont 5 matchent côté DB (voir fetchall ci-dessous)
+            return [{'external_id': f'live-{transaction}-{i}'} for i in range(10)]
+
+        # fetchone : INSERT qa_runs puis INSERT snapshot
+        fetchone_seq = [(99,), (200,)]
+
+        # fetchall : 4 combos, chacun retourne 5 IDs "live-*" matching + 95 IDs
+        # "db-only-*" qui ne matchent pas (DB plus riche que le scrape live).
+        # Total par combo : our_total=100, source=10, intersection=5.
+        # Per-combo recall = 5/10*100 = 50%. Top-level recall = 400/40*100 = 1000%.
+        fetchall_seq = []
+        for _portal, tx in [('homegate', 'achat'), ('homegate', 'location'),
+                            ('immoscout24', 'achat'), ('immoscout24', 'location')]:
+            rows = [(f'live-{tx}-{i}',) for i in range(5)]       # 5 matching
+            rows += [(f'db-only-{tx}-{i}',) for i in range(95)]  # 95 extras
+            fetchall_seq.append(rows)
+
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value = cur
+        cur.fetchone.side_effect = fetchone_seq
+        cur.fetchall.side_effect = fetchall_seq
+
+        with patch.object(worker, 'get_db', return_value=conn), \
+             patch.object(worker, 'return_db'), \
+             patch.object(worker, 'scrape_homegate', side_effect=fake_scrape), \
+             patch.object(worker, 'scrape_immoscout', side_effect=fake_scrape), \
+             patch.object(worker, 'sb_budget', MagicMock()), \
+             patch.object(worker, 'sb_bypass_cache', MagicMock()):
+            result = worker.run_recall_snapshot_for_city('peseux')
+
+        # Totaux : source=40 (10×4 combos), our=400 (100×4 combos)
+        self.assertEqual(result['source_total'], 40)
+        self.assertEqual(result['our_total'], 400)
+        # 400/40*100 = 1000.0 — valeur conservée (recall > 100 = signal
+        # diagnostique, pas un bug à masquer). Doit s'insérer sans crash.
+        self.assertEqual(result['recall_pct'], 1000.0)
+        # Per-combo recall reste borné (intersection/live = 5/10 = 50%)
+        # — vérifié via l'INSERT snapshot dans raw_snapshot (on ne lit pas
+        # le JSON ici, mais au moins on s'assure qu'aucune exception n'a
+        # remonté, donc le format JSONB était valide pour psycopg2).
+        self.assertEqual(result['errors'], 0)
+
+    def test_qa_worker_uses_bypass_cache(self):
+        """Fix v6.4.1 BUG 2 (CRITIQUE) : le worker DOIT entrer dans un
+        context sb_bypass_cache() avant de scraper. Sans ça, _sb_get
+        hitte le cache DB 12h et renvoie (304, '') → source_total=0
+        systématique sur toutes les villes après le 1er run quotidien
+        (cron matin + run manuel l'après-midi = cache écrase).
+
+        On patch `sb_bypass_cache` avec un MagicMock qui compte ses
+        appels, et on vérifie qu'il est bien instancié au moins une fois
+        par run_recall_snapshot_for_city (= le `with sb_bypass_cache():`
+        du code est bien traversé).
+        """
+        import qa_recall_worker as worker
+
+        bypass_mock = MagicMock(name='sb_bypass_cache')
+        budget_mock = MagicMock(name='sb_budget')
+
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value = cur
+        # fetchone : INSERT qa_runs puis INSERT snapshot
+        cur.fetchone.side_effect = [(1,), (2,)]
+        # fetchall : scrapers retournent [] donc pas de live_ids, mais
+        # _fetch_our_ids est quand même appelé 4 fois et doit répondre.
+        cur.fetchall.return_value = []
+
+        with patch.object(worker, 'get_db', return_value=conn), \
+             patch.object(worker, 'return_db'), \
+             patch.object(worker, 'scrape_homegate', return_value=[]), \
+             patch.object(worker, 'scrape_immoscout', return_value=[]), \
+             patch.object(worker, 'sb_budget', budget_mock), \
+             patch.object(worker, 'sb_bypass_cache', bypass_mock):
+            worker.run_recall_snapshot_for_city('peseux')
+
+        # sb_bypass_cache() a été appelé (instancié comme context manager).
+        # assert_called() suffit : un seul call / run est attendu (un
+        # with-block englobe tous les combos).
+        bypass_mock.assert_called()
+        # Et sb_budget aussi, dans le même with-statement.
+        budget_mock.assert_called()
 
 
 # ============================================================

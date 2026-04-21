@@ -26,11 +26,17 @@ DB même quand ScrapingBee est complètement down.
 """
 import json
 import logging
+import os
 import time
 import psycopg2
 
 from db import get_db, return_db
-from scrapers import scrape_homegate, scrape_immoscout, sb_budget
+from scrapers import (
+    scrape_homegate,
+    scrape_immoscout,
+    sb_budget,
+    sb_bypass_cache,
+)
 
 log = logging.getLogger('lou-app')
 
@@ -42,15 +48,45 @@ log = logging.getLogger('lou-app')
 # + Blueprint pour 30 lignes de data. Maintenir synchrone manuellement
 # si on ajoute des villes côté endpoint.
 _CITY_SLUG_TO_DISPLAY = {
-    # Villes du beta Neuchâtel
+    # -----------------------------------------------------------------
+    # Canton Neuchâtel — focus beta (QA_RECALL_CITIES par défaut)
+    # -----------------------------------------------------------------
     'peseux':            'Peseux',
     'neuchatel':         'Neuchâtel',
     'la-chaux-de-fonds': 'La Chaux-de-Fonds',
     'le-locle':          'Le Locle',
-    'cortaillod':        'Cortaillod',
-    'colombier-ne':      'Colombier',
     'boudry':            'Boudry',
-    # Grandes villes romandes
+    'cortaillod':        'Cortaillod',
+    # Colombier : 'colombier' est le slug court ; le scraper ajoute
+    # automatiquement le suffixe '-ne' via CITY_CANTONS pour produire
+    # l'URL Homegate (city-colombier-ne). On garde l'alias explicite
+    # 'colombier-ne' pour compat avec les anciens rapports/dashboards.
+    'colombier':         'Colombier',
+    'colombier-ne':      'Colombier',
+    # Marin : la commune a fusionné en 2009 pour former "La Tène", mais
+    # Homegate continue de lister sous "marin-epagnier" (CITY_CANTONS
+    # n'a pas 'marin' mais a 'marin-epagnier'). Slug court 'marin' →
+    # display historique pour que le scraper génère city-marin-epagnier.
+    'marin':             'Marin-Epagnier',
+    'marin-epagnier':    'Marin-Epagnier',
+    # Saint-Blaise : idem colombier, scraper ajoute -ne automatiquement.
+    'saint-blaise':      'Saint-Blaise',
+    'saint-blaise-ne':   'Saint-Blaise',
+    # Autres communes NE — disponibles si QA_RECALL_CITIES est étendu
+    # via env (sinon pas scrapées par défaut).
+    'hauterive':         'Hauterive',       # scraper ajoute -ne
+    'hauterive-ne':      'Hauterive',
+    'bevaix':            'Bevaix',
+    'milvignes':         'Milvignes',
+    'la-tene':           'La Tène',         # nom post-fusion 2009
+    'le-landeron':       'Le Landeron',
+    'val-de-ruz':        'Val-de-Ruz',
+    'val-de-travers':    'Val-de-Travers',
+    # -----------------------------------------------------------------
+    # Grandes villes romandes — HORS scope par défaut. Incluses ici
+    # uniquement pour que `QA_RECALL_CITIES` puisse les pointer sans
+    # ValueError si Antony décide d'étendre la couverture plus tard.
+    # -----------------------------------------------------------------
     'lausanne':          'Lausanne',
     'geneve':            'Genève',
     'fribourg':          'Fribourg',
@@ -63,15 +99,27 @@ _CITY_SLUG_TO_DISPLAY = {
 # combo, largement au-dessus de la réalité romande.
 _MAX_PAGES_PER_COMBO = 20
 
-# Budget sb_budget par ville (les 4 combos partagent). 120s est tight
-# pour Geneva sur ImmoScout (render_js=True = 5 crédits/page, ~4s/page) :
-# prévoir que certains combos passent en "budget exhausted" → source_total=0
-# consigné dans le breakdown. Acceptable — le run suivant réessayera.
-_SB_BUDGET_PER_CITY_S = 120
+# Budget sb_budget par ville (les 4 combos partagent). Bumpé à 300s en
+# v6.4.1 après observation du 1er run cron : sans cache (sb_bypass_cache
+# actif), ScrapingBee prend 25-30s/page ; une ville moyenne fait 5 pages
+# × 4 combos = 100-120s juste pour les LIST pages, plus les détails si
+# le scraper les fetche. 120s → seul le 1er combo passait, les 3 autres
+# étaient "budget exhausted". 300s = 5 min, 8 villes = 40 min max côté
+# cron nocturne, confortable.
+#
+# Override via env `LISTINGS_QA_SCRAPE_BUDGET_S` (nom historique du
+# timeout budget conservé pour compat Render dashboard).
+_SB_BUDGET_PER_CITY_S = int(os.environ.get('LISTINGS_QA_SCRAPE_BUDGET_S', '300'))
 
 # Caps anti-bloat pour les JSONB.
 _MAX_MISSING_PER_COMBO = 50
 _MAX_MISSING_TOP_LEVEL = 200
+
+# Clamp du recall_pct. La colonne est NUMERIC(7,2) en DB depuis v6.4.1
+# (max 99999.99). Le clamp Python est un filet de sécurité — bridé
+# bien en-dessous de la limite pour laisser un poil de marge aux
+# arrondis psycopg2→NUMERIC.
+_RECALL_PCT_MAX = 99999.99
 
 
 # --- DB helpers ------------------------------------------------------------
@@ -271,7 +319,15 @@ def run_recall_snapshot_for_city(city_slug: str) -> dict:
     conn_broken = False
     try:
         conn = get_db()
-        with sb_budget(_SB_BUDGET_PER_CITY_S):
+        # v6.4.1 fix CRITIQUE : sb_bypass_cache() est indispensable. Sans ça,
+        # _sb_get hitte le cache DB de SCRAPE_CACHE_TTL (12h) et renvoie
+        # (304, '') — les scrapers retournent alors [] et source_total=0
+        # pour toutes les villes après le 1er run quotidien. Le snapshot
+        # est mensonger ("0 listings live" alors qu'on en a 360+ en DB).
+        # L'ancien endpoint v6.3 listings-qa utilisait aussi sb_bypass_cache
+        # pour cette raison. Accidentellement omis au commit 2 lors du
+        # refactor — restauré ici.
+        with sb_bypass_cache(), sb_budget(_SB_BUDGET_PER_CITY_S):
             for portal, transaction in combos:
                 key = f"{portal}_{transaction}"
                 try:
@@ -283,8 +339,14 @@ def run_recall_snapshot_for_city(city_slug: str) -> dict:
                     }
                     our_ids = _fetch_our_ids(conn, city_slug, city_display, portal, transaction)
                     missing = sorted(live_ids - our_ids)
+                    # Intersection-based recall (borné [0, 100] par construction).
+                    # Clamp défensif à _RECALL_PCT_MAX — paranoïa pure, ne
+                    # devrait jamais s'activer ici ; permet de réutiliser
+                    # la même formule que le top-level sans surprise si la
+                    # sémantique du per-combo changeait un jour.
                     recall = (
-                        round(len(our_ids & live_ids) / len(live_ids) * 100, 2)
+                        round(min(len(our_ids & live_ids) / len(live_ids) * 100,
+                                  _RECALL_PCT_MAX), 2)
                         if live_ids else None
                     )
                     breakdown[key] = {
@@ -330,7 +392,15 @@ def run_recall_snapshot_for_city(city_slug: str) -> dict:
             errors += 1
 
     all_missing_capped = all_missing[:_MAX_MISSING_TOP_LEVEL]
-    recall_pct = round(total_our / total_source * 100, 2) if total_source else None
+    # Top-level = ratio des totaux (pas intersection). Peut dépasser 100%
+    # quand our_total > source_total (DB plus riche que le live scraping :
+    # signal diagnostique de DB stale ou scraper incomplet — on garde la
+    # valeur réelle). Clamp à _RECALL_PCT_MAX (99999.99) pour que l'INSERT
+    # passe même sur cas pathologiques (source_total=1, our=380 → 38000%).
+    recall_pct = (
+        round(min(total_our / total_source * 100, _RECALL_PCT_MAX), 2)
+        if total_source else None
+    )
     elapsed_s = round(time.time() - t_start, 1)
 
     # ---------- 3) Insert snapshot + finalize run (conn 3) ----------
