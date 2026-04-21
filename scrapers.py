@@ -450,7 +450,10 @@ def _sb_get(url, render_js=False):
                 _cache_mark(url, r.text)
             return r.status_code, r.text
         except requests.exceptions.Timeout:
-            log.error(f"[ScrapingBee] TIMEOUT fetching {url} (attempt {attempt+1})")
+            # Timeout géré par le retry + sb_budget → l'app renvoie quand même
+            # (0, '') au caller qui renvoie 200. Pas d'alerte Sentry ERROR pour
+            # ça : c'est une condition nominale sous charge/portail lent.
+            log.warning(f"[ScrapingBee] TIMEOUT fetching {url} (attempt {attempt+1})")
             if attempt < max_attempts - 1:
                 remaining = _sb_remaining()
                 if remaining is not None and remaining < sleep_5xx:
