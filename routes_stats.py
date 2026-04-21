@@ -1,23 +1,29 @@
 """
-Bon Home — Stats QA Blueprint (v6.3.3 — pré-beta audit point 4).
+Bon Home — Stats QA Blueprint (v6.4.0 — snapshot read-only).
 
-Endpoint pour cron externe (Cowork) qui compare Bonhome vs portails en live.
-Protégé par header X-QA-Token (constant-time compare). Pas d'auth JWT :
-le token sert justement à appeler hors session utilisateur.
+Endpoint pour cron externe (Cowork) qui sert le recall précalculé par
+`cron_job_qa_recall.py` (Render cron, 04:00 UTC quotidien). Protégé par
+header X-QA-Token (constant-time compare). Pas d'auth JWT : le token
+sert justement à appeler hors session utilisateur.
 
 GET /api/stats/listings-qa?city=<slug>
-  → bonhome_indexed (COUNT DB) + homegate_live + immoscout24_live via
-    ScrapingBee. Pour chaque portail : recall rate = |IDs live ∩ IDs DB|
-    / |IDs live|. Vente + location agrégés ET détaillés.
+  → SELECT DISTINCT ON (city) le row le plus récent de qa_recall_snapshots
+  → retourne 503 snapshot_not_ready si aucun row (le cron n'a pas encore
+    tourné pour cette ville) ; 200 avec le snapshot + snapshot_age_hours
+    sinon.
 
-⚠ Latence : chaque appel scraper ≈ 30-60s (ScrapingBee stealth proxy).
-   2 portails × 2 transactions = 4 calls ≈ 2 min. max_pages=1 pour borner.
-   gunicorn timeout = 300s (render.yaml) donc marge OK.
-
-⚠ Coût : ~4 crédits ScrapingBee par hit. Cron externe = 1× /jour suffit.
+IMPORTANT (v6.4.0) :
+  - Plus de scrape live dans l'endpoint. Cible : < 100 ms en lecture.
+  - Plus de fallback ?live=true : si le snapshot est absent ou stale, c'est
+    signalé via le code HTTP (503) ou le champ snapshot_age_hours (200).
+    L'opérateur est responsable de surveiller age_hours et d'ack un cron
+    qui a échoué.
+  - Breaking change de shape vs v6.3.x : `bonhome_indexed.*` et
+    `sources.*_live.*` ont disparu. Les consommateurs (Cowork SKILL.md
+    `monitor-villes-vs-bonhome`) doivent être mis à jour pour parser la
+    nouvelle forme (source_total_listings, our_total_listings, breakdown).
 """
 import os
-import time
 import hmac
 import logging
 from datetime import datetime, timezone
@@ -26,63 +32,11 @@ import psycopg2
 from flask import Blueprint, request, jsonify
 
 from db import get_db, return_db
-from scrapers import scrape_homegate, scrape_immoscout, sb_bypass_cache, sb_budget
 
 log = logging.getLogger('lou-app')
 stats_bp = Blueprint('stats', __name__)
 
 QA_TOKEN = os.environ.get('QA_TOKEN', '').strip()
-
-# v6.3.4 (P0 sync-hang fix) : borne le temps mural total des 4 appels scraper
-# (homegate+immoscout × location+achat) dans listings_qa. Sans ça, un portail
-# lent (Homegate sur petites communes NE) tient un worker gunicorn 300s et
-# l'edge Render coupe en 502 après 90s. Ajustable via env sans redeploy.
-LISTINGS_QA_SCRAPE_BUDGET_S = float(os.environ.get('LISTINGS_QA_SCRAPE_BUDGET_S', '60'))
-
-# Slug → display name pour les scrapers (qui attendent le nom avec accents).
-# Limité aux villes du beta + quelques grandes villes. Étendre au besoin.
-_CITY_SLUG_TO_DISPLAY = {
-    'neuchatel': 'Neuchâtel',
-    'la-chaux-de-fonds': 'La Chaux-de-Fonds',
-    'le-locle': 'Le Locle',
-    'cortaillod': 'Cortaillod',
-    'colombier': 'Colombier',
-    # Slugs URL Homegate avec suffixe canton (convention cron Cowork).
-    # Utiles quand la ville existe dans plusieurs cantons (Colombier VD et NE).
-    'colombier-ne': 'Colombier',
-    'peseux': 'Peseux',
-    'boudry': 'Boudry',
-    'marin-epagnier': 'Marin-Epagnier',
-    'hauterive': 'Hauterive',
-    'hauterive-ne': 'Hauterive',
-    'saint-blaise': 'Saint-Blaise',
-    'saint-blaise-ne': 'Saint-Blaise',
-    'milvignes': 'Milvignes',
-    'la-tene': 'La Tène',
-    'le-landeron': 'Le Landeron',
-    'bevaix': 'Bevaix',
-    'val-de-ruz': 'Val-de-Ruz',
-    'val-de-travers': 'Val-de-Travers',
-    'fleurier': 'Fleurier',
-    'corcelles-cormondreche': 'Corcelles-Cormondrèche',
-    'corcelles-cormondreche-ne': 'Corcelles-Cormondrèche',
-    'lausanne': 'Lausanne',
-    'geneve': 'Genève',
-    'fribourg': 'Fribourg',
-    'sion': 'Sion',
-    'bienne': 'Bienne',
-    'montreux': 'Montreux',
-    'nyon': 'Nyon',
-    'morges': 'Morges',
-    'yverdon': 'Yverdon',
-    'yverdon-les-bains': 'Yverdon-les-Bains',
-    'vevey': 'Vevey',
-    'renens': 'Renens',
-    'zurich': 'Zurich',
-    'basel': 'Basel',
-    'berne': 'Berne',
-    'lugano': 'Lugano',
-}
 
 
 def _check_token():
@@ -95,36 +49,30 @@ def _check_token():
     return hmac.compare_digest(provided, QA_TOKEN)
 
 
-def _safe_scrape(fn, portal_name, city_display, transaction):
-    """Wrapper qui attrape tout, log, et retourne (listings, elapsed_ms, error).
-    Un portail en échec ne doit PAS faire sauter l'endpoint entier (l'autre
-    portail peut toujours renvoyer son recall)."""
-    t0 = time.time()
-    try:
-        listings = fn(city=city_display, transaction=transaction, max_pages=1) or []
-    except Exception as e:
-        log.exception(f"listings-qa {portal_name}/{transaction}/{city_display} failed: {e}")
-        return [], round((time.time() - t0) * 1000, 1), str(e)[:200]
-    return listings, round((time.time() - t0) * 1000, 1), None
-
-
-def _recall(live_ids, db_ids, sample_n=5):
-    """|live ∩ db| / |live|, plus un échantillon d'IDs manquants pour debug."""
-    live_set = set(live_ids)
-    db_set = set(db_ids)
-    matched = live_set & db_set
-    missing = list(live_set - db_set)[:sample_n]
-    recall = round(len(matched) / len(live_set), 3) if live_set else None
-    return {
-        "live_count": len(live_set),
-        "matched_in_db": len(matched),
-        "recall": recall,
-        "missing_sample": missing,
-    }
+def _row_get(row, key, tuple_index):
+    """Tolère RealDictCursor (dict) ET cursor brut (tuple)."""
+    if isinstance(row, dict):
+        return row[key]
+    return row[tuple_index]
 
 
 @stats_bp.route('/api/stats/listings-qa', methods=['GET'])
 def listings_qa():
+    """Lecture pure du snapshot le plus récent pour une ville.
+
+    Deux chemins DB-transient :
+      - OperationalError / InterfaceError (SSL bad record mac sur Neon
+        cold-start) : 1 retry avec conn détruite via return_db(close=True),
+        ensuite 503 si ça repète (rare mais possible).
+      - Autre exception : 500 avec detail tronqué.
+
+    Note : on ne valide PLUS le city_slug côté endpoint (pas de
+    _CITY_SLUG_TO_DISPLAY ici — cf. qa_recall_worker.py). Un slug inconnu
+    produira 503 snapshot_not_ready, ce qui est le comportement attendu :
+    soit tu demandes une ville qui n'existe pas, soit le cron n'a pas
+    tourné dessus — dans les deux cas la réponse "pas de snapshot" est
+    appropriée.
+    """
     if not _check_token():
         return jsonify({"error": "unauthorized"}), 401
 
@@ -132,166 +80,82 @@ def listings_qa():
     if not city_slug:
         return jsonify({"error": "city required"}), 400
 
-    city_display = _CITY_SLUG_TO_DISPLAY.get(city_slug)
-    if not city_display:
-        return jsonify({"error": f"unknown city slug '{city_slug}'"}), 404
-
-    t_start = time.time()
-
-    # --- 1) Bonhome indexed (DB COUNT + breakdown) ------------------------
-    # v6.3.4 (P0 digue) : 1-shot retry si la 1re conn renvoie OperationalError
-    # ou InterfaceError (= SSL state corrompu côté Neon, cf fix _CACHE_CONN
-    # thread-local dans scrapers.py). La conn fautive est detruite avant retry.
-    bonhome = None
+    row = None
     last_err = None
     for attempt in (1, 2):
-        bonhome = {
-            "total": 0,
-            "by_transaction": {"location": 0, "achat": 0},
-            "by_source": {},
-            "ids_by_portal": {"homegate": set(), "immoscout24": set()},
-        }
         conn = None
+        conn_broken = False
         try:
             conn = get_db()
             cur = conn.cursor()
-            # Match sur city display OU slug (la colonne contient le nom d'affichage)
-            # pour tolérer les 2 orthographes "Neuchâtel" / "neuchatel".
             cur.execute("""
-                SELECT COALESCE(transaction,'') AS transaction,
-                       COUNT(*) AS n
-                FROM properties
-                WHERE is_active = TRUE
-                  AND LOWER(COALESCE(city,'')) IN (%s, %s)
-                GROUP BY transaction
-            """, (city_display.lower(), city_slug))
-            for r in cur.fetchall():
-                tx = r['transaction'] if isinstance(r, dict) else r[0]
-                n = r['n'] if isinstance(r, dict) else r[1]
-                if tx in ('location', 'achat'):
-                    bonhome["by_transaction"][tx] = int(n)
-                bonhome["total"] += int(n)
-
-            # Breakdown par source (via property_sources).
-            # NOTE (QA2) : la colonne source est stockée en PascalCase dans la DB
-            # ('Homegate', 'ImmoScout24', etc.). On normalise en lowercase côté
-            # sortie pour matcher la convention slug de l'endpoint.
-            cur.execute("""
-                SELECT ps.source, COUNT(DISTINCT p.id) AS n
-                FROM properties p
-                LEFT JOIN property_sources ps ON ps.property_id = p.id
-                WHERE p.is_active = TRUE
-                  AND LOWER(COALESCE(p.city,'')) IN (%s, %s)
-                GROUP BY ps.source
-            """, (city_display.lower(), city_slug))
-            for r in cur.fetchall():
-                src = r['source'] if isinstance(r, dict) else r[0]
-                n = r['n'] if isinstance(r, dict) else r[1]
-                if src:
-                    bonhome["by_source"][src.lower()] = int(n)
-
-            # IDs externes connus par portail (pour recall).
-            # LOWER(source) pour rattraper le mismatch 'ImmoScout24' vs 'immoscout24'.
-            cur.execute("""
-                SELECT LOWER(p.source) AS source, p.external_id
-                FROM properties p
-                WHERE p.is_active = TRUE
-                  AND LOWER(COALESCE(p.city,'')) IN (%s, %s)
-                  AND LOWER(p.source) IN ('homegate', 'immoscout24')
-                  AND p.external_id IS NOT NULL
-            """, (city_display.lower(), city_slug))
-            for r in cur.fetchall():
-                src = r['source'] if isinstance(r, dict) else r[0]
-                eid = r['external_id'] if isinstance(r, dict) else r[1]
-                if src in bonhome["ids_by_portal"]:
-                    bonhome["ids_by_portal"][src].add(str(eid))
-
-            # Aussi via property_sources (cross-portal dedup)
-            cur.execute("""
-                SELECT LOWER(ps.source) AS source, ps.external_id
-                FROM property_sources ps
-                JOIN properties p ON p.id = ps.property_id
-                WHERE p.is_active = TRUE
-                  AND LOWER(COALESCE(p.city,'')) IN (%s, %s)
-                  AND LOWER(ps.source) IN ('homegate', 'immoscout24')
-                  AND ps.external_id IS NOT NULL
-            """, (city_display.lower(), city_slug))
-            for r in cur.fetchall():
-                src = r['source'] if isinstance(r, dict) else r[0]
-                eid = r['external_id'] if isinstance(r, dict) else r[1]
-                if src in bonhome["ids_by_portal"]:
-                    bonhome["ids_by_portal"][src].add(str(eid))
-
+                SELECT id, captured_at, source_total_listings, our_total_listings,
+                       recall_pct, missing_listing_ids, raw_snapshot
+                FROM qa_recall_snapshots
+                WHERE city = %s
+                ORDER BY captured_at DESC
+                LIMIT 1
+            """, (city_slug,))
+            row = cur.fetchone()
             cur.close()
-            last_err = None
             break  # succès → sort du retry loop
         except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
-            # Typiquement : SSL bad record mac, server closed the connection,
-            # connection already closed. On détruit la conn (pas de putconn
-            # propre — elle est possiblement corrompue) et on retry UNE fois.
+            conn_broken = True
             last_err = e
-            log.warning(f"listings-qa DB transient error (attempt {attempt}/2): {e}")
-            if conn is not None:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-                conn = None
+            log.warning(f"listings-qa DB transient (attempt {attempt}/2): {e}")
             if attempt == 2:
-                log.exception("listings-qa DB query failed after retry")
-                return jsonify({"error": "db_query_failed", "detail": str(e)[:200]}), 500
-            # sinon : on boucle pour attempt 2
+                log.exception(f"listings-qa DB transient after retry: {e}")
+                return jsonify({
+                    "error": "db_transient",
+                    "detail": str(e)[:200],
+                }), 503
         except Exception as e:
             log.exception(f"listings-qa DB query failed: {e}")
-            return jsonify({"error": "db_query_failed", "detail": str(e)[:200]}), 500
+            return jsonify({
+                "error": "db_query_failed",
+                "detail": str(e)[:200],
+            }), 500
         finally:
             if conn is not None:
                 try:
-                    return_db(conn)
+                    return_db(conn, close=conn_broken)
                 except Exception:
                     pass
 
-    # --- 2) Scrape live Homegate + ImmoScout24 (vente + location) ---------
-    # QA1 : bypass du cache DB de _sb_get — sinon on rejoue du cache posé par
-    # le cron du matin et live_count=0 systématique (Homegate cassé hier).
-    # v6.3.4 (P0 sync-hang fix) : sb_budget borne le temps TOTAL des 4 appels.
-    # Budget épuisé → _sb_get retourne (0, '') → _safe_scrape renvoie [] avec
-    # error="budget exhausted" ; la réponse reste OK avec les comptages DB.
-    sources = {}
-    with sb_bypass_cache(), sb_budget(LISTINGS_QA_SCRAPE_BUDGET_S):
-        for portal_name, scraper_fn in (
-            ('homegate', scrape_homegate),
-            ('immoscout24', scrape_immoscout),
-        ):
-            db_ids = bonhome["ids_by_portal"].get(portal_name, set())
-            portal_block = {}
-            for transaction in ('location', 'achat'):
-                listings, elapsed_ms, err = _safe_scrape(
-                    scraper_fn, portal_name, city_display, transaction
-                )
-                live_ids = [str(l.get('external_id')) for l in listings if l.get('external_id')]
-                stats = _recall(live_ids, db_ids)
-                stats["elapsed_ms"] = elapsed_ms
-                if err:
-                    stats["error"] = err
-                portal_block[transaction] = stats
-            sources[portal_name + '_live'] = portal_block
+    if not row:
+        return jsonify({
+            "error": "snapshot_not_ready",
+            "message": (
+                "Snapshot pas encore généré pour cette ville. "
+                "Prochaine exécution du cron à 04:00 UTC."
+            ),
+            "city": city_slug,
+        }), 503
 
-    total_elapsed_ms = round((time.time() - t_start) * 1000, 1)
+    captured_at   = _row_get(row, 'captured_at',           1)
+    source_total  = _row_get(row, 'source_total_listings', 2)
+    our_total     = _row_get(row, 'our_total_listings',    3)
+    recall_pct    = _row_get(row, 'recall_pct',            4)
+    missing       = _row_get(row, 'missing_listing_ids',   5)
+    breakdown     = _row_get(row, 'raw_snapshot',          6)
 
-    # Ne pas leak les sets dans la réponse
-    bonhome_out = {
-        "total": bonhome["total"],
-        "by_transaction": bonhome["by_transaction"],
-        "by_source": bonhome["by_source"],
-    }
+    # captured_at = TIMESTAMPTZ → datetime tz-aware
+    now = datetime.now(timezone.utc)
+    try:
+        age_hours = round((now - captured_at).total_seconds() / 3600, 1)
+    except Exception:
+        age_hours = None
 
     return jsonify({
-        "env": os.environ.get('FLASK_ENV', 'development'),
         "city": city_slug,
-        "city_display": city_display,
-        "bonhome_indexed": bonhome_out,
-        "sources": sources,
-        "elapsed_ms": total_elapsed_ms,
-        "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "captured_at": captured_at.isoformat() if captured_at else None,
+        "snapshot_age_hours": age_hours,
+        "source_total_listings": int(source_total) if source_total is not None else 0,
+        "our_total_listings": int(our_total) if our_total is not None else 0,
+        # Decimal → float pour JSON-sérialisable
+        "recall_pct": float(recall_pct) if recall_pct is not None else None,
+        # missing et breakdown sont des JSONB, psycopg2 les renvoie déjà
+        # parsés en list/dict Python.
+        "missing_listing_ids": missing or [],
+        "breakdown": breakdown or {},
     }), 200

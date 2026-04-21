@@ -39,6 +39,31 @@ services:
           name: lou-db
           property: connectionString
 
+  # v6.4.0 — QA Recall Snapshot Cron. Alimente qa_recall_snapshots pour
+  # l'endpoint /api/stats/listings-qa (lecture pure, < 100 ms).
+  # Remplace le scrape synchrone de l'endpoint (qui timeout en 502 sur
+  # Neuchâtel/Boudry depuis pré-beta).
+  - type: cron
+    name: lou-qa-recall
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    schedule: "0 4 * * *"  # Every day at 04h UTC = 06h CEST (summer) / 05h CET (winter)
+    startCommand: python3 cron_job_qa_recall.py
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: lou-db
+          property: connectionString
+      # SCRAPINGBEE_API_KEY : défini manuellement dans le dashboard Render
+      # (même valeur que lou-scraper). sync:false évite le leak dans git.
+      - key: SCRAPINGBEE_API_KEY
+        sync: false
+      # QA_RECALL_CITIES : optionnel, défaut en code =
+      # "peseux,neuchatel,la-chaux-de-fonds,lausanne,geneve".
+      # Override dans le dashboard Render si besoin d'étendre la liste.
+      - key: QA_RECALL_CITIES
+        sync: false
+
 databases:
   - name: lou-db
     plan: free  # Upgrade to starter ($7/mo) for production
