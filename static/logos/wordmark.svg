@@ -5,8 +5,8 @@
     
   </defs>
   
-  <text class="wm-text" x="0" y="64" font-size="72" fill="#1A2332">bonhome</text>
-  <text class="wm-text" x="305" y="64" font-size="72" fill="#6B8A74">.</text>
+  <text class="wm-text" x="0" y="64" font-size="72" fill="#1E2A44">bonhome</text>
+  <text class="wm-text" x="305" y="64" font-size="72" fill="#2A6670">.</text>
   
-  <path d="M175 18 L190 6 L205 18" stroke="#6B8A74" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path>
+  <path d="M175 18 L190 6 L205 18" stroke="#2A6670" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path>
 </svg>

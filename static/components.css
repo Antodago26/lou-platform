@@ -65,7 +65,11 @@
   font-variation-settings: "opsz" 144;
 }
 
-/* ── 3) Wordmark — chevron + point en SAUGE (signature) ───────────────────── */
+/* ── 3) Wordmark — chevron + point en TEAL (light), SAUGE+TERRACOTTA (dark) ──
+   Palette 04 NCS 2026 :
+   - Sur fond clair (paper) : chevron + point = teal profond #2A6670
+   - Sur fond foncé (teal-deep, ink) : ajouter classe .wordmark--on-dark
+     → chevron = sauge #8FA780, point = terracotta #C96A44 */
 .wordmark {
   position: relative;
   font-family: var(--bh-font-serif);
@@ -88,13 +92,18 @@
   width: 0.55em;
   height: 0.33em;
   fill: none;
-  stroke: var(--bh-sage);       /* ex-teal → sage (règle DA) */
+  stroke: var(--bh-teal);       /* light bg : teal profond */
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
   pointer-events: none;
 }
-.wordmark__point { color: var(--bh-sage); }  /* ex-teal → sage */
+.wordmark__point { color: var(--bh-teal); }  /* light bg : teal profond */
+
+/* Variante fond foncé (nav teal-deep, footer, hero dark) */
+.wordmark--on-dark { color: var(--bh-paper); }
+.wordmark--on-dark .wordmark__chevron { stroke: var(--bh-sage); }
+.wordmark--on-dark .wordmark__point   { color: var(--bh-terracotta); }
 
 /* Tailles courantes (multiplicateur via font-size) */
 .wordmark--sm { font-size: 20px; }

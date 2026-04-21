@@ -6,32 +6,32 @@
 
 :root {
   /* ── Couleurs — surfaces ────────────────────────────────────────────────── */
-  --bh-paper:         #F5F1EA;   /* fond principal (pages) */
-  --bh-paper-soft:    #EDE8DF;   /* fond sections alternées */
-  --bh-paper-sunk:    #E4DED2;   /* fond cartes enfoncées / inputs */
+  --bh-paper:         #F7F4EE;   /* fond principal (pages) */
+  --bh-paper-soft:    #EFEAE0;   /* fond sections alternées */
+  --bh-paper-sunk:    #E6E0D4;   /* fond cartes enfoncées / inputs */
   --bh-paper-raised:  #FDFBF6;   /* cartes élevées / modals */
 
   /* ── Couleurs — encres (texte) ──────────────────────────────────────────── */
-  --bh-ink:           #1A2332;   /* Bleu d'encre — titres, corps principal */
+  --bh-ink:           #1E2A44;   /* Bleu d'encre — titres, corps principal */
   --bh-ink-soft:      #4A5568;   /* sous-titres, labels */
   --bh-ink-mute:      #6B7280;   /* métadonnées, captions */
   --bh-ink-disabled:  #9AA3B2;
 
-  /* ── Couleurs — ancres de marque ────────────────────────────────────────── */
-  --bh-teal:          #1F6B6E;   /* Couleur de l'année 2026 — ancre principale */
-  --bh-teal-deep:     #174E51;   /* hover / pressed */
-  --bh-teal-soft:     #A8C9CA;   /* fonds doux, chips */
+  /* ── Couleurs — ancres de marque (Palette 04 · NCS 2026) ───────────────── */
+  --bh-teal:          #2A6670;   /* Teal profond — ancre · CTA · chevron wordmark */
+  --bh-teal-deep:     #1A4650;   /* Label · texte appuyé · hover/pressed */
+  --bh-teal-soft:     #CEDFE1;   /* Teal soft — fond bulles Lou */
   --bh-teal-tint:     #E3EEEE;   /* fond sub-section */
 
-  --bh-sage:          #6B8A74;   /* chevron wordmark, accents secondaires */
-  --bh-sage-deep:     #4F6A58;
-  --bh-sage-soft:     #B8C9B9;
-  --bh-sage-tint:     #E4EBDF;
+  --bh-sage:          #8FA780;   /* Vert sauge — nature · tags · chevron sur dark */
+  --bh-sage-deep:     #5F7360;
+  --bh-sage-soft:     #C2D1B3;
+  --bh-sage-tint:     #E7EDDD;
 
-  --bh-terracotta:    #C15A3E;   /* signal chaleur, highlight, like */
-  --bh-terracotta-deep: #9A4530;
-  --bh-terracotta-soft: #E4B5A3;
-  --bh-terracotta-tint: #F2DDD1;
+  --bh-terracotta:    #C96A44;   /* Signal (≤ 1/écran) · point wordmark sur dark */
+  --bh-terracotta-deep: #9A4F30;
+  --bh-terracotta-soft: #E8B9A3;
+  --bh-terracotta-tint: #F5DDCE;
 
   /* ── Couleurs — lignes & séparateurs ────────────────────────────────────── */
   --bh-line:          #D4CEC2;   /* borders standards */
@@ -42,7 +42,7 @@
   --bh-success:       #4F6A58;   /* = sage-deep */
   --bh-warning:       #C79A3E;
   --bh-error:         #9A4530;   /* = terracotta-deep */
-  --bh-info:          #1F6B6E;   /* = teal */
+  --bh-info:          #2A6670;   /* = teal */
 
   /* ── Couleurs sémantiques (recommandé d'utiliser ces alias) ─────────────── */
   --bh-bg:            var(--bh-paper);
@@ -122,11 +122,11 @@
   --bh-radius-pill:   999px;
 
   /* ── Shadows ───────────────────────────────────────────────────────────── */
-  --bh-shadow-xs:     0 1px 2px rgba(26, 35, 50, 0.04);
-  --bh-shadow-sm:     0 2px 8px rgba(26, 35, 50, 0.06);
-  --bh-shadow-md:     0 6px 20px rgba(26, 35, 50, 0.08);
-  --bh-shadow-lg:     0 16px 40px rgba(26, 35, 50, 0.12);
-  --bh-shadow-inset:  inset 0 1px 2px rgba(26, 35, 50, 0.06);
+  --bh-shadow-xs:     0 1px 2px rgba(30, 42, 68, 0.04);
+  --bh-shadow-sm:     0 2px 8px rgba(30, 42, 68, 0.06);
+  --bh-shadow-md:     0 6px 20px rgba(30, 42, 68, 0.08);
+  --bh-shadow-lg:     0 16px 40px rgba(30, 42, 68, 0.12);
+  --bh-shadow-inset:  inset 0 1px 2px rgba(30, 42, 68, 0.06);
 
   /* ── Transitions ───────────────────────────────────────────────────────── */
   --bh-ease-out:      cubic-bezier(0.22, 1, 0.36, 1);
@@ -151,7 +151,7 @@
   --bh-z-toast:       400;
 
   /* ── Focus ring ────────────────────────────────────────────────────────── */
-  --bh-focus-ring:    0 0 0 3px rgba(31, 107, 110, 0.35);   /* teal translucide */
+  --bh-focus-ring:    0 0 0 3px rgba(42, 102, 112, 0.35);   /* teal translucide */
 }
 
 /* ── Dark mode (optionnel, pour plus tard) ─────────────────────────────────── */

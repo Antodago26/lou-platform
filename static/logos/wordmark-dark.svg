@@ -4,7 +4,7 @@
   <defs>
     
   </defs>
-  <text class="wm-text" x="0" y="64" font-size="72" fill="#F5F1EA">bonhome</text>
-  <text class="wm-text" x="305" y="64" font-size="72" fill="#B8C9B9">.</text>
-  <path d="M175 18 L190 6 L205 18" stroke="#B8C9B9" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path>
+  <text class="wm-text" x="0" y="64" font-size="72" fill="#F7F4EE">bonhome</text>
+  <text class="wm-text" x="305" y="64" font-size="72" fill="#8FA780">.</text>
+  <path d="M175 18 L190 6 L205 18" stroke="#8FA780" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path>
 </svg>

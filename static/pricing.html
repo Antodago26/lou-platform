@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tarifs — bonhome.</title>
   <meta name="description" content="Offres bonhome. : gratuit, Premium à 9 CHF/mois et Pro à 29 CHF/mois. Trouvez votre logement en Suisse romande.">
-  <meta name="theme-color" content="#1F6B6E">
+  <meta name="theme-color" content="#2A6670">
   <link rel="icon" type="image/svg+xml" href="/static/logos/favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -31,7 +31,7 @@
     .nav-toggle[aria-expanded="true"] span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
     @media (max-width: 768px) {
       .nav-toggle { display: flex; }
-      .nav-links { display: none; position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; align-items: stretch; gap: 0; padding: 12px 5% 20px; background: var(--bh-paper-raised); border-top: 1px solid var(--bh-line-soft); box-shadow: 0 12px 24px rgba(26, 35, 50,.08); z-index: 50; }
+      .nav-links { display: none; position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; align-items: stretch; gap: 0; padding: 12px 5% 20px; background: var(--bh-paper-raised); border-top: 1px solid var(--bh-line-soft); box-shadow: 0 12px 24px rgba(30, 42, 68,.08); z-index: 50; }
       .nav-links.open { display: flex; }
       .nav-links a { padding: 14px 8px; border-bottom: 1px solid var(--bh-line-soft); font-size: 16px; }
       .nav-links a:last-child { border-bottom: 0; }
@@ -47,8 +47,8 @@
     @media (max-width: 900px) { .plans { grid-template-columns: 1fr; } }
 
     .plan { background: var(--bh-paper-raised); border: 1px solid var(--bh-line); border-radius: 16px; padding: 32px 28px; position: relative; display: flex; flex-direction: column; transition: transform .2s, box-shadow .2s; }
-    .plan:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(26, 35, 50,.06); }
-    .plan.featured { border: 2px solid var(--bh-teal); box-shadow: 0 8px 32px rgba(31, 107, 110,.12); transform: scale(1.02); }
+    .plan:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(30, 42, 68,.06); }
+    .plan.featured { border: 2px solid var(--bh-teal); box-shadow: 0 8px 32px rgba(42, 102, 112,.12); transform: scale(1.02); }
     .plan.featured:hover { transform: scale(1.02) translateY(-2px); }
 
     .plan-badge { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); background: var(--bh-teal); color: var(--bh-paper-raised); font-size: 12px; font-weight: 700; padding: 6px 16px; border-radius: 999px; letter-spacing: .5px; text-transform: uppercase; }
@@ -68,7 +68,7 @@
 
     .plan-cta { display: block; text-align: center; padding: 13px 24px; border-radius: 10px; font-weight: 600; font-size: 15px; transition: transform .15s; }
     .plan-cta.primary { background: var(--bh-teal); color: var(--bh-paper-raised); }
-    .plan-cta.primary:hover { transform: translateY(-1px); background: #174E51; }
+    .plan-cta.primary:hover { transform: translateY(-1px); background: var(--bh-teal-deep); }
     .plan-cta.secondary { background: var(--bh-line-soft); color: var(--bh-ink); }
     .plan-cta.secondary:hover { background: var(--bh-line); }
     .plan-cta.disabled { background: var(--bh-line-soft); color: var(--bh-ink-mute); cursor: not-allowed; pointer-events: none; }
@@ -78,7 +78,7 @@
     .faq { max-width: 820px; margin: 0 auto; padding: 30px 5% 80px; }
     .faq h2 { font-size: 32px; text-align: center; margin-bottom: 30px; }
     details { background: var(--bh-paper-soft); border: 1px solid var(--bh-line-soft); border-radius: 12px; padding: 18px 22px; margin-bottom: 12px; transition: all .2s; }
-    details[open] { background: var(--bh-paper-raised); border-color: var(--bh-teal); box-shadow: 0 4px 16px rgba(31, 107, 110,.08); }
+    details[open] { background: var(--bh-paper-raised); border-color: var(--bh-teal); box-shadow: 0 4px 16px rgba(42, 102, 112,.08); }
     summary { font-weight: 600; font-size: 16px; color: var(--bh-ink); cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; }
     summary::-webkit-details-marker { display: none; }
     summary::after { content: '+'; font-size: 22px; color: var(--bh-teal); font-weight: 400; transition: transform .2s; }
