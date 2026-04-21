@@ -26,12 +26,18 @@ import psycopg2
 from flask import Blueprint, request, jsonify
 
 from db import get_db, return_db
-from scrapers import scrape_homegate, scrape_immoscout, sb_bypass_cache
+from scrapers import scrape_homegate, scrape_immoscout, sb_bypass_cache, sb_budget
 
 log = logging.getLogger('lou-app')
 stats_bp = Blueprint('stats', __name__)
 
 QA_TOKEN = os.environ.get('QA_TOKEN', '').strip()
+
+# v6.3.4 (P0 sync-hang fix) : borne le temps mural total des 4 appels scraper
+# (homegate+immoscout × location+achat) dans listings_qa. Sans ça, un portail
+# lent (Homegate sur petites communes NE) tient un worker gunicorn 300s et
+# l'edge Render coupe en 502 après 90s. Ajustable via env sans redeploy.
+LISTINGS_QA_SCRAPE_BUDGET_S = float(os.environ.get('LISTINGS_QA_SCRAPE_BUDGET_S', '60'))
 
 # Slug → display name pour les scrapers (qui attendent le nom avec accents).
 # Limité aux villes du beta + quelques grandes villes. Étendre au besoin.
@@ -248,8 +254,11 @@ def listings_qa():
     # --- 2) Scrape live Homegate + ImmoScout24 (vente + location) ---------
     # QA1 : bypass du cache DB de _sb_get — sinon on rejoue du cache posé par
     # le cron du matin et live_count=0 systématique (Homegate cassé hier).
+    # v6.3.4 (P0 sync-hang fix) : sb_budget borne le temps TOTAL des 4 appels.
+    # Budget épuisé → _sb_get retourne (0, '') → _safe_scrape renvoie [] avec
+    # error="budget exhausted" ; la réponse reste OK avec les comptages DB.
     sources = {}
-    with sb_bypass_cache():
+    with sb_bypass_cache(), sb_budget(LISTINGS_QA_SCRAPE_BUDGET_S):
         for portal_name, scraper_fn in (
             ('homegate', scrape_homegate),
             ('immoscout24', scrape_immoscout),

@@ -334,9 +334,11 @@ if os.environ.get('DATABASE_URL', ''):
 
     def _rescore_all_on_boot():
         import time
+        import psycopg2 as _pg
         time.sleep(5)  # let gunicorn finish booting
         db = None
         lock_acquired = False
+        conn_broken = False
         try:
             from scoring_engine import score_property
             db = get_db()
@@ -412,11 +414,18 @@ if os.environ.get('DATABASE_URL', ''):
                 db.commit()
                 log.info(f"Boot rescore: {len(props)} properties for profile {prof['id']}")
             log.info("Boot rescore complete")
+        except (_pg.OperationalError, _pg.InterfaceError) as e:
+            # SSL bad record mac, server closed connection, etc. → conn pourrie.
+            # On flag pour forcer close=True : sinon return_db la remet dans le
+            # pool et le prochain thread qui l'emprunte retombe sur la même erreur.
+            conn_broken = True
+            log.error(f"Boot rescore DB transport error (connection will be closed): {e}", exc_info=True)
         except Exception as e:
             log.error(f"Boot rescore error: {e}", exc_info=True)
         finally:
             # Release advisory lock (auto-released sinon à la fin de session PG).
-            if lock_acquired and db is not None:
+            # Skip si la conn est cassée : l'unlock va juste re-échouer.
+            if lock_acquired and db is not None and not conn_broken:
                 try:
                     cur2 = db.cursor()
                     cur2.execute("SELECT pg_advisory_unlock(%s)", (BOOT_RESCORE_LOCK_KEY,))
@@ -426,7 +435,7 @@ if os.environ.get('DATABASE_URL', ''):
                     pass
             if db is not None:
                 try:
-                    return_db(db)
+                    return_db(db, close=conn_broken)
                 except Exception:
                     pass
 

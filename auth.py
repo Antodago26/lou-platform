@@ -546,6 +546,7 @@ def update_profile():
                 except Exception as e:
                     log.error(f"bg_scrape_and_score: get_db failed: {e}", exc_info=True)
                     return
+                conn_broken = False
                 try:
                     # Only scrape cities that are genuinely NEW (not already in the profile)
                     if scrape_list:
@@ -609,6 +610,11 @@ def update_profile():
                         scored += 1
                     bg_conn.commit()
                     log.info(f"Profile update scoring: {scored} properties scored for profile {pid}")
+                except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+                    # Conn TLS pourrie (SSL bad record mac, etc.) → force close
+                    # pour ne pas empoisonner le pool.
+                    conn_broken = True
+                    log.error(f"Profile update bg DB transport error: {e}", exc_info=True)
                 except Exception as e:
                     log.error(f"Profile update bg error: {e}", exc_info=True)
                     try:
@@ -618,7 +624,7 @@ def update_profile():
                 finally:
                     try: bg_cur.close()
                     except Exception: pass
-                    try: return_db(bg_conn)
+                    try: return_db(bg_conn, close=conn_broken)
                     except Exception: pass
 
             thread = threading.Thread(target=_bg_scrape_and_score, args=(all_cities, cities_to_scrape, transaction, profile_id, request.user_id))

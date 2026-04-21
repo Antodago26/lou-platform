@@ -78,15 +78,26 @@ def get_db():
     return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
 
 
-def return_db(conn):
-    """Return a connection to the pool (or close it if pooling disabled / broken)."""
+def return_db(conn, close=False):
+    """Return a connection to the pool (or close it if pooling disabled / broken).
+
+    v6.3.4 (P0 SSL-poisoning fix) : l'appelant peut forcer `close=True` quand
+    il a intercepté une OperationalError/InterfaceError — sinon une conn avec
+    un stream TLS pourri (ex. "SSL bad record mac") re-rentre dans le pool
+    (conn.closed reste parfois 0 après l'erreur) et empoisonne le prochain
+    thread qui la récupère. On auto-force aussi `close=True` si le rollback
+    lui-même lève : c'est la signature d'une conn cassée côté transport."""
     if conn is None:
         return
-    try:
-        if not conn.closed:
-            conn.rollback()
-    except Exception:
-        pass
+    if not close:
+        try:
+            if conn.closed:
+                close = True
+            else:
+                conn.rollback()
+        except Exception:
+            # Rollback KO = conn cassée (SSL/socket). On la détruit.
+            close = True
     pool = _db_pool
     if pool is None:
         try:
@@ -95,7 +106,7 @@ def return_db(conn):
             pass
         return
     try:
-        broken = conn.closed or getattr(conn, 'status', None) == psycopg2.extensions.STATUS_IN_TRANSACTION
+        broken = close or conn.closed or getattr(conn, 'status', None) == psycopg2.extensions.STATUS_IN_TRANSACTION
         pool.putconn(conn, close=bool(broken))
     except Exception as e:
         log.debug(f"pool.putconn() failed, closing connection: {e}")

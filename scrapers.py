@@ -300,6 +300,7 @@ def _smart_get(url, render_js=False, try_direct=False):
 # live d'un portail — sinon on rejoue du cache post-cron et live_count=0.
 import threading as _threading
 _SB_CONTEXT = _threading.local()
+_SB_BUDGET_TLS = _threading.local()
 
 def _sb_bypass_cache_active():
     return bool(getattr(_SB_CONTEXT, 'bypass_cache', False))
@@ -316,11 +317,44 @@ class sb_bypass_cache:
         _SB_CONTEXT.bypass_cache = self._prev
 
 
+class sb_budget:
+    """Context manager : borne le temps mural TOTAL des appels _sb_get sur ce
+    thread. Budget épuisé → _sb_get retourne (0, '') sans crédit ni attente.
+    Utilisé par les routes synchrones (listings_qa) pour fail-fast plutôt que
+    bloquer un worker 300s sur un portail lent. Re-entrant safe (stacké)."""
+    def __init__(self, seconds):
+        self.seconds = float(seconds)
+    def __enter__(self):
+        self._prev = getattr(_SB_BUDGET_TLS, 'deadline', None)
+        _SB_BUDGET_TLS.deadline = time.monotonic() + self.seconds
+        return self
+    def __exit__(self, *_):
+        _SB_BUDGET_TLS.deadline = self._prev
+
+
+def _sb_remaining():
+    """Secondes restantes dans le sb_budget du thread, ou None si inactif."""
+    deadline = getattr(_SB_BUDGET_TLS, 'deadline', None)
+    if deadline is None:
+        return None
+    return deadline - time.monotonic()
+
+
 def _sb_get(url, render_js=False):
     """Fetch a URL via ScrapingBee. Returns (status_code, html_text).
     If the URL was scraped successfully less than SCRAPE_CACHE_TTL_HOURS ago,
     returns (304, '') without spending a credit — callers treat it as an
-    empty/terminal page. Bypassed if `sb_bypass_cache` context active."""
+    empty/terminal page. Bypassed if `sb_bypass_cache` context active.
+
+    Si un `sb_budget` est actif sur ce thread, borne chaque requests.get au
+    temps restant (tuple connect/read) et coupe retries + sleeps dès que le
+    budget passe sous le seuil — pour éviter de tenir un worker gunicorn
+    pendant 300s sur un portail lent (cas /api/stats/listings-qa)."""
+    remaining = _sb_remaining()
+    if remaining is not None and remaining <= 0:
+        log.info(f"[ScrapingBee] budget exhausted, skipping {url[:60]}...")
+        return 0, ''
+
     # Cache short-circuit — save credits on URLs we already hit recently
     if not _sb_bypass_cache_active() and _cache_is_fresh(url):
         log.info(f"[cache-hit] skip {url[:80]}... (< {SCRAPE_CACHE_TTL_HOURS}h)")
@@ -343,6 +377,9 @@ def _sb_get(url, render_js=False):
     #   - 500/502/504 : retry simple (3s).
     #   - 403/429 : retry avec premium_proxy=true (consomme +10 crédits mais
     #     passe les protections anti-bot qui ont caused le block).
+    # v6.3.4 (P0 sync-hang fix) : avec sb_budget actif, 2 tentatives et 1s
+    # de sleep — on préfère rendre la main à l'appelant vite que d'épuiser
+    # le budget sur un portail bloqué.
     def _build_params(premium=False):
         p = {
             'api_key': SCRAPINGBEE_KEY,
@@ -361,24 +398,52 @@ def _sb_get(url, render_js=False):
     params = _build_params(premium=False)
     premium_retried = False
 
-    for attempt in range(3):
+    has_budget = remaining is not None
+    max_attempts = 2 if has_budget else 3
+    sleep_5xx = 1 if has_budget else 3
+    sleep_block = 1 if has_budget else 2
+    # Connect timeout court — un DNS/TCP lent ne doit pas consommer toute la
+    # fenêtre read. Passe en tuple (connect, read) à requests pour borner les
+    # deux indépendamment : sinon timeout=N ne s'applique qu'au read.
+    connect_to = 5
+
+    for attempt in range(max_attempts):
+        remaining = _sb_remaining()
+        if remaining is not None and remaining <= 0:
+            log.info(f"[ScrapingBee] budget exhausted mid-retry, aborting {url[:60]}...")
+            return 0, ''
+        if remaining is not None:
+            # Laisse 0.5s de marge pour que le budget expire proprement AVANT
+            # que requests ne lève un Timeout (évite l'exception quand on aurait
+            # pu juste retourner (0, '')).
+            read_to = max(5, min(175, remaining - connect_to - 0.5))
+        else:
+            read_to = 175
         try:
-            r = requests.get(SCRAPINGBEE_URL, params=params, timeout=180)
+            r = requests.get(SCRAPINGBEE_URL, params=params, timeout=(connect_to, read_to))
             r.encoding = 'utf-8'  # Force UTF-8 to avoid Latin-1 misdetection
             log.info(f"[ScrapingBee] {url[:60]}... → HTTP {r.status_code} ({len(r.text)} bytes)")
 
             # 5xx : retry stealth
-            if r.status_code in (500, 502, 504) and attempt < 2:
-                log.warning(f"[ScrapingBee] Server error {r.status_code}, retrying in 3s...")
-                time.sleep(3)
+            if r.status_code in (500, 502, 504) and attempt < max_attempts - 1:
+                remaining = _sb_remaining()
+                if remaining is not None and remaining < sleep_5xx:
+                    log.warning(f"[ScrapingBee] Server error {r.status_code}, budget<{sleep_5xx}s, giving up")
+                    return r.status_code, r.text
+                log.warning(f"[ScrapingBee] Server error {r.status_code}, retrying in {sleep_5xx}s...")
+                time.sleep(sleep_5xx)
                 continue
 
             # 403/429 : retry avec premium_proxy (anti-bot contourné)
-            if r.status_code in (403, 429) and not premium_retried and attempt < 2:
+            if r.status_code in (403, 429) and not premium_retried and attempt < max_attempts - 1:
+                remaining = _sb_remaining()
+                if remaining is not None and remaining < sleep_block:
+                    log.warning(f"[ScrapingBee] Blocked ({r.status_code}), budget<{sleep_block}s, giving up")
+                    return r.status_code, r.text
                 log.warning(f"[ScrapingBee] Blocked ({r.status_code}), retrying with premium_proxy")
                 premium_retried = True
                 params = _build_params(premium=True)
-                time.sleep(2)
+                time.sleep(sleep_block)
                 continue
 
             if r.status_code == 200 and r.text:
@@ -386,14 +451,16 @@ def _sb_get(url, render_js=False):
             return r.status_code, r.text
         except requests.exceptions.Timeout:
             log.error(f"[ScrapingBee] TIMEOUT fetching {url} (attempt {attempt+1})")
-            if attempt < 2:
-                time.sleep(3)
+            if attempt < max_attempts - 1:
+                remaining = _sb_remaining()
+                if remaining is not None and remaining < sleep_5xx:
+                    return 0, ''
+                time.sleep(sleep_5xx)
                 continue
             return 0, ''
         except Exception as e:
             log.error(f"[ScrapingBee] Error fetching {url}: {e}")
             return 0, ''
-    return 0, ''
     return 0, ''
 
 

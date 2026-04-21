@@ -65,8 +65,10 @@ def api_scrape():
     def _bg_scrape(city_list, tx, uid):
         from scrapers import scrape_all, save_to_db
         from scoring_engine import score_property
+        import psycopg2 as _pg
         bg_conn = get_db()
         bg_cur = bg_conn.cursor()
+        conn_broken = False
         try:
             total_saved = 0
             for c in city_list:
@@ -141,11 +143,16 @@ def api_scrape():
                     bg_conn.rollback()
                 except Exception:
                     pass
+        except (_pg.OperationalError, _pg.InterfaceError) as e:
+            # Conn TLS pourrie → force close pour ne pas empoisonner le pool
+            conn_broken = True
+            log.error(f"User scrape bg DB transport error: {e}", exc_info=True)
         except Exception as e:
             log.error(f"User scrape bg error: {e}", exc_info=True)
         finally:
-            bg_cur.close()
-            return_db(bg_conn)
+            try: bg_cur.close()
+            except Exception: pass
+            return_db(bg_conn, close=conn_broken)
 
     thread = threading.Thread(target=_bg_scrape, args=(cities, transaction, user_id))
     thread.daemon = True
@@ -500,9 +507,11 @@ def api_cron_scrape():
     def _background_scrape(targets, profiles_data):
         from scrapers import scrape_all, save_to_db
         from scoring_engine import score_property
+        import psycopg2 as _pg
 
         bg_conn = get_db()
         bg_cur = bg_conn.cursor()
+        conn_broken = False
         try:
             total_saved = 0
             for city, transaction in targets:
@@ -577,6 +586,9 @@ def api_cron_scrape():
 
             log.info(f"Cron complete: saved={total_saved}, scored={scored_total}")
 
+        except (_pg.OperationalError, _pg.InterfaceError) as e:
+            conn_broken = True
+            log.error(f"Cron background DB transport error: {e}", exc_info=True)
         except Exception as e:
             log.error(f"Cron background error: {e}", exc_info=True)
             try:
@@ -584,8 +596,9 @@ def api_cron_scrape():
             except Exception:
                 pass
         finally:
-            bg_cur.close()
-            return_db(bg_conn)
+            try: bg_cur.close()
+            except Exception: pass
+            return_db(bg_conn, close=conn_broken)
 
     thread = threading.Thread(target=_background_scrape, args=(scrape_targets, profiles))
     thread.daemon = True
