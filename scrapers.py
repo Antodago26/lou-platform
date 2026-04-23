@@ -814,12 +814,17 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=4):
     results = []
     tx = "rent" if transaction == "location" else "buy"
     slug = _normalize_city(city).replace(' ', '-')
-    # Add canton suffix for ambiguous city names (e.g., colombier-ne, hauterive-ne)
+    # Add canton suffix for ambiguous city names (e.g., colombier-ne, hauterive-ne).
+    # v6.4.2 BUG B : `saint-blaise` retiré. Homegate 404 sur city-saint-blaise-ne
+    # (observé 22/04 sur le cron QA) — il n'y a qu'un Saint-Blaise en CH, donc
+    # pas de disambiguation nécessaire. Les autres entrées restent : colombier
+    # (VD/NE), hauterive (NE/FR), corcelles-cormondrèche (variantes d'encodage).
     canton = CITY_CANTONS.get(city.lower(), '')
-    if canton and slug in ('colombier', 'hauterive', 'saint-blaise', 'corcelles-cormondrèche', 'corcelles-cormondr', 'corcelles-cormondrche'):
+    if canton and slug in ('colombier', 'hauterive', 'corcelles-cormondrèche', 'corcelles-cormondr', 'corcelles-cormondrche'):
         slug = f"{slug}-{canton.lower()}"
 
     consecutive_errors = 0
+    consecutive_empty = 0   # v6.4.2 BUG A : pages HTTP 200 avec 0 listings extraits
     for page in range(1, max_pages + 1):
         url = f"https://www.homegate.ch/{tx}/real-estate/city-{slug}/matching-list?ep={page}"
         # render_js=False → 1 credit instead of 5. Homegate's SSR payload contains all listings.
@@ -828,11 +833,16 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=4):
         if status != 200:
             log.warning(f"[Homegate] Page {page}: HTTP {status}")
             consecutive_errors += 1
-            if consecutive_errors >= 2:
-                log.warning(f"[Homegate] 2 consecutive errors, stopping pagination")
+            if consecutive_empty + consecutive_errors >= 2:
+                log.warning(f"[Homegate] stopping pagination: {consecutive_empty} empty + {consecutive_errors} errors consecutive")
                 break
             continue
         consecutive_errors = 0
+
+        # v6.4.2 BUG A : capture len(results) avant parsing pour détecter les
+        # pages HTTP 200 qui n'ont produit aucun listing (JSON vide, cards=[],
+        # ou cards présentes mais toutes fail de parse). Signal fin de pagination.
+        results_before_page = len(results)
 
         soup = BeautifulSoup(html, 'html.parser')
 
@@ -843,6 +853,7 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=4):
         if json_listings:
             log.info(f"[Homegate] Page {page}: {len(json_listings)} listings via __NEXT_DATA__")
             results.extend(json_listings)
+            consecutive_empty = 0   # v6.4.2 BUG A : reset sur page productive
             time.sleep(1)
             continue
 
@@ -975,6 +986,23 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=4):
             except Exception as e:
                 log.debug(f"[Homegate] Card parse error: {e}")
 
+        # v6.4.2 BUG A : empty-page detection. HTTP 200 + 0 listings extraits
+        # = fin de pagination (ou layout portail cassé). Sans ça, le scraper
+        # brûlait 10-18 pages vides avant de stop sur "2 consecutive errors",
+        # cramait 300s de sb_budget → ImmoScout n'était jamais appelé.
+        # Page 1 vide → ville inconnue du portail, break immédiat.
+        # Sinon break dès que empty+errors >= 2 consécutifs.
+        if len(results) == results_before_page:
+            consecutive_empty += 1
+            if page == 1:
+                log.info(f"[Homegate] Page 1 empty → ville sans résultat sur ce portail, pagination stoppée")
+                break
+            if consecutive_empty + consecutive_errors >= 2:
+                log.info(f"[Homegate] stopping pagination: {consecutive_empty} empty + {consecutive_errors} errors consecutive")
+                break
+        else:
+            consecutive_empty = 0
+
         time.sleep(1)
 
     log.info(f"[Homegate] Total: {len(results)} listings")
@@ -991,11 +1019,17 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=4):
     tx = "rent" if transaction == "location" else "buy"
     slug = _normalize_city(city).replace(' ', '-')
     canton = CITY_CANTONS.get(city.lower(), '')
-    # Add canton suffix for disambiguation (e.g., colombier-ne)
-    if canton and slug in ('colombier', 'hauterive', 'saint-blaise'):
+    # Add canton suffix for disambiguation (e.g., colombier-ne).
+    # v6.4.2 BUG B : `saint-blaise` retiré par symétrie avec Homegate.
+    # ImmoScout n'a pas été observé 404 sur city-saint-blaise-ne (BUG A
+    # cramait le budget avant qu'ImmoScout soit appelé), mais la raison
+    # sous-jacente est portail-agnostique : pas d'autre Saint-Blaise en CH.
+    # Si IS24 nécessitait vraiment le suffixe, on le remettra ciblé.
+    if canton and slug in ('colombier', 'hauterive'):
         slug = f"{slug}-{canton.lower()}"
 
     consecutive_errors = 0
+    consecutive_empty = 0   # v6.4.2 BUG A : pages HTTP 200 avec 0 listings
     for page in range(1, max_pages + 1):
         # ImmoScout24 switched to English URL paths (mid-2025)
         url = f"https://www.immoscout24.ch/en/real-estate/{tx}/city-{slug}?pn={page}"
@@ -1004,11 +1038,15 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=4):
         if status != 200:
             log.warning(f"[ImmoScout24] Page {page}: HTTP {status}")
             consecutive_errors += 1
-            if consecutive_errors >= 2:
-                log.warning(f"[ImmoScout24] 2 consecutive errors, stopping pagination")
+            if consecutive_empty + consecutive_errors >= 2:
+                log.warning(f"[ImmoScout24] stopping pagination: {consecutive_empty} empty + {consecutive_errors} errors consecutive")
                 break
             continue
         consecutive_errors = 0
+
+        # v6.4.2 BUG A : capture len(results) avant parsing pour détecter les
+        # pages HTTP 200 sans yield (JSON parse fail + HTML cards vides).
+        results_before_page = len(results)
 
         found_structured = False
 
@@ -1303,6 +1341,21 @@ def scrape_immoscout(city="Lausanne", transaction="location", max_pages=4):
 
             if not cards:
                 log.info(f"[ImmoScout24] Page {page}: No structured data found, HTML size: {len(html)}")
+
+        # v6.4.2 BUG A : empty-page detection. Même logique que Homegate —
+        # HTTP 200 + 0 listings extraits = fin de pagination. Page 1 vide →
+        # break immédiat (ville inconnue du portail). Sinon break dès que
+        # consecutive_empty + consecutive_errors >= 2.
+        if len(results) == results_before_page:
+            consecutive_empty += 1
+            if page == 1:
+                log.info(f"[ImmoScout24] Page 1 empty → ville sans résultat sur ce portail, pagination stoppée")
+                break
+            if consecutive_empty + consecutive_errors >= 2:
+                log.info(f"[ImmoScout24] stopping pagination: {consecutive_empty} empty + {consecutive_errors} errors consecutive")
+                break
+        else:
+            consecutive_empty = 0
 
         time.sleep(1)
 
