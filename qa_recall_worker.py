@@ -28,6 +28,7 @@ import json
 import logging
 import os
 import time
+from itertools import product
 import psycopg2
 
 from db import get_db, return_db
@@ -99,17 +100,24 @@ _CITY_SLUG_TO_DISPLAY = {
 # combo, largement au-dessus de la réalité romande.
 _MAX_PAGES_PER_COMBO = 20
 
-# Budget sb_budget par ville (les 4 combos partagent). Bumpé à 300s en
-# v6.4.1 après observation du 1er run cron : sans cache (sb_bypass_cache
-# actif), ScrapingBee prend 25-30s/page ; une ville moyenne fait 5 pages
-# × 4 combos = 100-120s juste pour les LIST pages, plus les détails si
-# le scraper les fetche. 120s → seul le 1er combo passait, les 3 autres
-# étaient "budget exhausted". 300s = 5 min, 8 villes = 40 min max côté
-# cron nocturne, confortable.
+# Budget sb_budget par PORTAIL (depuis v6.4.3, BUG A). Avant : 300s
+# partagés entre les 4 combos (Homegate vente+loc + IS24 vente+loc).
+# Observation run nocturne 22/04 : Homegate (slow, 25-96s par page vide
+# côté ScrapingBee) cramait à lui seul les 300s sur 7 des 8 villes →
+# IS24 jamais appelé ("budget exhausted, skipping").
 #
-# Override via env `LISTINGS_QA_SCRAPE_BUDGET_S` (nom historique du
-# timeout budget conservé pour compat Render dashboard).
-_SB_BUDGET_PER_CITY_S = int(os.environ.get('LISTINGS_QA_SCRAPE_BUDGET_S', '300'))
+# Fix : 300s par portail, séquentiels. Total max par ville = 600s, soit
+# 8 villes × 600s = 80 min max pour le cron nocturne. Acceptable à 04:00 UTC.
+#
+# Le nom env var `LISTINGS_QA_SCRAPE_BUDGET_S` est CONSERVÉ pour compat
+# Render dashboard, mais sa sémantique est désormais "budget par portail",
+# pas "par ville". Documenté en clair pour éviter confusion future.
+_SB_BUDGET_PER_PORTAL_S = int(os.environ.get('LISTINGS_QA_SCRAPE_BUDGET_S', '300'))
+
+# Ordres déterministes pour que le breakdown JSONB soit comparable d'un
+# run à l'autre (clés stables = `homegate_achat`, `homegate_location`, etc.).
+_PORTALS = ('homegate', 'immoscout24')
+_TRANSACTIONS = ('achat', 'location')
 
 # Caps anti-bloat pour les JSONB.
 _MAX_MISSING_PER_COMBO = 50
@@ -308,13 +316,6 @@ def run_recall_snapshot_for_city(city_slug: str) -> dict:
     total_our = 0
     errors = 0
 
-    combos = [
-        ('homegate',    'achat'),
-        ('homegate',    'location'),
-        ('immoscout24', 'achat'),
-        ('immoscout24', 'location'),
-    ]
-
     conn = None
     conn_broken = False
     try:
@@ -323,58 +324,68 @@ def run_recall_snapshot_for_city(city_slug: str) -> dict:
         # _sb_get hitte le cache DB de SCRAPE_CACHE_TTL (12h) et renvoie
         # (304, '') — les scrapers retournent alors [] et source_total=0
         # pour toutes les villes après le 1er run quotidien. Le snapshot
-        # est mensonger ("0 listings live" alors qu'on en a 360+ en DB).
-        # L'ancien endpoint v6.3 listings-qa utilisait aussi sb_bypass_cache
-        # pour cette raison. Accidentellement omis au commit 2 lors du
-        # refactor — restauré ici.
-        with sb_bypass_cache(), sb_budget(_SB_BUDGET_PER_CITY_S):
-            for portal, transaction in combos:
-                key = f"{portal}_{transaction}"
-                try:
-                    listings = _run_scraper(portal, city_display, transaction)
-                    live_ids = {
-                        str(l.get('external_id'))
-                        for l in listings
-                        if l.get('external_id')
-                    }
-                    our_ids = _fetch_our_ids(conn, city_slug, city_display, portal, transaction)
-                    missing = sorted(live_ids - our_ids)
-                    # Intersection-based recall (borné [0, 100] par construction).
-                    # Clamp défensif à _RECALL_PCT_MAX — paranoïa pure, ne
-                    # devrait jamais s'activer ici ; permet de réutiliser
-                    # la même formule que le top-level sans surprise si la
-                    # sémantique du per-combo changeait un jour.
-                    recall = (
-                        round(min(len(our_ids & live_ids) / len(live_ids) * 100,
-                                  _RECALL_PCT_MAX), 2)
-                        if live_ids else None
-                    )
-                    breakdown[key] = {
-                        "source_total": len(live_ids),
-                        "our_total": len(our_ids),
-                        "recall_pct": recall,
-                        "missing_ids": missing[:_MAX_MISSING_PER_COMBO],
-                    }
-                    total_source += len(live_ids)
-                    total_our += len(our_ids)
-                    for mid in missing:
-                        all_missing.append({
-                            "portal": portal,
-                            "transaction": transaction,
-                            "id": mid,
-                        })
-                except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
-                    # La conn 2 est morte : inutile de continuer les combos
-                    # suivants, ils échoueront pareil. On break et finalise.
-                    conn_broken = True
-                    breakdown[key] = {"error": f"db_transient: {str(e)[:150]}"}
-                    errors += 1
-                    log.error(f"[qa-recall] DB transport error {key}/{city_slug}: {e}", exc_info=True)
-                    break
-                except Exception as e:
-                    breakdown[key] = {"error": f"{type(e).__name__}: {str(e)[:150]}"}
-                    errors += 1
-                    log.exception(f"[qa-recall] combo {key}/{city_slug} failed")
+        # est mensonger. Restauré au commit 2.1 après omission au refactor.
+        #
+        # v6.4.3 BUG A : sb_budget est désormais NESTED par portail (un
+        # `with sb_budget(300)` séparé pour Homegate puis pour ImmoScout)
+        # au lieu d'un budget global partagé entre les 4 combos. Avant,
+        # Homegate (slow ScrapingBee 25-96s/page vide) cramait les 300s
+        # avant qu'IS24 soit appelé sur 7/8 villes. Maintenant chaque
+        # portail a son propre 300s frais — IS24 est garanti d'avoir sa
+        # chance même si Homegate consomme tout son budget.
+        with sb_bypass_cache():
+            for portal in _PORTALS:
+                if conn_broken:
+                    break  # conn morte sur portail précédent — inutile de continuer
+                with sb_budget(_SB_BUDGET_PER_PORTAL_S):
+                    for transaction in _TRANSACTIONS:
+                        key = f"{portal}_{transaction}"
+                        try:
+                            listings = _run_scraper(portal, city_display, transaction)
+                            live_ids = {
+                                str(l.get('external_id'))
+                                for l in listings
+                                if l.get('external_id')
+                            }
+                            our_ids = _fetch_our_ids(conn, city_slug, city_display, portal, transaction)
+                            missing = sorted(live_ids - our_ids)
+                            # Intersection-based recall (borné [0, 100] par
+                            # construction). Clamp défensif à _RECALL_PCT_MAX
+                            # — paranoïa pure, ne devrait jamais s'activer ici.
+                            recall = (
+                                round(min(len(our_ids & live_ids) / len(live_ids) * 100,
+                                          _RECALL_PCT_MAX), 2)
+                                if live_ids else None
+                            )
+                            breakdown[key] = {
+                                "source_total": len(live_ids),
+                                "our_total": len(our_ids),
+                                "recall_pct": recall,
+                                "missing_ids": missing[:_MAX_MISSING_PER_COMBO],
+                            }
+                            total_source += len(live_ids)
+                            total_our += len(our_ids)
+                            for mid in missing:
+                                all_missing.append({
+                                    "portal": portal,
+                                    "transaction": transaction,
+                                    "id": mid,
+                                })
+                        except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+                            # Conn morte : inutile de continuer les combos
+                            # suivants (de ce portail OU du portail suivant),
+                            # ils échoueront pareil. On break inner ; le check
+                            # `if conn_broken` en haut du for-portal bloque le
+                            # portail suivant.
+                            conn_broken = True
+                            breakdown[key] = {"error": f"db_transient: {str(e)[:150]}"}
+                            errors += 1
+                            log.error(f"[qa-recall] DB transport error {key}/{city_slug}: {e}", exc_info=True)
+                            break
+                        except Exception as e:
+                            breakdown[key] = {"error": f"{type(e).__name__}: {str(e)[:150]}"}
+                            errors += 1
+                            log.exception(f"[qa-recall] combo {key}/{city_slug} failed")
     finally:
         if conn is not None:
             try:
@@ -385,7 +396,7 @@ def run_recall_snapshot_for_city(city_slug: str) -> dict:
     # Si la conn 2 est tombée en plein milieu, combler les combos restants
     # avec un marker d'erreur — le snapshot raw reflète alors clairement
     # qu'on n'a pas pu tester tous les combos.
-    for portal, transaction in combos:
+    for portal, transaction in product(_PORTALS, _TRANSACTIONS):
         key = f"{portal}_{transaction}"
         if key not in breakdown:
             breakdown[key] = {"error": "skipped: prior transport error"}

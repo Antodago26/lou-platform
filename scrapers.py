@@ -815,12 +815,16 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=4):
     tx = "rent" if transaction == "location" else "buy"
     slug = _normalize_city(city).replace(' ', '-')
     # Add canton suffix for ambiguous city names (e.g., colombier-ne, hauterive-ne).
-    # v6.4.2 BUG B : `saint-blaise` retiré. Homegate 404 sur city-saint-blaise-ne
-    # (observé 22/04 sur le cron QA) — il n'y a qu'un Saint-Blaise en CH, donc
-    # pas de disambiguation nécessaire. Les autres entrées restent : colombier
-    # (VD/NE), hauterive (NE/FR), corcelles-cormondrèche (variantes d'encodage).
+    # v6.4.3 BUG B (correction) : `saint-blaise` RÉINTRODUIT après validation
+    # empirique du run nocturne. Logs : `city-saint-blaise` → HTTP 404 sur
+    # Homegate, `city-saint-blaise-ne` → HTTP 200. La désambig est nécessaire
+    # côté Homegate (le slug nu n'est pas reconnu, peut-être parce qu'IS24/
+    # Homegate ont chacun leur propre indexation et Homegate impose le suffixe
+    # canton pour cette commune en particulier). À noter : retiré côté
+    # ImmoScout24 où le slug nu n'a pas montré de 404 (logs IS24 montraient
+    # timeout/504, pas 404).
     canton = CITY_CANTONS.get(city.lower(), '')
-    if canton and slug in ('colombier', 'hauterive', 'corcelles-cormondrèche', 'corcelles-cormondr', 'corcelles-cormondrche'):
+    if canton and slug in ('colombier', 'hauterive', 'saint-blaise', 'corcelles-cormondrèche', 'corcelles-cormondr', 'corcelles-cormondrche'):
         slug = f"{slug}-{canton.lower()}"
 
     consecutive_errors = 0

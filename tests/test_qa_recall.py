@@ -313,5 +313,47 @@ class EndpointListingsQaTest(unittest.TestCase):
         get_db_mock.assert_not_called()
 
 
+# ============================================================
+# Scraper URL slug regression tests
+# ============================================================
+
+class ScraperUrlSlugTest(unittest.TestCase):
+    """v6.4.3 BUG B regression : scrape_homegate('Saint-Blaise', ...) DOIT
+    requêter `city-saint-blaise-ne`. Le run nocturne post-2.2 a montré
+    HTTP 404 sur `city-saint-blaise` (slug nu) et HTTP 200 sur le slug
+    avec suffixe — donc Homegate impose la désambig pour cette commune,
+    contrairement à ce qu'on avait initialement déduit. Test garde-fou
+    contre toute future régression qui retirerait saint-blaise du tuple
+    de désambig."""
+
+    def test_scrape_homegate_saint_blaise_uses_ne_suffix(self):
+        import scrapers
+
+        captured_urls = []
+
+        def fake_sb_get(url, render_js=False):
+            captured_urls.append(url)
+            # HTML vide → 0 listings → empty-page detection break sur page 1.
+            return (200, '<html><body></body></html>')
+
+        with patch.object(scrapers, '_sb_get', side_effect=fake_sb_get):
+            scrapers.scrape_homegate(
+                city='Saint-Blaise',
+                transaction='location',
+                max_pages=1,
+            )
+
+        self.assertTrue(captured_urls,
+                        "scrape_homegate n'a pas appelé _sb_get une seule fois")
+        first_url = captured_urls[0]
+        # Doit contenir `city-saint-blaise-ne` (suffixe canton ajouté par la
+        # disambig list à scrapers.py:~819).
+        self.assertIn(
+            'city-saint-blaise-ne',
+            first_url,
+            f"Expected city-saint-blaise-ne in URL, got: {first_url}",
+        )
+
+
 if __name__ == '__main__':
     unittest.main()
