@@ -46,24 +46,20 @@ class RunRecallSnapshotForCityTest(unittest.TestCase):
         ]
 
     def test_run_recall_snapshot_for_city_inserts_row(self):
-        """Happy path : 4 combos × 2 live IDs = 8 source_total ; DB mocke
-        renvoie 1 ID matching par combo = 4 our_total ; recall = 50%.
-        Doit émettre : 1 INSERT qa_runs, 4 SELECT our_ids, 1 INSERT
-        snapshot, 1 UPDATE qa_runs."""
+        """Happy path v6.4.4 : 2 combos (Homegate × achat+location) × 2 live
+        IDs = 4 source_total ; DB mock renvoie 1 ID matching par combo =
+        2 our_total ; recall = 50%. Doit émettre : 1 INSERT qa_runs, 2
+        SELECT our_ids, 1 INSERT snapshot, 1 UPDATE qa_runs."""
         import qa_recall_worker as worker
 
         # Cursor scripting :
-        #   fetchone() est appelé pour :
-        #     - RETURNING id du INSERT qa_runs      → (7,)
-        #     - RETURNING id du INSERT snapshot     → (42,)
-        #   fetchall() est appelé pour :
-        #     - 4× SELECT our_ids (un par combo)    → 1 row chacun (50% recall)
+        #   fetchone() :  INSERT qa_runs RETURNING id → (7,)
+        #                 INSERT snapshot RETURNING id → (42,)
+        #   fetchall() :  2× SELECT our_ids (1 par combo Homegate)
         fetchone_seq = [(7,), (42,)]
         fetchall_seq = [
             [('live-achat-1',)],       # homegate_achat:    matche 1/2
             [('live-location-1',)],    # homegate_location: matche 1/2
-            [('live-achat-1',)],       # immoscout24_achat: matche 1/2
-            [('live-location-1',)],    # immoscout24_loc:   matche 1/2
         ]
         conn = MagicMock()
         cur = MagicMock()
@@ -71,31 +67,38 @@ class RunRecallSnapshotForCityTest(unittest.TestCase):
         cur.fetchone.side_effect = fetchone_seq
         cur.fetchall.side_effect = fetchall_seq
 
+        # v6.4.4 : scrape_immoscout doit NE PAS être appelé. On le mocke
+        # quand même (return_value=[] pour fail-safe si régression) et on
+        # vérifie qu'il n'est pas invoqué.
+        immoscout_mock = MagicMock(return_value=[])
+
         with patch.object(worker, 'get_db', return_value=conn), \
              patch.object(worker, 'return_db'), \
              patch.object(worker, 'scrape_homegate',
                           side_effect=lambda city, transaction, max_pages: self._fake_listings(transaction)), \
-             patch.object(worker, 'scrape_immoscout',
-                          side_effect=lambda city, transaction, max_pages: self._fake_listings(transaction)), \
+             patch.object(worker, 'scrape_immoscout', immoscout_mock), \
              patch.object(worker, 'sb_budget', MagicMock()), \
              patch.object(worker, 'sb_bypass_cache', MagicMock()):
             result = worker.run_recall_snapshot_for_city('peseux')
 
-        # Compteurs
-        self.assertEqual(result['source_total'], 8)  # 2 listings × 4 combos
-        self.assertEqual(result['our_total'], 4)     # 1 match × 4 combos
+        # Compteurs (v6.4.4 : 2 combos au lieu de 4)
+        self.assertEqual(result['source_total'], 4)  # 2 listings × 2 combos
+        self.assertEqual(result['our_total'], 2)     # 1 match × 2 combos
         self.assertEqual(result['recall_pct'], 50.0)
         self.assertEqual(result['errors'], 0)
         self.assertEqual(result['run_id'], 7)
         self.assertEqual(result['snapshot_id'], 42)
+
+        # ImmoScout24 retiré du monitoring → ne doit pas être appelé.
+        immoscout_mock.assert_not_called()
 
         # Les bons SQLs ont été émis (on inspecte le 1er arg de chaque execute)
         sqls = ' '.join(str(c.args[0]) for c in cur.execute.call_args_list)
         self.assertIn('INSERT INTO qa_runs', sqls)
         self.assertIn('INSERT INTO qa_recall_snapshots', sqls)
         self.assertIn('UPDATE qa_runs', sqls)
-        # 4 combos = 4 SELECT our_ids
-        self.assertGreaterEqual(sqls.count('UNION ALL'), 4)
+        # 2 combos = 2 SELECT our_ids (chaque _fetch_our_ids fait 1 UNION ALL)
+        self.assertGreaterEqual(sqls.count('UNION ALL'), 2)
 
     def test_run_recall_unknown_city_raises(self):
         """Slug absent de _CITY_SLUG_TO_DISPLAY → ValueError claire.
@@ -107,27 +110,24 @@ class RunRecallSnapshotForCityTest(unittest.TestCase):
             get_db_mock.assert_not_called()
 
     def test_recall_pct_above_100_no_crash(self):
-        """Fix v6.4.1 BUG 1 : quand our_total >> source_total (DB riche mais
-        scraper trouve peu d'annonces live), le top-level recall_pct dépasse
-        100%. Ex : 10 live/combo × 4 = 40 source ; 100 DB/combo × 4 = 400 our
-        → recall = 400/40*100 = 1000%. Doit stocker la valeur réelle
-        (NUMERIC(7,2) après migration v641) sans crash."""
+        """Fix v6.4.1 BUG 1 (recall > 100% sans crash NUMERIC), adapté
+        v6.4.4 à 2 combos Homegate. DB riche mais scraper trouve peu
+        d'annonces live : 10 live/combo × 2 = 20 source ; 100 DB/combo
+        × 2 = 200 our → recall = 200/20*100 = 1000%. Le ratio est le
+        même qu'avant (4 combos), juste les totaux halvés."""
         import qa_recall_worker as worker
 
         def fake_scrape(city, transaction, max_pages):
-            # 10 IDs live par combo, dont 5 matchent côté DB (voir fetchall ci-dessous)
             return [{'external_id': f'live-{transaction}-{i}'} for i in range(10)]
 
         # fetchone : INSERT qa_runs puis INSERT snapshot
         fetchone_seq = [(99,), (200,)]
 
-        # fetchall : 4 combos, chacun retourne 5 IDs "live-*" matching + 95 IDs
-        # "db-only-*" qui ne matchent pas (DB plus riche que le scrape live).
-        # Total par combo : our_total=100, source=10, intersection=5.
-        # Per-combo recall = 5/10*100 = 50%. Top-level recall = 400/40*100 = 1000%.
+        # fetchall : 2 combos Homegate, chacun retourne 5 matching + 95 extras
+        # Per-combo : our=100, source=10, intersection=5, recall=50%.
+        # Top-level : our=200, source=20, ratio=200/20*100=1000%.
         fetchall_seq = []
-        for _portal, tx in [('homegate', 'achat'), ('homegate', 'location'),
-                            ('immoscout24', 'achat'), ('immoscout24', 'location')]:
+        for tx in ('achat', 'location'):
             rows = [(f'live-{tx}-{i}',) for i in range(5)]       # 5 matching
             rows += [(f'db-only-{tx}-{i}',) for i in range(95)]  # 95 extras
             fetchall_seq.append(rows)
@@ -141,21 +141,17 @@ class RunRecallSnapshotForCityTest(unittest.TestCase):
         with patch.object(worker, 'get_db', return_value=conn), \
              patch.object(worker, 'return_db'), \
              patch.object(worker, 'scrape_homegate', side_effect=fake_scrape), \
-             patch.object(worker, 'scrape_immoscout', side_effect=fake_scrape), \
+             patch.object(worker, 'scrape_immoscout', MagicMock(return_value=[])), \
              patch.object(worker, 'sb_budget', MagicMock()), \
              patch.object(worker, 'sb_bypass_cache', MagicMock()):
             result = worker.run_recall_snapshot_for_city('peseux')
 
-        # Totaux : source=40 (10×4 combos), our=400 (100×4 combos)
-        self.assertEqual(result['source_total'], 40)
-        self.assertEqual(result['our_total'], 400)
-        # 400/40*100 = 1000.0 — valeur conservée (recall > 100 = signal
+        # Totaux v6.4.4 : source=20 (10×2 combos), our=200 (100×2 combos)
+        self.assertEqual(result['source_total'], 20)
+        self.assertEqual(result['our_total'], 200)
+        # 200/20*100 = 1000.0 — valeur conservée (recall > 100 = signal
         # diagnostique, pas un bug à masquer). Doit s'insérer sans crash.
         self.assertEqual(result['recall_pct'], 1000.0)
-        # Per-combo recall reste borné (intersection/live = 5/10 = 50%)
-        # — vérifié via l'INSERT snapshot dans raw_snapshot (on ne lit pas
-        # le JSON ici, mais au moins on s'assure qu'aucune exception n'a
-        # remonté, donc le format JSONB était valide pour psycopg2).
         self.assertEqual(result['errors'], 0)
 
     def test_qa_worker_uses_bypass_cache(self):

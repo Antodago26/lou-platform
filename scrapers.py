@@ -1017,6 +1017,13 @@ def scrape_homegate(city="Lausanne", transaction="location", max_pages=4):
 # IMMOSCOUT24 — via ScrapingBee
 # ============================================================
 
+# DEPRECATED for monitoring (DataDome blocked, see commit history v6.4.4).
+# Kept for legacy/reference. Not called from qa_recall_worker.py anymore.
+# Reason : DataDome challenge sur stealth_proxy → 504 systématique ; bascule
+# en premium_proxy = 5× le coût/page. Décision produit : retirer IS24 plutôt
+# que payer pour scraper un acteur qui essaie activement de nous bloquer.
+# Le cron prod (cron_job.py) peut encore l'utiliser si besoin futur ; le
+# QA monitoring (qa_recall_worker.py) ne l'appelle plus.
 def scrape_immoscout(city="Lausanne", transaction="location", max_pages=4):
     log.info(f"[ImmoScout24] Searching {city} ({transaction})")
     results = []

@@ -115,8 +115,15 @@ _MAX_PAGES_PER_COMBO = 20
 _SB_BUDGET_PER_PORTAL_S = int(os.environ.get('LISTINGS_QA_SCRAPE_BUDGET_S', '300'))
 
 # Ordres déterministes pour que le breakdown JSONB soit comparable d'un
-# run à l'autre (clés stables = `homegate_achat`, `homegate_location`, etc.).
-_PORTALS = ('homegate', 'immoscout24')
+# run à l'autre (clés stables = `homegate_achat`, `homegate_location`).
+#
+# v6.4.4 : ImmoScout24 retiré du monitoring (DataDome bloque le scraping
+# stealth, premium_proxy 5× plus cher = mauvais alignement business). La
+# fonction scrape_immoscout reste dans scrapers.py (deprecated mais gardée
+# pour référence). On ne monitore plus que Homegate. Si on ajoute un autre
+# portail (ex: scraping direct d'agences immo), ré-étendre _PORTALS suffit
+# — la logique de budget nested par portail est préservée.
+_PORTALS = ('homegate',)
 _TRANSACTIONS = ('achat', 'location')
 
 # Caps anti-bloat pour les JSONB.
@@ -424,7 +431,13 @@ def run_recall_snapshot_for_city(city_slug: str) -> dict:
             conn, city_slug, total_source, total_our,
             recall_pct, all_missing_capped, breakdown,
         )
-        status = 'success' if errors == 0 else ('partial' if errors < 4 else 'failed')
+        # v6.4.4 : seuil success/partial/failed dérivé du nombre réel de
+        # combos (avant : hardcodé à 4 → cassé quand IS24 retiré).
+        total_combos = len(_PORTALS) * len(_TRANSACTIONS)
+        status = (
+            'success' if errors == 0
+            else ('partial' if errors < total_combos else 'failed')
+        )
         _finalize_run(
             conn, run_id, status,
             listings_processed=total_source,
@@ -432,7 +445,9 @@ def run_recall_snapshot_for_city(city_slug: str) -> dict:
             metadata={
                 "city": city_slug,
                 "snapshot_id": snapshot_id,
-                "portals_scraped": 4,
+                # Renommé en v6.4.4 — l'ancien `portals_scraped: 4` était
+                # confusément nommé (c'était les combos, pas les portails).
+                "combos_total": total_combos,
                 "combos_with_error": errors,
                 "elapsed_s": elapsed_s,
             },
