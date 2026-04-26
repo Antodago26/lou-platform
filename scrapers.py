@@ -340,7 +340,7 @@ def _sb_remaining():
     return deadline - time.monotonic()
 
 
-def _sb_get(url, render_js=False):
+def _sb_get(url, render_js=False, premium_proxy=False):
     """Fetch a URL via ScrapingBee. Returns (status_code, html_text).
     If the URL was scraped successfully less than SCRAPE_CACHE_TTL_HOURS ago,
     returns (304, '') without spending a credit — callers treat it as an
@@ -349,7 +349,12 @@ def _sb_get(url, render_js=False):
     Si un `sb_budget` est actif sur ce thread, borne chaque requests.get au
     temps restant (tuple connect/read) et coupe retries + sleeps dès que le
     budget passe sous le seuil — pour éviter de tenir un worker gunicorn
-    pendant 300s sur un portail lent (cas /api/stats/listings-qa)."""
+    pendant 300s sur un portail lent (cas /api/stats/listings-qa).
+
+    v6.4.5 : kwarg `premium_proxy` (default False = stealth_proxy comme avant).
+    Si True, démarre directement avec premium_proxy=true pour passer DataDome
+    et autres anti-bots qui résistent au stealth (~+10 crédits/call). Utilisé
+    par le link health worker sur Homegate où le stealth est inefficace."""
     remaining = _sb_remaining()
     if remaining is not None and remaining <= 0:
         log.info(f"[ScrapingBee] budget exhausted, skipping {url[:60]}...")
@@ -395,8 +400,11 @@ def _sb_get(url, render_js=False):
             p['wait'] = 3000
         return p
 
-    params = _build_params(premium=False)
-    premium_retried = False
+    # v6.4.5 : si caller force `premium_proxy=True`, on skip directement
+    # le mode stealth ; `premium_retried = True` empêche le retry "403→bascule
+    # premium" puisqu'on est déjà premium dès la 1ère tentative.
+    params = _build_params(premium=premium_proxy)
+    premium_retried = bool(premium_proxy)
 
     has_budget = remaining is not None
     max_attempts = 2 if has_budget else 3

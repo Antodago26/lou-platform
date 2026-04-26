@@ -1,24 +1,31 @@
 """
-Bon Home — QA Recall Cron Entry Point (v6.4.0).
+Bon Home — QA Recall + Link Health Cron Entry Point (v6.4.5).
 
 Lancé par Render cron à 04:00 UTC quotidien (cf. render.yaml → lou-qa-recall).
 
   Command : python3 cron_job_qa_recall.py
   Schedule: 0 4 * * *
 
-Itère sur les villes de QA_RECALL_CITIES (env, défaut = 5 villes beta),
-appelle `qa_recall_worker.run_recall_snapshot_for_city` pour chacune, log
-le résultat en JSON structuré sur stdout.
+Deux phases en séquence (Option B, archi validée 26/04 — pas de cron séparé) :
+
+  Phase 1 — RECALL : itère sur QA_RECALL_CITIES, appelle
+  `qa_recall_worker.run_recall_snapshot_for_city` pour chacune, écrit
+  qa_recall_snapshots. Durée actuelle ~32 min (8 villes × Homegate × 2 tx).
+
+  Phase 2 — LINK HEALTH : appelle
+  `qa_link_health_worker.run_link_health_check()` (cap 1000 URLs/run,
+  oldest first). HEAD direct gratuit pour non-Homegate (~85% du stock),
+  ScrapingBee Premium uniquement pour Homegate sans scrape récent
+  (optimisation e). Durée cible 5-15 min.
 
 Exit code :
-  0 si TOUTES les villes ont produit un snapshot (même status='partial')
-  1 si au moins une ville a complètement échoué (exception non catchée
-    dans le worker → pas de row qa_recall_snapshots écrit)
+  0 si Phase 1 OK (toutes les villes ont un snapshot) ET Phase 2 OK
+    (run_link_health_check n'a pas raised une exception fatale).
+  1 si Phase 1 a au moins 1 hard failure OU Phase 2 a raised.
 
-Un status='failed' (tous les combos d'une ville en échec) compte quand
-même comme "la ville a un snapshot" — le row existe, recall_pct=NULL,
-l'endpoint servira snapshot_age_hours pour que l'opérateur voie que
-le cron a tourné mais n'a rien pu mesurer.
+Phase 2 NE PEUT PAS faire échouer Phase 1 : si elle crash, on log
+l'erreur, on continue (exit code reflète quand même la failure pour
+Render dashboard rouge).
 """
 import json
 import logging
@@ -113,16 +120,59 @@ def run() -> int:
             )
             log.exception(f"Unexpected error on city={slug}")
 
-    total_elapsed = round(time.time() - t0, 1)
+    phase1_elapsed = round(time.time() - t0, 1)
     _log_event(
-        "cron_end",
-        elapsed_s=total_elapsed,
+        "phase1_end",
+        elapsed_s=phase1_elapsed,
         cities_processed=len(results),
         cities_failed=hard_failures,
         cities_total=len(cities),
     )
 
-    return 0 if hard_failures == 0 else 1
+    # ====================================================================
+    # Phase 2 — Link health check
+    # ====================================================================
+    # On lance Phase 2 même si Phase 1 a eu des hard_failures : les deux
+    # phases sont indépendantes (Phase 2 lit `properties` directement, pas
+    # les snapshots de Phase 1). Si Phase 1 a un problème, on veut quand
+    # même la donnée Phase 2 du jour.
+    phase2_failed = False
+    phase2_t0 = time.time()
+    try:
+        from qa_link_health_worker import run_link_health_check
+        link_result = run_link_health_check()
+        _log_event(
+            "phase2_end",
+            urls_checked=link_result.get('urls_checked'),
+            counts=link_result.get('counts'),
+            cache_hits_homegate=link_result.get('cache_hits_homegate'),
+            sb_credits_estimated=link_result.get('sb_credits_estimated'),
+            unreachable_pct=link_result.get('unreachable_pct'),
+            elapsed_s=link_result.get('elapsed_s'),
+            run_id=link_result.get('run_id'),
+        )
+    except Exception as e:
+        phase2_failed = True
+        _log_event(
+            "phase2_failed",
+            elapsed_s=round(time.time() - phase2_t0, 1),
+            reason=type(e).__name__,
+            error=str(e)[:300],
+        )
+        log.exception("Phase 2 (link health) crashed")
+
+    total_elapsed = round(time.time() - t0, 1)
+    _log_event(
+        "cron_end",
+        elapsed_s=total_elapsed,
+        phase1_elapsed_s=phase1_elapsed,
+        cities_processed=len(results),
+        cities_failed=hard_failures,
+        cities_total=len(cities),
+        phase2_failed=phase2_failed,
+    )
+
+    return 0 if (hard_failures == 0 and not phase2_failed) else 1
 
 
 if __name__ == '__main__':
