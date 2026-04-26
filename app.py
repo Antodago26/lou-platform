@@ -409,6 +409,34 @@ if os.environ.get('DATABASE_URL', ''):
             except Exception:
                 pass
 
+    # v6.4.2 schema : extensions pour la Phase 2 (link health check) du
+    # cron lou-qa-recall. Ajoute properties.last_checked_at + index partiel,
+    # et qa_link_checks.{status, final_url, error_msg}. Tout via ALTER ADD
+    # COLUMN IF NOT EXISTS — idempotent. Doit tourner APRÈS run_schema_v640
+    # (qa_link_checks doit déjà exister).
+    conn = None
+    conn_broken = False
+    try:
+        import psycopg2 as _pg
+        from migrations.schema_v642 import run_schema_v642
+        conn = get_db()
+        stats = run_schema_v642(conn)
+        log.info(f"v6.4.2 schema stats: {stats}")
+    except Exception as e:
+        try:
+            import psycopg2 as _pg
+            if isinstance(e, (_pg.OperationalError, _pg.InterfaceError)):
+                conn_broken = True
+        except Exception:
+            pass
+        log.warning(f"v6.4.2 schema error (boot continues, will retry next boot): {e}")
+    finally:
+        if conn is not None:
+            try:
+                return_db(conn, close=conn_broken)
+            except Exception:
+                pass
+
     # v6.3 backfills: rooms (NULL/0), Homegate titles (.â mojibake),
     # addresses (leading 'CH '/NPA/dots), properties GPS.
     # Doit tourner APRÈS _run_migrations() (qui backfill les zones GPS) et
