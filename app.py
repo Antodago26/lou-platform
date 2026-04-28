@@ -437,6 +437,33 @@ if os.environ.get('DATABASE_URL', ''):
             except Exception:
                 pass
 
+    # v6.4.3 schema : backfill correctif des classifications 5xx mal
+    # étiquetées en 'broken' au run d8fb6e2 (cf. commit v6.4.6 fix). One-shot,
+    # gate idempotent via migrations_applied. Doit tourner APRÈS v642 (qui
+    # garantit que la colonne `status` existe).
+    conn = None
+    conn_broken = False
+    try:
+        import psycopg2 as _pg
+        from migrations.schema_v643 import run_schema_v643
+        conn = get_db()
+        stats = run_schema_v643(conn)
+        log.info(f"v6.4.3 schema stats: {stats}")
+    except Exception as e:
+        try:
+            import psycopg2 as _pg
+            if isinstance(e, (_pg.OperationalError, _pg.InterfaceError)):
+                conn_broken = True
+        except Exception:
+            pass
+        log.warning(f"v6.4.3 schema error (boot continues, will retry next boot): {e}")
+    finally:
+        if conn is not None:
+            try:
+                return_db(conn, close=conn_broken)
+            except Exception:
+                pass
+
     # v6.3 backfills: rooms (NULL/0), Homegate titles (.â mojibake),
     # addresses (leading 'CH '/NPA/dots), properties GPS.
     # Doit tourner APRÈS _run_migrations() (qui backfill les zones GPS) et

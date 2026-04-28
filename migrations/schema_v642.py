@@ -104,6 +104,26 @@ def ensure_qa_link_checks_extensions(conn) -> None:
     conn.commit()
 
 
+def ensure_qa_link_checks_advisory_comment(conn) -> None:
+    """v6.4.6 : pose un COMMENT ON TABLE pour avertir au niveau Postgres
+    que les classifications de qa_link_checks sont advisory et NE DOIVENT
+    PAS être consommées par des queries user-facing tant que le workflow
+    `LINK_HEALTH_AUTO_HIDE` n'est pas validé.
+
+    Visible via `\\d+ qa_link_checks` ou `SELECT obj_description('qa_link_checks'::regclass)`.
+    Idempotent : COMMENT remplace toute valeur précédente, safe à relancer.
+    """
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            COMMENT ON TABLE qa_link_checks IS
+            'advisory data — do NOT consume in user-facing queries until LINK_HEALTH_AUTO_HIDE workflow is validated'
+        """)
+    finally:
+        cur.close()
+    conn.commit()
+
+
 def run_schema_v642(conn) -> dict:
     """Point d'entrée v6.4.2 — à appeler depuis `app.py` APRÈS
     `run_schema_v641` (logique : v642 étend une table créée par v640 et
@@ -123,8 +143,9 @@ def run_schema_v642(conn) -> dict:
         stats['migrations_applied_table'] = f'error: {e}'
 
     steps = [
-        ('properties_last_checked_at', ensure_properties_last_checked_at),
-        ('qa_link_checks_extensions',  ensure_qa_link_checks_extensions),
+        ('properties_last_checked_at',          ensure_properties_last_checked_at),
+        ('qa_link_checks_extensions',           ensure_qa_link_checks_extensions),
+        ('qa_link_checks_advisory_comment',     ensure_qa_link_checks_advisory_comment),
     ]
     all_ok = True
     for label, fn in steps:

@@ -33,14 +33,24 @@ Stratégie par portail :
             - HTTP 404/410 → 'broken'
             - Autre → 'unreachable'
 
-Sémantique status (figée par CEO 26/04) :
-  - 'ok'          : URL répond (200/2xx, ou cache_via_prod_scrape)
+Sémantique status (figée par CEO 26/04, 5xx révisé v6.4.6) :
+  - 'ok'          : URL répond 200/2xx (ou cache_via_prod_scrape)
   - 'redirect'    : 3xx vers URL différente (final_url logged, pas d'alerte)
-  - 'broken'      : 404/410/5xx persistant ou marqueur "annonce supprimée"
-                    → l'annonce sera masquée côté front
-  - 'unreachable' : 403/timeout/DNS/anti-bot — log silencieux, NE PAS masquer
-                    (DataDome qui nous bloque ≠ annonce morte, distingo
-                    critique pour pas dépublier 50% du stock à tort)
+  - 'broken'      : 404 / 410 (signaux explicites "ressource n'existe plus")
+                    OU marqueur "annonce supprimée" / "page introuvable"
+                    dans le body. AUCUN autre status code ne mappe en
+                    broken — en particulier PAS les 5xx (cf. unreachable).
+  - 'unreachable' : 403, timeout, DNS, anti-bot, ET 5xx — peu importe la
+                    source (HEAD direct, SB Premium). Distingo critique :
+                      * Run d8fb6e2 du 26/04 : SB Premium retournait 500
+                        systematic sur Homegate (DataDome via SB ou
+                        SB-side failure indistinguable). Le mapping initial
+                        5xx → 'broken' a produit 111 false positives.
+                      * v6.4.6 : 5xx → 'unreachable'. Safer default sur
+                        incertitude. Une vraie panne agence apparaîtra
+                        sur plusieurs runs successifs et sera escaladée
+                        manuellement.
+                    Log silencieux, NE PAS masquer l'annonce.
 
 Sélection : 1000 URLs/run (cap), ordre `last_checked_at NULLS FIRST`
 (oldest first), filtre is_active=TRUE + source_url NOT NULL + (last_checked
@@ -65,6 +75,38 @@ from db import get_db, return_db
 from scrapers import _sb_get, sb_bypass_cache
 
 log = logging.getLogger('lou-app')
+
+
+# ============================================================================
+# ⚠ ADVISORY DATA — qa_link_checks (depuis 26/04/2026)
+# ============================================================================
+# Les rows écrites dans `qa_link_checks` par ce worker NE DOIVENT PAS être
+# consommées par des queries user-facing (filtre /api/properties, dépublication
+# automatique, UPDATE properties SET is_active=FALSE) tant que :
+#
+#   1. La constante `LINK_HEALTH_AUTO_HIDE` ci-dessous n'a pas été flippée
+#      à True via l'env var du même nom, ET
+#   2. La classification (status='broken'/'ok'/'redirect'/'unreachable') a
+#      été validée sur 3+ runs cron successifs sans false positive sur le
+#      portail concerné.
+#
+# Historique false positives à conserver en mémoire :
+#   - Run d8fb6e2 (26/04) : 111 Homegate marqués 'broken' à tort à cause de
+#     ScrapingBee Premium 500 systematic. Fix v6.4.6 : 5xx → 'unreachable'
+#     dans `_classify` (cf. commit message). Backfill DB via migration v643.
+#
+# Cf. aussi `COMMENT ON TABLE qa_link_checks` posé par schema_v642.py
+# (visible via `\d+ qa_link_checks` dans psql) qui rappelle ce statut
+# advisory directement au niveau Postgres.
+# ============================================================================
+
+# Flag de garde-fou. Aujourd'hui aucun consommateur en aval — ce flag est
+# une CONVENTION pour empêcher qu'un futur PR ajoute "WHERE qa_link_checks.status
+# != 'broken'" sans validation préalable. Tout futur code qui prend une
+# décision basée sur qa_link_checks DOIT gater sur `LINK_HEALTH_AUTO_HIDE`.
+LINK_HEALTH_AUTO_HIDE = (
+    os.environ.get('LINK_HEALTH_AUTO_HIDE', 'false').strip().lower() == 'true'
+)
 
 
 # ============================================================
@@ -192,8 +234,15 @@ def _classify(status_code, body=None, final_url=None):
         return 'redirect', status_code, final_url, None
     if status_code in (404, 410):
         return 'broken', status_code, None, None
+    # v6.4.6 : 5xx → unreachable (avant : 'broken'). Run d8fb6e2 a montré
+    # que ScrapingBee Premium peut renvoyer 500 systematic sur Homegate
+    # (DataDome via SB ou SB-side failure indistinguable). Classer en
+    # 'broken' produit des false positives qui dépublieraient à tort.
+    # Safer default sur incertitude : 'unreachable' = log silencieux, pas
+    # de masquage. Une vraie panne agence se manifestera sur plusieurs runs
+    # successifs et sera escaladée manuellement.
     if 500 <= status_code < 600:
-        return 'broken', status_code, None, f'server_error_{status_code}'
+        return 'unreachable', status_code, None, f'server_error_{status_code}'
     if status_code == 403:
         return 'unreachable', 403, None, 'forbidden_403'
     return 'unreachable', status_code, None, f'unexpected_{status_code}'
@@ -415,7 +464,10 @@ def run_link_health_check(max_urls: int = None) -> dict:
     if max_urls is None:
         max_urls = _MAX_URLS_PER_RUN
 
-    log.info(f"[link-health] start max_urls={max_urls} age_threshold={_AGE_THRESHOLD_DAYS}d")
+    log.info(
+        f"[link-health] start max_urls={max_urls} age_threshold={_AGE_THRESHOLD_DAYS}d "
+        f"LINK_HEALTH_AUTO_HIDE={LINK_HEALTH_AUTO_HIDE}"
+    )
     t_start = time.time()
 
     age_threshold = datetime.now(timezone.utc) - timedelta(days=_AGE_THRESHOLD_DAYS)

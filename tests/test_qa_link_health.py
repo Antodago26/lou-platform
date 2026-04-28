@@ -55,11 +55,17 @@ class ClassifyTest(unittest.TestCase):
         self.assertEqual(s, 'broken')
         self.assertEqual(code, 404)
 
-    def test_500_broken_with_error(self):
+    def test_5xx_unreachable_with_error(self):
+        """v6.4.6 fix : 5xx ne mappe plus en 'broken' mais en 'unreachable'.
+        Run d8fb6e2 a montré que SB Premium 500 systematic produit des
+        false positives quand mappé en broken (111 Homegate dépubliés à
+        tort). Safer default sur incertitude : unreachable."""
         import qa_link_health_worker as worker
-        s, _, _, err = worker._classify(503)
-        self.assertEqual(s, 'broken')
-        self.assertEqual(err, 'server_error_503')
+        for code in (500, 502, 503, 504):
+            s, _, _, err = worker._classify(code)
+            self.assertEqual(s, 'unreachable',
+                             f"5xx code {code} doit être 'unreachable', got {s}")
+            self.assertEqual(err, f'server_error_{code}')
 
     def test_403_unreachable(self):
         import qa_link_health_worker as worker
@@ -247,6 +253,47 @@ class HomegateOptimizationTest(unittest.TestCase):
 
         self.assertEqual(result['cache_hits_homegate'], 0)
         self.assertEqual(result['sb_credits_estimated'], 11)
+        sb_mock.assert_called_once()
+
+    def test_homegate_premium_500_classified_as_unreachable(self):
+        """v6.4.6 régression Q1 : un _sb_get retournant (500, '...') sur
+        Homegate DOIT produire status='unreachable', PAS 'broken'.
+
+        Avant fix v6.4.6 : run d8fb6e2 (26/04) a vu SB Premium renvoyer
+        500 systematic sur ~110 Homegate → 111 false positives en 'broken'.
+        Le body était la page d'erreur SB (33553 bytes consistent), sans
+        marker DataDome lisible dans le HTML — donc le check de body
+        markers ne le rattrapait pas. Le fix est dans `_classify` directement :
+        5xx → 'unreachable' inconditionnel (cf. fix v6.4.6).
+
+        Ce test échoue si quelqu'un re-mappe les 5xx en broken — ne pas
+        toucher sans validation 3+ runs prod sans false positive.
+        """
+        import qa_link_health_worker as worker
+        conn, cur = _mock_conn()
+        cur.fetchone.side_effect = [(99,)]
+        cur.fetchall.return_value = [
+            (1, 'https://www.homegate.ch/buy/9999', 'homegate', None),
+        ]
+        # SB Premium retourne 500 + page d'erreur SB (sans marker DataDome
+        # dans le HTML, comme observé en prod sur d8fb6e2).
+        sb_error_body = '<html><body>Internal proxy error</body></html>' * 1000
+        sb_mock = MagicMock(return_value=(500, sb_error_body))
+
+        with patch.object(worker, 'get_db', return_value=conn), \
+             patch.object(worker, 'return_db'), \
+             patch.object(worker, '_sb_get', sb_mock), \
+             patch.object(worker, 'sb_bypass_cache', MagicMock()):
+            result = worker.run_link_health_check(max_urls=1)
+
+        self.assertEqual(result['urls_checked'], 1)
+        self.assertEqual(result['counts']['unreachable'], 1,
+                         "SB Premium 500 doit produire 'unreachable' (1 row)")
+        self.assertEqual(result['counts']['broken'], 0,
+                         "FALSE POSITIVE : SB 500 ne doit JAMAIS produire "
+                         "'broken'. Si ce test fail, v6.4.6 fix régressé "
+                         "et le worker re-publie en aval des 'broken' bidons "
+                         "qui dépublieraient le stock à tort.")
         sb_mock.assert_called_once()
 
 
