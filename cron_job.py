@@ -27,6 +27,30 @@ RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
 ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', '')
 
 
+def _flag_disabled(name: str, default: bool = True) -> bool:
+    """Lit un flag booléen depuis l'env. Default = True (= source activée)
+    pour préserver le comportement historique si la var n'est pas posée.
+    Retourne True si la source est DÉSACTIVÉE.
+
+    Accepte 'false' / '0' / 'no' / 'off' (case-insensitive) comme désactivé.
+    Tout autre valeur (y compris vide / absent) = activé.
+    """
+    raw = os.environ.get(name)
+    if raw is None:
+        return not default
+    return raw.strip().lower() in ('false', '0', 'no', 'off')
+
+
+# Drop produit 30/04 (CEO) : Homegate + ImmoScout24 sortis du scope.
+# Le code des scrapers reste dans scrapers.py pour réactivation future si
+# la stratégie change (cf. commit feat(qa): drop homegate+immoscout).
+DISABLED_SOURCES = set()
+if _flag_disabled('ENABLE_HOMEGATE'):
+    DISABLED_SOURCES.add('Homegate')
+if _flag_disabled('ENABLE_IMMOSCOUT24'):
+    DISABLED_SOURCES.add('ImmoScout24')
+
+
 def get_db():
     conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
     conn.autocommit = False
@@ -323,6 +347,8 @@ def run():
     log.info("=" * 50)
     log.info("Bon Home Cron Job Start")
     log.info("=" * 50)
+    if DISABLED_SOURCES:
+        log.info(f"Sources disabled via env flags: {sorted(DISABLED_SOURCES)}")
 
     db = get_db()
 
@@ -376,7 +402,10 @@ def run():
     for city, transaction in scrape_targets:
         log.info(f"--- Scraping: {city} ({transaction}) ---")
         try:
-            listings = scrape_all(city=city, transaction=transaction, skip_nearby=True)
+            listings = scrape_all(
+                city=city, transaction=transaction, skip_nearby=True,
+                disabled_sources=DISABLED_SOURCES,
+            )
             if listings:
                 saved = save_to_db(db, listings)
                 total_scraped += saved

@@ -1,27 +1,42 @@
 """
-Bon Home — Stats QA Blueprint (v6.4.0 — snapshot read-only).
+Bon Home — Stats QA Blueprint (v6.4.4 — repurpose source health).
 
-Endpoint pour cron externe (Cowork) qui sert le recall précalculé par
-`cron_job_qa_recall.py` (Render cron, 04:00 UTC quotidien). Protégé par
-header X-QA-Token (constant-time compare). Pas d'auth JWT : le token
-sert justement à appeler hors session utilisateur.
+Endpoint pour cron externe (Cowork) qui sert les snapshots santé per-source
+précalculés par la Phase 1 du cron `lou-qa-recall` (Render cron, 04:00 UTC
+quotidien). Protégé par header X-QA-Token (constant-time compare).
 
-GET /api/stats/listings-qa?city=<slug>
-  → SELECT DISTINCT ON (city) le row le plus récent de qa_recall_snapshots
-  → retourne 503 snapshot_not_ready si aucun row (le cron n'a pas encore
-    tourné pour cette ville) ; 200 avec le snapshot + snapshot_age_hours
-    sinon.
+GET /api/stats/listings-qa
+  → SELECT DISTINCT ON (source) le row le plus récent de qa_source_health
+    (un par source, captured_at DESC).
+  → 200 avec `sources: [...]` + `captured_at` (le plus récent global) +
+    `snapshot_age_hours` si au moins une row existe.
+  → 503 snapshot_not_ready si la table est vide (cron pas encore tourné
+    après la migration v6.4.4).
 
-IMPORTANT (v6.4.0) :
-  - Plus de scrape live dans l'endpoint. Cible : < 100 ms en lecture.
-  - Plus de fallback ?live=true : si le snapshot est absent ou stale, c'est
-    signalé via le code HTTP (503) ou le champ snapshot_age_hours (200).
-    L'opérateur est responsable de surveiller age_hours et d'ack un cron
-    qui a échoué.
-  - Breaking change de shape vs v6.3.x : `bonhome_indexed.*` et
-    `sources.*_live.*` ont disparu. Les consommateurs (Cowork SKILL.md
-    `monitor-villes-vs-bonhome`) doivent être mis à jour pour parser la
-    nouvelle forme (source_total_listings, our_total_listings, breakdown).
+BREAKING CHANGE vs v6.4.0 :
+  - Le param `?city=<slug>` est retiré (la donnée est globale, pas
+    per-city). Cowork SKILL.md `monitor-villes-vs-bonhome` doit être
+    adapté en aval (drop produit Homegate/IS24 30/04 — la liste des
+    villes n'a plus de sens dans ce contexte).
+  - Le shape change : `{city, source_total_listings, our_total_listings,
+    recall_pct, missing_listing_ids, breakdown}` → `{captured_at,
+    snapshot_age_hours, sources: [{source, status, total_active,
+    scraped_7d, scraped_30d, last_scrape}, ...]}`.
+
+Sample 200 :
+  {
+    "captured_at": "2026-04-30T04:00:12.345+00:00",
+    "snapshot_age_hours": 1.5,
+    "sources": [
+      {"source": "Flatfox",       "status": "ok",
+       "total_active": 412, "scraped_7d": 380, "scraped_30d": 410,
+       "last_scrape": "2026-04-30T03:42:01+00:00"},
+      {"source": "Immobilier.ch", "status": "warn",
+       "total_active": 89,  "scraped_7d": 0,   "scraped_30d": 89,
+       "last_scrape": "2026-04-22T15:18:33+00:00"},
+      ...
+    ]
+  }
 """
 import os
 import hmac
@@ -40,9 +55,7 @@ QA_TOKEN = os.environ.get('QA_TOKEN', '').strip()
 
 
 def _check_token():
-    """Constant-time compare du header X-QA-Token avec QA_TOKEN env.
-    Retourne True si OK, False sinon. Bloque aussi si QA_TOKEN vide
-    (protection anti-accès accidentel si env var pas set en prod)."""
+    """Constant-time compare du header X-QA-Token avec QA_TOKEN env."""
     if not QA_TOKEN:
         return False
     provided = request.headers.get('X-QA-Token', '') or ''
@@ -58,29 +71,22 @@ def _row_get(row, key, tuple_index):
 
 @stats_bp.route('/api/stats/listings-qa', methods=['GET'])
 def listings_qa():
-    """Lecture pure du snapshot le plus récent pour une ville.
+    """Lecture pure du dernier snapshot par source.
+
+    DISTINCT ON (source) ORDER BY source, captured_at DESC = pour chaque
+    source, garder le row le plus récent. Pattern Postgres-natif, plus
+    rapide qu'une window function ROW_NUMBER() pour ce cas.
 
     Deux chemins DB-transient :
       - OperationalError / InterfaceError (SSL bad record mac sur Neon
         cold-start) : 1 retry avec conn détruite via return_db(close=True),
-        ensuite 503 si ça repète (rare mais possible).
+        ensuite 503 si ça repète.
       - Autre exception : 500 avec detail tronqué.
-
-    Note : on ne valide PLUS le city_slug côté endpoint (pas de
-    _CITY_SLUG_TO_DISPLAY ici — cf. qa_recall_worker.py). Un slug inconnu
-    produira 503 snapshot_not_ready, ce qui est le comportement attendu :
-    soit tu demandes une ville qui n'existe pas, soit le cron n'a pas
-    tourné dessus — dans les deux cas la réponse "pas de snapshot" est
-    appropriée.
     """
     if not _check_token():
         return jsonify({"error": "unauthorized"}), 401
 
-    city_slug = (request.args.get('city') or '').strip().lower()
-    if not city_slug:
-        return jsonify({"error": "city required"}), 400
-
-    row = None
+    rows = None
     last_err = None
     for attempt in (1, 2):
         conn = None
@@ -89,16 +95,15 @@ def listings_qa():
             conn = get_db()
             cur = conn.cursor()
             cur.execute("""
-                SELECT id, captured_at, source_total_listings, our_total_listings,
-                       recall_pct, missing_listing_ids, raw_snapshot
-                FROM qa_recall_snapshots
-                WHERE city = %s
-                ORDER BY captured_at DESC
-                LIMIT 1
-            """, (city_slug,))
-            row = cur.fetchone()
+                SELECT DISTINCT ON (source)
+                       source, captured_at, total_active,
+                       scraped_7d, scraped_30d, last_scrape, status
+                FROM qa_source_health
+                ORDER BY source, captured_at DESC
+            """)
+            rows = cur.fetchall()
             cur.close()
-            break  # succès → sort du retry loop
+            break  # succès
         except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
             conn_broken = True
             last_err = e
@@ -122,40 +127,50 @@ def listings_qa():
                 except Exception:
                     pass
 
-    if not row:
+    if not rows:
         return jsonify({
             "error": "snapshot_not_ready",
             "message": (
-                "Snapshot pas encore généré pour cette ville. "
+                "Aucun snapshot santé per-source en DB. "
                 "Prochaine exécution du cron à 04:00 UTC."
             ),
-            "city": city_slug,
         }), 503
 
-    captured_at   = _row_get(row, 'captured_at',           1)
-    source_total  = _row_get(row, 'source_total_listings', 2)
-    our_total     = _row_get(row, 'our_total_listings',    3)
-    recall_pct    = _row_get(row, 'recall_pct',            4)
-    missing       = _row_get(row, 'missing_listing_ids',   5)
-    breakdown     = _row_get(row, 'raw_snapshot',          6)
+    sources = []
+    latest_captured_at = None
+    for row in rows:
+        source       = _row_get(row, 'source',       0)
+        captured_at  = _row_get(row, 'captured_at',  1)
+        total_active = _row_get(row, 'total_active', 2)
+        scraped_7d   = _row_get(row, 'scraped_7d',   3)
+        scraped_30d  = _row_get(row, 'scraped_30d',  4)
+        last_scrape  = _row_get(row, 'last_scrape',  5)
+        status       = _row_get(row, 'status',       6)
 
-    # captured_at = TIMESTAMPTZ → datetime tz-aware
-    now = datetime.now(timezone.utc)
-    try:
-        age_hours = round((now - captured_at).total_seconds() / 3600, 1)
-    except Exception:
-        age_hours = None
+        if latest_captured_at is None or (
+            captured_at is not None and captured_at > latest_captured_at
+        ):
+            latest_captured_at = captured_at
+
+        sources.append({
+            "source":       source,
+            "status":       status,
+            "total_active": int(total_active) if total_active is not None else 0,
+            "scraped_7d":   int(scraped_7d)   if scraped_7d   is not None else 0,
+            "scraped_30d":  int(scraped_30d)  if scraped_30d  is not None else 0,
+            "last_scrape":  last_scrape.isoformat() if last_scrape else None,
+        })
+
+    age_hours = None
+    if latest_captured_at is not None:
+        try:
+            now = datetime.now(timezone.utc)
+            age_hours = round((now - latest_captured_at).total_seconds() / 3600, 1)
+        except Exception:
+            age_hours = None
 
     return jsonify({
-        "city": city_slug,
-        "captured_at": captured_at.isoformat() if captured_at else None,
+        "captured_at": latest_captured_at.isoformat() if latest_captured_at else None,
         "snapshot_age_hours": age_hours,
-        "source_total_listings": int(source_total) if source_total is not None else 0,
-        "our_total_listings": int(our_total) if our_total is not None else 0,
-        # Decimal → float pour JSON-sérialisable
-        "recall_pct": float(recall_pct) if recall_pct is not None else None,
-        # missing et breakdown sont des JSONB, psycopg2 les renvoie déjà
-        # parsés en list/dict Python.
-        "missing_listing_ids": missing or [],
-        "breakdown": breakdown or {},
+        "sources": sources,
     }), 200

@@ -2876,7 +2876,8 @@ NEARBY_MAIN_CITY = {
 }
 
 
-def scrape_all(city="Lausanne", transaction="location", skip_nearby=False):
+def scrape_all(city="Lausanne", transaction="location", skip_nearby=False,
+               disabled_sources=None):
     """Scrape all portals for a given city and transaction type.
     For small towns, also scrapes the nearest large city to catch listings
     that portals list under the main city name.
@@ -2884,8 +2885,16 @@ def scrape_all(city="Lausanne", transaction="location", skip_nearby=False):
     skip_nearby=True disables the NEARBY_MAIN_CITY expansion. Use it from the
     cron job when all relevant main cities are already in the scrape_targets
     list (avoids scraping Neuchâtel 12× — once per small NE town).
+
+    disabled_sources : iterable de noms de portails à skipper (matchés sur
+    le 1er élément du tuple `scrapers` ci-dessous, ex: 'Homegate',
+    'ImmoScout24'). Set vide / None = aucun skip. Utilisé par cron_job.py
+    pour respecter les flags env ENABLE_HOMEGATE / ENABLE_IMMOSCOUT24
+    (drop produit 30/04 — code des scrapers conservé pour réactivation
+    future si la stratégie change).
     """
     all_results = []
+    disabled = set(disabled_sources or ())
 
     # Determine cities to scrape
     cities_to_scrape = [city]
@@ -2895,7 +2904,7 @@ def scrape_all(city="Lausanne", transaction="location", skip_nearby=False):
             cities_to_scrape.append(nearby)
             log.info(f"[scrape_all] Also scraping nearby city: {nearby}")
 
-    scrapers = [
+    all_scrapers = [
         ('Flatfox', scrape_flatfox),
         ('Homegate', scrape_homegate),
         ('ImmoScout24', scrape_immoscout),
@@ -2905,6 +2914,9 @@ def scrape_all(city="Lausanne", transaction="location", skip_nearby=False):
         ('Comparis', scrape_comparis),
         ('Properstar', scrape_properstar),
     ]
+    scrapers = [(name, fn) for name, fn in all_scrapers if name not in disabled]
+    if disabled:
+        log.info(f"[scrape_all] Skipping disabled sources: {sorted(disabled)}")
 
     # NE-only agency scrapers (single-fetch, ignores city loop) — only run for Neuchâtel main
     ne_agency_scrapers = [

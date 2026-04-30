@@ -464,6 +464,32 @@ if os.environ.get('DATABASE_URL', ''):
             except Exception:
                 pass
 
+    # v6.4.4 schema : table qa_source_health (repurpose Phase 1 du cron
+    # lou-qa-recall après drop Homegate + ImmoScout24, décision CEO 30/04).
+    # CREATE TABLE IF NOT EXISTS — idempotent.
+    conn = None
+    conn_broken = False
+    try:
+        import psycopg2 as _pg
+        from migrations.schema_v644 import run_schema_v644
+        conn = get_db()
+        stats = run_schema_v644(conn)
+        log.info(f"v6.4.4 schema stats: {stats}")
+    except Exception as e:
+        try:
+            import psycopg2 as _pg
+            if isinstance(e, (_pg.OperationalError, _pg.InterfaceError)):
+                conn_broken = True
+        except Exception:
+            pass
+        log.warning(f"v6.4.4 schema error (boot continues, will retry next boot): {e}")
+    finally:
+        if conn is not None:
+            try:
+                return_db(conn, close=conn_broken)
+            except Exception:
+                pass
+
     # v6.3 backfills: rooms (NULL/0), Homegate titles (.â mojibake),
     # addresses (leading 'CH '/NPA/dots), properties GPS.
     # Doit tourner APRÈS _run_migrations() (qui backfill les zones GPS) et
