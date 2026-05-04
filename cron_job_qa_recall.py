@@ -58,6 +58,14 @@ def run() -> int:
         log.error("DATABASE_URL not set — aborting")
         return 1
 
+    # Audit H8 (2026-05) : Phase 2 (link health) calls ScrapingBee Premium
+    # for Homegate URLs. Without the key it silently falls back to direct
+    # requests which DataDome blocks → entire batch lands as 'unreachable'
+    # without any signal that the key was the root cause.
+    if not os.environ.get('SCRAPINGBEE_API_KEY'):
+        log.error("SCRAPINGBEE_API_KEY not set — Phase 2 would silently mark all Homegate URLs unreachable")
+        return 1
+
     _log_event("cron_start", phase1="source_health", phase2="link_health")
     t0 = time.time()
 

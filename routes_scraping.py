@@ -1,38 +1,71 @@
 """Bon Home — Scraping / scoring / cron Blueprint."""
 import os
 import re
+import hmac
 import logging
 import threading
 
 from flask import Blueprint, jsonify, request
 
 from db import get_db, return_db
-from auth import token_required
+from auth import token_required, admin_required
+from rate_limit import check_rate_limit, rate_limited_response
 
 log = logging.getLogger('lou-app')
 scraping_bp = Blueprint('scraping', __name__)
 
 CRON_SECRET = os.environ.get('CRON_SECRET', '')
+if not CRON_SECRET:
+    log.warning("CRON_SECRET not configured — /api/cron/scrape and /api/scrape/{debug,test} will reject all requests")
+
+# Caps for /api/import payload sanitization
+_IMPORT_MAX_TITLE_LEN = 300
+_IMPORT_MAX_DESC_LEN = 10000
+_IMPORT_MAX_URL_LEN = 500
+_IMPORT_MAX_IMAGES = 50
+_IMPORT_URL_RE = re.compile(r'^https?://', re.IGNORECASE)
+
+# Per-user throttles — heavy operations that burn ScrapingBee credits.
+_SCRAPE_PER_USER_MIN = 1
+_SCRAPE_PER_USER_HOUR = 5
+_IMPORT_PER_USER_MIN = 5
+_IMPORT_PER_USER_HOUR = 60
+
+
+def _safe_http_url(value):
+    """Return value if it's an http(s) URL within size limits, else None."""
+    if not isinstance(value, str):
+        return None
+    if len(value) > _IMPORT_MAX_URL_LEN:
+        return None
+    if not _IMPORT_URL_RE.match(value):
+        return None
+    return value
 
 
 def _require_cron_secret():
-    secret = request.headers.get('X-Cron-Secret', '') or request.args.get('secret', '')
+    """Header-only since audit H2 (2026-05-04) — query-string fallback dropped
+    to prevent the secret leaking into Cloudflare/Render access logs and
+    Referer headers. Constant-time comparison to defeat timing oracles."""
+    secret = request.headers.get('X-Cron-Secret', '')
     if not CRON_SECRET:
-        log.warning("CRON_SECRET not configured — cron endpoints are disabled")
         return False
-    if secret != CRON_SECRET:
+    if not secret:
         return False
-    return True
+    return hmac.compare_digest(secret, CRON_SECRET)
 
 
 @scraping_bp.route('/api/scrape', methods=['POST'])
 @token_required
 def api_scrape():
     """Trigger scraping based on user's search profile zones. Background-threaded."""
+    user_id = request.user_id
+    if not check_rate_limit(f"scrape:user:{user_id}", _SCRAPE_PER_USER_MIN, _SCRAPE_PER_USER_HOUR):
+        return rate_limited_response(retry_after_seconds=60)
+
     data = request.get_json(silent=True) or {}
     city = data.get('city')
     transaction = data.get('transaction', 'location')
-    user_id = request.user_id
 
     if not city:
         conn = get_db()
@@ -166,9 +199,18 @@ def api_scrape():
 
 
 @scraping_bp.route('/api/import', methods=['POST'])
-@token_required
+@admin_required
 def api_import():
-    """Import scraped listings from external source."""
+    """Import scraped listings from local_scraper. Admin-only.
+
+    Used by the operator-run local_scraper.py workflow which logs in as the
+    admin to obtain a JWT, then POSTs scraped listings here. NOT a general
+    user endpoint — see audit C1 (2026-05-04): a non-admin user posting
+    listings would inject content into the global catalog visible to everyone.
+    """
+    if not check_rate_limit(f"import:user:{request.user_id}", _IMPORT_PER_USER_MIN, _IMPORT_PER_USER_HOUR):
+        return rate_limited_response()
+
     from scrapers import save_to_db
 
     data = request.json or {}
@@ -186,6 +228,27 @@ def api_import():
         for field in required_fields:
             if not listing.get(field):
                 return jsonify({"error": f"Listing {i}: champ '{field}' requis"}), 400
+
+        # URL scheme + length validation (defense in depth, even though admin-only)
+        source_url = _safe_http_url(listing.get('source_url'))
+        if not source_url:
+            return jsonify({"error": f"Listing {i}: source_url doit être http(s) (max {_IMPORT_MAX_URL_LEN} chars)"}), 400
+        listing['source_url'] = source_url
+
+        # Cap free-text fields to schema-friendly lengths
+        title = listing.get('title') or ''
+        if not isinstance(title, str) or len(title) > _IMPORT_MAX_TITLE_LEN:
+            return jsonify({"error": f"Listing {i}: title invalide (max {_IMPORT_MAX_TITLE_LEN} chars)"}), 400
+        desc = listing.get('description')
+        if isinstance(desc, str) and len(desc) > _IMPORT_MAX_DESC_LEN:
+            listing['description'] = desc[:_IMPORT_MAX_DESC_LEN]
+
+        # Filter images: only http(s), capped count
+        raw_images = listing.get('images') or []
+        if not isinstance(raw_images, list):
+            return jsonify({"error": f"Listing {i}: images doit être une liste"}), 400
+        clean_images = [u for u in (_safe_http_url(img) for img in raw_images) if u]
+        listing['images'] = clean_images[:_IMPORT_MAX_IMAGES]
 
     conn = get_db()
     try:

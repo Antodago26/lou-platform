@@ -280,7 +280,26 @@ def _run_migrations():
 # APP FACTORY
 # ============================================================
 def create_app():
-    flask_app = Flask(__name__, static_folder='static')
+    flask_app = Flask(__name__, static_folder='static', template_folder='templates')
+
+    # static_url(path) Jinja helper — auto-bumps cache buster from file mtime.
+    # Closes the manual ?v=20260420b trap (memory note 2026-04-14): if you
+    # forget to bump the version after editing brand.css, users keep seeing
+    # the old file. With static_url() the path becomes /static/brand.css?v=N
+    # where N is the file's mtime as int — changes the moment you save.
+    # Pair with the long-cache header below: ?v= present → 1-year cache.
+    _static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+
+    def static_url(path):
+        full = os.path.join(_static_dir, path)
+        try:
+            mtime = int(os.path.getmtime(full))
+        except OSError:
+            log.warning(f"static_url: missing file {path}")
+            return f"/static/{path}"
+        return f"/static/{path}?v={mtime}"
+
+    flask_app.jinja_env.globals['static_url'] = static_url
 
     # CORS: restrict to known domains.
     # v6.3 security: in production, require ALLOWED_ORIGINS to be explicitly set
@@ -296,15 +315,53 @@ def create_app():
         raise RuntimeError("ALLOWED_ORIGINS env var is required in production")
     CORS(flask_app, resources={r"/api/*": {"origins": allowed_origins}})
 
-    # Security headers on every response
+    # Security headers on every response.
+    # CSP allowlist (audit M1, 2026-05-04): allows hCaptcha, Google Fonts,
+    # Leaflet via unpkg, Swiss federal geo API. 'unsafe-inline' is kept for
+    # script-src and style-src because the HTML pages embed inline blocks
+    # (TODO: move to nonces or external files, then drop unsafe-inline).
+    # X-XSS-Protection dropped — deprecated and can introduce XS-Leak issues.
+    _CSP = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://js.hcaptcha.com https://*.hcaptcha.com https://unpkg.com; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' https: data:; "
+        "connect-src 'self' https://api.hcaptcha.com https://*.hcaptcha.com https://api3.geo.admin.ch; "
+        "frame-src https://*.hcaptcha.com https://newassets.hcaptcha.com; "
+        "worker-src 'self'; "
+        "manifest-src 'self'; "
+        "frame-ancestors 'self'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "object-src 'none'"
+    )
+    _PERMISSIONS_POLICY = (
+        "camera=(), microphone=(), geolocation=(), payment=(), usb=(), "
+        "magnetometer=(), gyroscope=(), accelerometer=(), interest-cohort=()"
+    )
+
     @flask_app.after_request
     def _add_security_headers(response):
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['X-Frame-Options'] = 'SAMEORIGIN'
-        response.headers['X-XSS-Protection'] = '1; mode=block'
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        response.headers['Content-Security-Policy'] = _CSP
+        response.headers['Permissions-Policy'] = _PERMISSIONS_POLICY
         if request.is_secure:
             response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+
+        # Cache-Control for static assets: long-cache + immutable when the
+        # request carries a ?v= cache buster (auto-injected by static_url),
+        # no-cache otherwise. This makes the cache buster actually do something
+        # — Flask's default `no-cache` for sent files would otherwise force
+        # every visit to re-download brand.css/components.css/app.js.
+        if request.path.startswith('/static/'):
+            if request.args.get('v'):
+                response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+            else:
+                response.headers['Cache-Control'] = 'no-cache'
+
         return response
 
     # Register blueprints

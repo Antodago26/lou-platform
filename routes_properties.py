@@ -8,7 +8,7 @@ import logging
 from flask import Blueprint, jsonify, request, make_response
 
 from db import get_db, return_db
-from auth import token_required, plan_feature
+from auth import token_required, token_required_query_ok, plan_feature
 from helpers import days_since
 
 log = logging.getLogger('lou-app')
@@ -590,10 +590,12 @@ def get_favorites():
 
 
 @properties_bp.route('/api/favorites/export', methods=['GET'])
-@token_required
+@token_required_query_ok
 @plan_feature('export_csv')
 def export_favorites():
-    """Export favorites as CSV (plan-gated when PRICING_ENABLED=True)."""
+    """Export favorites as CSV (plan-gated when PRICING_ENABLED=True).
+    Uses token_required_query_ok because the frontend opens this via
+    window.open(...) which can't set Authorization headers."""
     user_id = request.user_id
     conn = get_db()
     cur = conn.cursor()

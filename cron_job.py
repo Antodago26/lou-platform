@@ -166,7 +166,7 @@ def _build_alert_email(properties, count_total):
 </html>'''
 
 
-def _send_scraper_alert(failed_scrapers, stats, major_gaps=None):
+def _send_scraper_alert(failed_scrapers, stats, major_gaps=None, failed_cities=None):
     """
     Send a monitoring email to ADMIN_EMAIL.
 
@@ -176,8 +176,13 @@ def _send_scraper_alert(failed_scrapers, stats, major_gaps=None):
                       sur une ville à gros volume (Neuchâtel, Lausanne, …).
                       Sert d'alerte plus fine même si le scraper marche
                       globalement ailleurs.
+    failed_cities   : list de tuples (city, transaction, exc_type, msg) pour
+                      les villes où scrape_all a RAISED (audit C5, 2026-05).
+                      Avant cet ajout les exceptions étaient log.error()'d
+                      sans alerte → perte silencieuse de listings.
     """
     major_gaps = major_gaps or []
+    failed_cities = failed_cities or []
     if not ADMIN_EMAIL:
         log.warning("ADMIN_EMAIL not set, skipping scraper alert")
         return False
@@ -205,26 +210,50 @@ def _send_scraper_alert(failed_scrapers, stats, major_gaps=None):
             gaps_block = f'''<h3 style="color:#b45309;margin:24px 0 8px;font-size:15px">🟠 Trous sur villes majeures</h3>
             <p style="color:#64748b;margin:0 0 8px;font-size:13px">Scrapers qui retournent 0 sur ces couples (scraper / ville) — fonctionnent ailleurs, mais signal probable d'un problème ciblé :</p>
             <table style="width:100%;border-collapse:collapse;background:#fefce8;border:1px solid #fde68a;border-radius:8px;overflow:hidden;margin-bottom:16px">{gaps_rows}</table>'''
-        html = f'''<!DOCTYPE html><html><body style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px">
-            <h2 style="color:#dc2626;margin:0 0 8px">⚠️ Scrapers en échec</h2>
-            <p style="color:#64748b;margin:0 0 16px">Le cron du {datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M UTC")} a retourné 0 résultat pour ces scrapers sur TOUTES les villes. À investiguer :</p>
-            {gaps_block}
-            <table style="width:100%;border-collapse:collapse;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;overflow:hidden">
+        cities_block = ''
+        if failed_cities:
+            city_rows = ''.join(
+                f'<tr>'
+                f'<td style="padding:4px 12px;color:#dc2626">{city}</td>'
+                f'<td style="padding:4px 12px;color:#64748b">{tx}</td>'
+                f'<td style="padding:4px 12px;color:#dc2626;font-family:monospace;font-size:12px">{exc_type}</td>'
+                f'<td style="padding:4px 12px;color:#64748b;font-size:12px">{msg[:120]}</td>'
+                f'</tr>'
+                for city, tx, exc_type, msg in failed_cities
+            )
+            cities_block = f'''<h3 style="color:#dc2626;margin:24px 0 8px;font-size:15px">🔴 Exceptions par ville (perte sèche)</h3>
+            <p style="color:#64748b;margin:0 0 8px;font-size:13px">scrape_all a levé une exception sur ces villes — listings du jour perdus :</p>
+            <table style="width:100%;border-collapse:collapse;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;overflow:hidden;margin-bottom:16px;font-size:13px">
+              <thead><tr style="background:#fecaca"><th style="padding:6px 12px;text-align:left">Ville</th><th style="padding:6px 12px;text-align:left">Tx</th><th style="padding:6px 12px;text-align:left">Erreur</th><th style="padding:6px 12px;text-align:left">Message</th></tr></thead>
+              <tbody>{city_rows}</tbody>
+            </table>'''
+        scrapers_block = ''
+        if failed_scrapers:
+            scrapers_block = f'''<table style="width:100%;border-collapse:collapse;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;overflow:hidden">
               <thead><tr style="background:#fecaca"><th style="padding:8px 12px;text-align:left">Scraper</th><th style="padding:8px 12px;text-align:right">Résultats</th></tr></thead>
               <tbody>{rows}</tbody>
-            </table>
+            </table>'''
+        html = f'''<!DOCTYPE html><html><body style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px">
+            <h2 style="color:#dc2626;margin:0 0 8px">⚠️ Scraper monitoring</h2>
+            <p style="color:#64748b;margin:0 0 16px">Cron du {datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M UTC")} :</p>
+            {cities_block}
+            {gaps_block}
+            {scrapers_block}
             <h3 style="color:#0f172a;margin:24px 0 8px;font-size:14px">Autres scrapers (OK)</h3>
             <table style="width:100%;border-collapse:collapse;font-size:13px">{other_rows}</table>
             <p style="color:#94a3b8;font-size:12px;margin-top:24px">Bon Home — monitoring cron</p>
         </body></html>'''
+        # Subject prioritises the worst signal: failed scrapers > city exceptions > major gaps
+        if failed_scrapers:
+            subject = f"[Bon Home] {len(failed_scrapers)} scraper(s) en échec"
+        elif failed_cities:
+            subject = f"[Bon Home] {len(failed_cities)} ville(s) en exception (perte sèche)"
+        else:
+            subject = f"[Bon Home] Trous ciblés : {len(major_gaps)} couple(s) scraper/ville à 0"
         resp = http_requests.post('https://api.resend.com/emails', json={
             'from': 'Bon Home Monitoring <noreply@bonhome.ch>',
             'to': [ADMIN_EMAIL],
-            'subject': (
-                f"[Bon Home] {len(failed_scrapers)} scraper(s) en échec"
-                if failed_scrapers else
-                f"[Bon Home] Trous ciblés : {len(major_gaps)} couple(s) scraper/ville à 0"
-            ),
+            'subject': subject,
             'html': html,
         }, headers={
             'Authorization': f'Bearer {RESEND_API_KEY}',
@@ -344,6 +373,14 @@ def run():
         log.error("DATABASE_URL not set")
         sys.exit(1)
 
+    # Audit H8 (2026-05) : fail hard if SCRAPINGBEE_API_KEY is missing.
+    # Without it, scrapers.py:_sb_get falls back to direct requests.get,
+    # which gets blocked silently (403 HTML parsed in 0 listings) and looks
+    # like a "soft" success — entire cron cycle wasted, no alert.
+    if not os.environ.get('SCRAPINGBEE_API_KEY'):
+        log.error("SCRAPINGBEE_API_KEY not set — cron would silently no-op via direct-fetch fallback")
+        sys.exit(1)
+
     log.info("=" * 50)
     log.info("Bon Home Cron Job Start")
     log.info("=" * 50)
@@ -399,6 +436,7 @@ def run():
     # Reset per-scraper counters so we can detect scrapers returning 0 everywhere.
     reset_scraper_stats()
     total_scraped = 0
+    failed_cities = []  # audit C5 : collecte les exceptions par ville pour l'alerte
     for city, transaction in scrape_targets:
         log.info(f"--- Scraping: {city} ({transaction}) ---")
         try:
@@ -411,13 +449,16 @@ def run():
                 total_scraped += saved
                 log.info(f"Saved {saved} listings for {city}")
         except Exception as e:
-            log.error(f"Scrape failed for {city}: {e}")
+            log.error(f"Scrape failed for {city}: {e}", exc_info=True)
+            failed_cities.append((city, transaction, type(e).__name__, str(e)))
             try:
                 db.rollback()
             except Exception:
                 pass
 
     log.info(f"Total scraped and saved: {total_scraped}")
+    if failed_cities:
+        log.warning(f"{len(failed_cities)} city/transaction combos raised: {[(c, tx) for c, tx, _, _ in failed_cities]}")
 
     # Step 3bis: Monitor (v6.3.3 SC4) — 2 niveaux d'alerte :
     #   1. GLOBAL : un scraper retourne 0 sur TOUTES les villes du run
@@ -441,10 +482,13 @@ def run():
         ])
         if failed_scrapers:
             log.warning(f"Scrapers with 0 results on all cities: {failed_scrapers}")
-            _send_scraper_alert(failed_scrapers, stats, major_gaps=major_gaps)
+            _send_scraper_alert(failed_scrapers, stats, major_gaps=major_gaps, failed_cities=failed_cities)
+        elif failed_cities:
+            # audit C5 : ville en exception même sans 0-global et sans major_gaps
+            _send_scraper_alert([], stats, major_gaps=major_gaps, failed_cities=failed_cities)
         elif major_gaps:
             log.warning(f"Scraper gaps on major cities: {major_gaps}")
-            _send_scraper_alert([], stats, major_gaps=major_gaps)
+            _send_scraper_alert([], stats, major_gaps=major_gaps, failed_cities=failed_cities)
 
     # Step 4: Deactivate stale listings (> 21 days without update)
     # C2.6 — tightened from 30d to 21d so the catalog purges sooner.

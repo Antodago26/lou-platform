@@ -147,6 +147,12 @@ _ANTIBOT_MARKERS = (
     'access denied',
 )
 
+# Postgres advisory-lock key (audit C3, 2026-05-04). Prevents two overlapping
+# link-health runs from selecting the same 1000 URLs and double-billing
+# ScrapingBee Premium (~11k credits per overlap on Homegate). Session-level —
+# released automatically when the lock connection is closed.
+_LINK_HEALTH_LOCK_KEY = 7463092017042020
+
 # Marqueurs "annonce supprimée" dans les pages Homegate (cas où Premium
 # passe le 200 mais le contenu est une page d'erreur applicative).
 # Multilingue car Homegate sert FR/DE/EN selon le client.
@@ -440,6 +446,39 @@ def _record_check(conn, prop_id: int, source_lower: str, url: str,
 # Entry point
 # ============================================================
 
+def _acquire_run_lock():
+    """Try to grab the link-health advisory lock. Returns the connection
+    holding the lock (caller must close it to release), or None if another
+    run already holds it."""
+    db_url = os.environ.get('DATABASE_URL')
+    if not db_url:
+        return None
+    try:
+        conn = psycopg2.connect(db_url)
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute("SELECT pg_try_advisory_lock(%s)", (_LINK_HEALTH_LOCK_KEY,))
+            row = cur.fetchone()
+            acquired = bool(row[0]) if row else False
+        if not acquired:
+            conn.close()
+            return None
+        return conn
+    except Exception as e:
+        log.warning(f"[link-health] could not acquire run lock: {e}")
+        return None
+
+
+def _release_run_lock(lock_conn):
+    """Closing the connection releases all session advisory locks."""
+    if lock_conn is None:
+        return
+    try:
+        lock_conn.close()
+    except Exception:
+        pass
+
+
 def run_link_health_check(max_urls: int = None) -> dict:
     """Sélectionne `max_urls` propriétés actives, vérifie chaque URL,
     INSERT qa_link_checks + UPDATE properties.last_checked_at.
@@ -464,6 +503,26 @@ def run_link_health_check(max_urls: int = None) -> dict:
     if max_urls is None:
         max_urls = _MAX_URLS_PER_RUN
 
+    # Anti-overlap guard (audit C3, 2026-05). Two parallel runs would
+    # SELECT the same 1000 URLs and double the SB Premium spend.
+    lock_conn = _acquire_run_lock()
+    if lock_conn is None:
+        log.warning("[link-health] another run holds the advisory lock — exiting cleanly")
+        return {
+            'run_id': None, 'urls_checked': 0,
+            'counts': {'ok': 0, 'redirect': 0, 'broken': 0, 'unreachable': 0},
+            'cache_hits_homegate': 0, 'sb_credits_estimated': 0,
+            'unreachable_pct': 0.0, 'elapsed_s': 0.0,
+            'skipped_reason': 'concurrent_run',
+        }
+
+    try:
+        return _run_link_health_check_locked(max_urls)
+    finally:
+        _release_run_lock(lock_conn)
+
+
+def _run_link_health_check_locked(max_urls: int) -> dict:
     log.info(
         f"[link-health] start max_urls={max_urls} age_threshold={_AGE_THRESHOLD_DAYS}d "
         f"LINK_HEALTH_AUTO_HIDE={LINK_HEALTH_AUTO_HIDE}"

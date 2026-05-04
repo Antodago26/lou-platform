@@ -22,6 +22,16 @@ from helpers import (
     validate_json, SignupRequest, LoginRequest, ProfileUpdateRequest,
     parse_budget, parse_rooms, _HAS_PYDANTIC,
 )
+from rate_limit import client_ip, check_rate_limit, rate_limited_response
+
+# Brute-force throttles (audit C2, 2026-05). Per-worker in-memory — see
+# rate_limit.py for the Redis upgrade TODO.
+_LOGIN_PER_IP_MIN = 5
+_LOGIN_PER_IP_HOUR = 30
+_LOGIN_PER_EMAIL_MIN = 5
+_LOGIN_PER_EMAIL_HOUR = 20
+_SIGNUP_PER_IP_MIN = 3
+_SIGNUP_PER_IP_HOUR = 10
 
 log = logging.getLogger('lou-app')
 
@@ -85,22 +95,47 @@ def make_token(user_id):
     )
 
 
+def _decode_jwt_or_401(token):
+    """Returns (user_id, error_response). error_response is None on success."""
+    if not token:
+        return None, (jsonify({"error": "Token manquant"}), 401)
+    try:
+        data = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
+        return data['user_id'], None
+    except jwt.ExpiredSignatureError:
+        return None, (jsonify({"error": "Token expiré"}), 401)
+    except jwt.InvalidTokenError:
+        return None, (jsonify({"error": "Token invalide"}), 401)
+
+
 def token_required(f):
-    """JWT authentication decorator."""
+    """JWT authentication decorator. Header-only — see audit H1 (2026-05-04):
+    accepting ?token= leaks JWTs into Cloudflare/Render logs, browser history,
+    and Referer. For download endpoints that need the token in the URL (e.g.
+    window.open for CSV export), use token_required_query_ok instead."""
     @wraps(f)
     def decorated(*args, **kwargs):
         token = request.headers.get('Authorization', '').replace('Bearer ', '')
-        if not token:
-            token = request.args.get('token', '')
-        if not token:
-            return jsonify({"error": "Token manquant"}), 401
-        try:
-            data = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
-            request.user_id = data['user_id']
-        except jwt.ExpiredSignatureError:
-            return jsonify({"error": "Token expiré"}), 401
-        except jwt.InvalidTokenError:
-            return jsonify({"error": "Token invalide"}), 401
+        user_id, err = _decode_jwt_or_401(token)
+        if err:
+            return err
+        request.user_id = user_id
+        return f(*args, **kwargs)
+    return decorated
+
+
+def token_required_query_ok(f):
+    """JWT decorator that accepts ?token= in the query string. Use ONLY for
+    GET endpoints that must be opened via window.open / direct browser URL
+    (e.g. CSV/PDF downloads). Every other endpoint should use token_required."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get('Authorization', '').replace('Bearer ', '') \
+            or request.args.get('token', '')
+        user_id, err = _decode_jwt_or_401(token)
+        if err:
+            return err
+        request.user_id = user_id
         return f(*args, **kwargs)
     return decorated
 
@@ -243,6 +278,8 @@ def get_config():
 
 @auth_bp.route('/api/signup', methods=['POST'])
 def signup():
+    if not check_rate_limit(f"signup:ip:{client_ip()}", _SIGNUP_PER_IP_MIN, _SIGNUP_PER_IP_HOUR):
+        return rate_limited_response()
     req, err = validate_json(SignupRequest)
     if err:
         return err
@@ -343,6 +380,10 @@ def signup():
 
 @auth_bp.route('/api/login', methods=['POST'])
 def login():
+    # IP throttle first — caps credential stuffing from one source.
+    if not check_rate_limit(f"login:ip:{client_ip()}", _LOGIN_PER_IP_MIN, _LOGIN_PER_IP_HOUR):
+        return rate_limited_response()
+
     req, err = validate_json(LoginRequest)
     if err:
         return err
@@ -350,6 +391,14 @@ def login():
     password = getattr(req, 'password', '') or ''
     if not _HAS_PYDANTIC:
         email = email.strip().lower()
+    else:
+        email = email.strip().lower()
+
+    # Per-email throttle — caps targeted brute force on one account from
+    # rotating IPs. Recorded BEFORE bcrypt so the timing is consistent
+    # whether the email exists or not.
+    if email and not check_rate_limit(f"login:email:{email}", _LOGIN_PER_EMAIL_MIN, _LOGIN_PER_EMAIL_HOUR):
+        return rate_limited_response()
 
     conn = get_db()
     cur = conn.cursor()

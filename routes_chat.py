@@ -2,9 +2,7 @@
 import os
 import json
 import re
-import time
 import logging
-from collections import defaultdict
 
 import jwt
 from flask import Blueprint, jsonify, request
@@ -14,6 +12,7 @@ from anthropic import Anthropic
 from db import get_db, return_db
 from helpers import validate_json, ChatRequest
 from auth import JWT_SECRET
+from rate_limit import client_ip, check_rate_limit
 
 log = logging.getLogger('lou-app')
 chat_bp = Blueprint('chat', __name__)
@@ -21,49 +20,18 @@ chat_bp = Blueprint('chat', __name__)
 ANTHROPIC_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 anthropic_client = Anthropic(api_key=ANTHROPIC_KEY) if ANTHROPIC_KEY else None
 
-# ---------------------------------------------------------------------------
-# Rate limiter (in-memory, per gunicorn worker).
-#
-# v6.3.3 — clé serveur-contrôlée :
-#   - authentifié : "user:<jwt_user_id>"
-#   - anonyme     : "ip:<real_client_ip>"
-#
-# Le session_id fourni par le client n'est JAMAIS utilisé pour rate-limit
-# (il restait trivialement bypassable en incrémentant un cookie). Avec
-# clé = IP, un attaquant doit rotater son IP pour contourner.
-#
-# Buckets minute ET heure : le bucket horaire cape les attaques qui
-# respectent la fenêtre minute mais spamment sur la durée (drain budget
-# Anthropic). TODO post-beta : backer par Redis/flask-limiter pour agréger
-# entre workers — actuellement limite ×nb_workers en pratique.
-# ---------------------------------------------------------------------------
-_chat_rate_min = defaultdict(list)
-_chat_rate_hour = defaultdict(list)
-
+# Per-key chat caps. Authenticated users get a wider envelope than anons.
+# Buckets are shared with /api/login etc. via rate_limit.py — an attacker
+# cannot rotate from spamming login to spamming chat to dodge throttles.
 CHAT_AUTH_PER_MIN = 20
 CHAT_AUTH_PER_HOUR = 200
 CHAT_ANON_PER_MIN = 5
 CHAT_ANON_PER_HOUR = 30
 
 
-def _client_ip():
-    """
-    Real client IP. Render/Cloudflare injectent X-Forwarded-For ; on prend
-    la première IP (client original, le reste = proxies en chaîne).
-    """
-    xff = request.headers.get('X-Forwarded-For', '')
-    if xff:
-        first = xff.split(',')[0].strip()
-        if first:
-            return first
-    return request.remote_addr or 'unknown'
-
-
 def _rate_key():
-    """
-    Returns (key, is_anonymous). Clé serveur-contrôlée uniquement.
-    Ne se base JAMAIS sur data.session_id (user-fourni = bypassable).
-    """
+    """Returns (key, is_anonymous). Server-controlled only — never trusts
+    user-supplied session_id (trivially bypassable by incrementing a cookie)."""
     token = request.headers.get('Authorization', '').replace('Bearer ', '')
     if token:
         try:
@@ -71,23 +39,14 @@ def _rate_key():
             return f"user:{tdata['user_id']}", False
         except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
             pass
-    return f"ip:{_client_ip()}", True
+    return f"ip:{client_ip()}", True
 
 
 def _check_rate_limit(key, is_anonymous):
-    """Vérifie buckets minute + heure. True si autorisé."""
-    now = time.time()
-    _chat_rate_min[key] = [t for t in _chat_rate_min[key] if now - t < 60]
-    _chat_rate_hour[key] = [t for t in _chat_rate_hour[key] if now - t < 3600]
+    """Chat-specific wrapper that picks anon vs auth limits."""
     per_min = CHAT_ANON_PER_MIN if is_anonymous else CHAT_AUTH_PER_MIN
     per_hour = CHAT_ANON_PER_HOUR if is_anonymous else CHAT_AUTH_PER_HOUR
-    if len(_chat_rate_min[key]) >= per_min:
-        return False
-    if len(_chat_rate_hour[key]) >= per_hour:
-        return False
-    _chat_rate_min[key].append(now)
-    _chat_rate_hour[key].append(now)
-    return True
+    return check_rate_limit(key, per_min, per_hour)
 
 
 LOU_SYSTEM_PROMPT = """Tu es Lou, un chasseur immobilier digital suisse. Tu es un loup sympathique et efficace.
