@@ -29,11 +29,11 @@
   <meta name="twitter:image" content="https://www.bonhome.ch/static/og-beta-v4.png">
 
   <link rel="icon" type="image/svg+xml" href="/static/logos/favicon.svg">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <!-- Fraunces avec l'axe opsz (CRITIQUE — sans ça rend fin comme Times).
-       URL verbatim du README DA V1.0 (section Font loading). -->
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,300;1,9..144,400&family=Inter:wght@400;500;600&display=swap">
+  <!-- Fonts self-hosted depuis 2026-05 (audit H18 : FADP/GDPR + perf).
+       Avant : Fraunces+Inter chargés depuis fonts.googleapis.com → Google
+       recevait l'IP de chaque visiteur CH/EU. Maintenant : woff2 servis
+       depuis /static/fonts/, même origine, cache long. -->
+  <link rel="stylesheet" href="{{ static_url('fonts/google-fonts.css') }}">
   <link rel="stylesheet" href="{{ static_url('brand.css') }}">
   <link rel="stylesheet" href="{{ static_url('components.css') }}">
 
