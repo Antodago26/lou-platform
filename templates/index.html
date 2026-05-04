@@ -37,6 +37,23 @@
   <link rel="stylesheet" href="{{ static_url('brand.css') }}">
   <link rel="stylesheet" href="{{ static_url('components.css') }}">
 
+  <!-- JSON-LD Organization : carte de visite Google. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "bonhome.",
+    "url": "https://bonhome.ch",
+    "logo": "https://bonhome.ch/static/logos/wordmark.svg",
+    "description": "Assistant immobilier IA suisse. Lou surveille 7 portails (Homegate, ImmoScout24, Comparis, Flatfox, etc.) et scoree les annonces selon tes critères.",
+    "areaServed": "CH",
+    "email": "contact@bonhome.ch",
+    "sameAs": [
+      "https://www.instagram.com/bonhome.ch"
+    ]
+  }
+  </script>
+
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: var(--font-body); color: var(--ink); background: var(--paper); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
@@ -459,7 +476,7 @@
         <h4>Contact</h4>
         <a href="mailto:contact@bonhome.ch">contact@bonhome.ch</a>
         <div class="footer-social">
-          <a href="https://www.instagram.com/bonhome.ch" target="_blank" rel="noopener" aria-label="Instagram">
+          <a href="https://www.instagram.com/bonhome.ch" target="_blank" rel="noopener noreferrer" aria-label="Instagram">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zM5.838 12a6.162 6.162 0 1 0 12.324 0 6.162 6.162 0 0 0-12.324 0zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/></svg>
           </a>
         </div>

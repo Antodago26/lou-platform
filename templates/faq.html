@@ -10,8 +10,109 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,300;1,9..144,400&family=Inter:wght@400;500;600&display=swap">
+  <link rel="canonical" href="https://bonhome.ch/faq">
   <link rel="stylesheet" href="{{ static_url('brand.css') }}">
   <link rel="stylesheet" href="{{ static_url('components.css') }}">
+
+  <!-- JSON-LD FAQPage : éligibilité rich snippet Google. Tenir synchro
+       avec les <details>/<summary> ci-dessous (sinon Google flag inconsistency). -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Comment bonhome. trouve-t-il les biens immobiliers ?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "bonhome. scrute en continu plus de 10 portails immobiliers suisses (Homegate, ImmoScout24, Comparis, Flatfox, Immobilier.ch, Acheter-Louer, Properstar et plusieurs régies indépendantes). Les annonces sont rafraîchies chaque jour, dédupliquées entre portails, puis scorées selon vos critères personnels."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Est-ce que bonhome. est gratuit ?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Oui, l'accès à bonhome. est gratuit pour l'instant. Nous réfléchissons à une offre premium à l'avenir pour des fonctionnalités avancées (alertes instantanées, analyses de marché), mais le service de base restera gratuit."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Quelle est la différence avec Homegate ou ImmoScout24 ?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "bonhome. ne publie pas d'annonces : nous agrégeons les biens des autres portails et les présentons avec un scoring personnalisé. L'objectif est de vous épargner la corvée de consulter 10 sites différents et de repérer le bon bien parmi des centaines d'annonces."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Comment fonctionne le score de A à D ?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Chaque bien est évalué sur 100 points répartis sur 6 critères : zone (proximité géographique), budget (adéquation avec votre fourchette), type (appartement/maison/etc.), surface, équipements demandés (parking, balcon, etc.) et fraîcheur de l'annonce. La note finale est convertie en grade : A (85-100), B (70-84), C (55-69), D (0-54)."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Pourquoi certains critères sont à 0 ?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Un critère à 0 signifie que le bien ne correspond pas du tout à ce paramètre. Par exemple, si vous demandez un parking et que l'annonce ne le mentionne pas, le score « Équipements » sera bas. Cliquez sur le badge de score d'une annonce pour voir le détail de chaque critère."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Puis-je modifier mes critères de recherche ?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Oui. Dans votre dashboard, accédez à « Mon profil » pour ajuster vos zones, votre budget, le type de bien recherché et vos équipements prioritaires. Les scores sont recalculés automatiquement."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Comment recevoir des alertes par email ?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Dans votre profil, activez les alertes email et choisissez leur fréquence (instantanée, quotidienne ou hebdomadaire). Vous pouvez également définir un score minimum pour ne recevoir que les meilleures annonces."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "À quelle fréquence les nouvelles annonces sont-elles détectées ?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Nos robots scrutent les portails une fois par jour en soirée (vers 18h). Les nouvelles annonces et changements de prix sont détectés et les alertes sont envoyées dans la foulée."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Comment supprimer mon compte ?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Pour supprimer votre compte et toutes vos données, envoyez-nous un email à contact@bonhome.ch depuis l'adresse associée à votre compte. La suppression est effective sous 30 jours."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Mes données sont-elles partagées avec des tiers ?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Non. Vos critères et conversations ne sont jamais vendus ni partagés. Les seuls sous-traitants techniques sont listés dans notre politique de confidentialité."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Puis-je exporter mes favoris ?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Oui, depuis l'onglet « Mes favoris » du dashboard, cliquez sur « Exporter CSV » pour télécharger la liste complète avec prix, scores et liens vers les annonces originales."
+        }
+      }
+    ]
+  }
+  </script>
+
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: var(--bh-font-sans); color: var(--bh-ink); background: var(--bh-paper); -webkit-font-smoothing: antialiased; font-feature-settings: "ss01" on, "ss02" on; }

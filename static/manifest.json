@@ -1,13 +1,13 @@
 {
-  "name": "Bon Home",
-  "short_name": "BonHome",
-  "description": "Votre chasseur immobilier intelligent",
+  "name": "bonhome.",
+  "short_name": "bonhome.",
+  "description": "Lou surveille 7 portails immobiliers suisses pour toi. Tu vis, elle cherche.",
+  "lang": "fr-CH",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#0369a1",
+  "background_color": "#F7F4EE",
+  "theme_color": "#2A6670",
   "icons": [
-    { "src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png" }
+    { "src": "/static/logos/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]
 }
