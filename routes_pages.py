@@ -1,8 +1,9 @@
 """Bon Home — Static pages + health endpoint Blueprint."""
 import time
 import logging
+from datetime import date
 
-from flask import Blueprint, jsonify, send_from_directory
+from flask import Blueprint, jsonify, send_from_directory, render_template, abort, Response
 
 from plans import public_catalog
 from db import get_db, return_db, pool_stats
@@ -11,10 +12,21 @@ log = logging.getLogger('lou-app')
 
 pages_bp = Blueprint('pages', __name__)
 
+# Whitelist of templates served via the public router. Adding a new public
+# page = adding it here. Anything else returns 404.
+_PUBLIC_PAGES = {
+    'dashboard': 'dashboard.html',
+    'privacy':   'privacy.html',
+    'terms':     'terms.html',
+    'profil':    'profil.html',
+    'faq':       'faq.html',
+    'pricing':   'pricing.html',
+}
+
 
 @pages_bp.route('/')
 def index():
-    return send_from_directory('static', 'index.html')
+    return render_template('index.html')
 
 
 @pages_bp.route('/manifest.json')
@@ -22,34 +34,46 @@ def manifest_json():
     return send_from_directory('static', 'manifest.json')
 
 
-@pages_bp.route('/dashboard')
-def dashboard():
-    return send_from_directory('static', 'dashboard.html')
+@pages_bp.route('/robots.txt')
+def robots_txt():
+    body = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /api/\n"
+        "Disallow: /dashboard\n"
+        "Disallow: /profil\n"
+        "\n"
+        "Sitemap: https://bonhome.ch/sitemap.xml\n"
+    )
+    return Response(body, mimetype='text/plain')
 
 
-@pages_bp.route('/privacy')
-def privacy():
-    return send_from_directory('static', 'privacy.html')
+# Public URLs to expose in the sitemap. Order matters less than completeness.
+_SITEMAP_URLS = ['/', '/pricing', '/faq', '/privacy', '/terms']
 
 
-@pages_bp.route('/terms')
-def terms():
-    return send_from_directory('static', 'terms.html')
+@pages_bp.route('/sitemap.xml')
+def sitemap_xml():
+    today = date.today().isoformat()
+    urls = ''.join(
+        f'<url><loc>https://bonhome.ch{path}</loc><lastmod>{today}</lastmod></url>'
+        for path in _SITEMAP_URLS
+    )
+    body = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        f'{urls}'
+        '</urlset>'
+    )
+    return Response(body, mimetype='application/xml')
 
 
-@pages_bp.route('/profil')
-def profil():
-    return send_from_directory('static', 'profil.html')
-
-
-@pages_bp.route('/faq')
-def faq():
-    return send_from_directory('static', 'faq.html')
-
-
-@pages_bp.route('/pricing')
-def pricing():
-    return send_from_directory('static', 'pricing.html')
+@pages_bp.route('/<page>')
+def public_page(page):
+    template = _PUBLIC_PAGES.get(page)
+    if not template:
+        abort(404)
+    return render_template(template)
 
 
 @pages_bp.route('/health')

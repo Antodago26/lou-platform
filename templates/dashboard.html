@@ -13,10 +13,15 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <!-- Fraunces avec l'axe opsz (CRITIQUE — cf README DA V1.0). -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,300;1,9..144,400&family=Inter:wght@400;500;600&display=swap">
-  <link rel="stylesheet" href="/static/brand.css?v=20260420b">
-  <link rel="stylesheet" href="/static/components.css?v=20260420b">
+  <link rel="stylesheet" href="{{ static_url('brand.css') }}">
+  <link rel="stylesheet" href="{{ static_url('components.css') }}">
 </head>
 <body class="bh-base">
-  <script src="/static/app.js?v=20260420b"></script>
+  <noscript>
+    <p style="padding:24px;text-align:center;font-family:sans-serif;color:#1A4650">
+      Cette page nécessite JavaScript. Active-le pour accéder à ton tableau de bord.
+    </p>
+  </noscript>
+  <script src="{{ static_url('app.js') }}" defer></script>
 </body>
 </html>
