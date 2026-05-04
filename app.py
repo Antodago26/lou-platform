@@ -72,7 +72,7 @@ if _SENTRY_DSN:
         # Import/init error ne doit jamais bloquer le boot.
         logging.getLogger('lou-app').error(f"Sentry init failed: {_se}")
 
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 from db import get_db, return_db, init_db
@@ -364,6 +364,26 @@ def create_app():
 
         return response
 
+    # Audit H6 (2026-05) : routes admin/properties qui n'ont pas leur propre
+    # try/except retournaient un 500 HTML générique sur erreur DB, cassant
+    # les consumers JSON. Ces handlers globaux interceptent et renvoient du
+    # JSON propre. Sentry capture quand même la stack via app.logger.
+    import psycopg2 as _pg_for_handlers
+
+    @flask_app.errorhandler(_pg_for_handlers.Error)
+    def _handle_psycopg2_error(e):
+        log.exception(f"Unhandled DB error on {request.path}")
+        return jsonify({"error": "Erreur serveur (DB)"}), 500
+
+    @flask_app.errorhandler(500)
+    def _handle_500(e):
+        # Catch-all pour les routes /api/* qui n'ont pas de try/except.
+        # Les routes pages (/, /faq, etc.) gardent la 500 HTML par défaut.
+        if request.path.startswith('/api/'):
+            log.exception(f"Unhandled exception on {request.path}")
+            return jsonify({"error": "Erreur serveur"}), 500
+        return e
+
     # Register blueprints
     flask_app.register_blueprint(auth_bp)
     flask_app.register_blueprint(properties_bp)
@@ -606,7 +626,7 @@ if os.environ.get('DATABASE_URL', ''):
         lock_acquired = False
         conn_broken = False
         try:
-            from scoring_engine import score_property
+            from scoring_engine import upsert_scored_properties
             db = get_db()
             cur = db.cursor()
 
@@ -653,30 +673,8 @@ if os.environ.get('DATABASE_URL', ''):
                     q += " AND (price IS NULL OR price <= %s)"
                     params.append(int(float(prof['budget_max']) * 1.3))
                 cur.execute(q, params)
-                props = [dict(r) for r in cur.fetchall()]
-                for prop in props:
-                    result = score_property(prop, prof, zones)
-                    cur.execute("""
-                        INSERT INTO scored_properties
-                            (property_id, profile_id, user_id, total_score, grade,
-                             score_zone, score_budget, score_type, score_surface,
-                             score_equipment, score_freshness, distance_km)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                        ON CONFLICT (property_id, profile_id)
-                        DO UPDATE SET
-                            total_score=EXCLUDED.total_score, grade=EXCLUDED.grade,
-                            score_zone=EXCLUDED.score_zone, score_budget=EXCLUDED.score_budget,
-                            score_type=EXCLUDED.score_type, score_surface=EXCLUDED.score_surface,
-                            score_equipment=EXCLUDED.score_equipment, score_freshness=EXCLUDED.score_freshness,
-                            distance_km=EXCLUDED.distance_km, scored_at=NOW()
-                    """, (
-                        prop['id'], prof['id'], prof['user_id'],
-                        result['total_score'], result['grade'],
-                        result['score_zone'], result['score_budget'],
-                        result['score_type'], result['score_surface'],
-                        result['score_equipment'], result['score_freshness'],
-                        result['distance_km']
-                    ))
+                props = cur.fetchall()
+                upsert_scored_properties(cur, props, prof, zones, user_id=prof['user_id'])
                 db.commit()
                 log.info(f"Boot rescore: {len(props)} properties for profile {prof['id']}")
             log.info("Boot rescore complete")

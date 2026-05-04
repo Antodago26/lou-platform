@@ -97,7 +97,7 @@ def api_scrape():
 
     def _bg_scrape(city_list, tx, uid):
         from scrapers import scrape_all, save_to_db
-        from scoring_engine import score_property
+        from scoring_engine import upsert_scored_properties
         import psycopg2 as _pg
         bg_conn = get_db()
         bg_cur = bg_conn.cursor()
@@ -141,33 +141,7 @@ def api_scrape():
                         score_params.append(int(float(profile['budget_max']) * 1.3))
                     bg_cur.execute(score_query, score_params)
                     properties = bg_cur.fetchall()
-
-                    scored = 0
-                    for prop in properties:
-                        prop = dict(prop)
-                        result = score_property(prop, profile, zones)
-                        bg_cur.execute("""
-                            INSERT INTO scored_properties
-                                (property_id, profile_id, user_id, total_score, grade,
-                                 score_zone, score_budget, score_type, score_surface,
-                                 score_equipment, score_freshness, distance_km)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                            ON CONFLICT (property_id, profile_id)
-                            DO UPDATE SET
-                                total_score = EXCLUDED.total_score, grade = EXCLUDED.grade,
-                                score_zone = EXCLUDED.score_zone, score_budget = EXCLUDED.score_budget,
-                                score_type = EXCLUDED.score_type, score_surface = EXCLUDED.score_surface,
-                                score_equipment = EXCLUDED.score_equipment, score_freshness = EXCLUDED.score_freshness,
-                                distance_km = EXCLUDED.distance_km, scored_at = NOW()
-                        """, (
-                            prop['id'], profile['id'], uid,
-                            result['total_score'], result['grade'],
-                            result['score_zone'], result['score_budget'],
-                            result['score_type'], result['score_surface'],
-                            result['score_equipment'], result['score_freshness'],
-                            result['distance_km']
-                        ))
-                        scored += 1
+                    scored = upsert_scored_properties(bg_cur, properties, profile, zones, user_id=uid)
                     bg_conn.commit()
                     log.info(f"User scrape scoring: {scored} properties scored for user {uid}")
             except Exception as e:
@@ -267,7 +241,7 @@ def api_import():
 @token_required
 def api_score():
     """Score all properties for the current user's profile."""
-    from scoring_engine import score_property
+    from scoring_engine import upsert_scored_properties
     conn = get_db()
     cur = conn.cursor()
     try:
@@ -300,39 +274,7 @@ def api_score():
             score_params.append(int(float(profile['budget_max']) * 1.3))
         cur.execute(score_query, score_params)
         properties = cur.fetchall()
-
-        scored = 0
-        for prop in properties:
-            prop = dict(prop)
-            result = score_property(prop, profile, zones)
-
-            cur.execute("""
-                INSERT INTO scored_properties
-                    (property_id, profile_id, user_id, total_score, grade,
-                     score_zone, score_budget, score_type, score_surface,
-                     score_equipment, score_freshness, distance_km)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (property_id, profile_id)
-                DO UPDATE SET
-                    total_score = EXCLUDED.total_score,
-                    grade = EXCLUDED.grade,
-                    score_zone = EXCLUDED.score_zone,
-                    score_budget = EXCLUDED.score_budget,
-                    score_type = EXCLUDED.score_type,
-                    score_surface = EXCLUDED.score_surface,
-                    score_equipment = EXCLUDED.score_equipment,
-                    score_freshness = EXCLUDED.score_freshness,
-                    distance_km = EXCLUDED.distance_km,
-                    scored_at = NOW()
-            """, (
-                prop['id'], profile['id'], request.user_id,
-                result['total_score'], result['grade'],
-                result['score_zone'], result['score_budget'],
-                result['score_type'], result['score_surface'],
-                result['score_equipment'], result['score_freshness'],
-                result['distance_km']
-            ))
-            scored += 1
+        scored = upsert_scored_properties(cur, properties, profile, zones, user_id=request.user_id)
 
         conn.commit()
         return jsonify({"ok": True, "scored": scored, "profile_id": profile['id']})
@@ -569,7 +511,7 @@ def api_cron_scrape():
 
     def _background_scrape(targets, profiles_data):
         from scrapers import scrape_all, save_to_db
-        from scoring_engine import score_property
+        from scoring_engine import upsert_scored_properties
         import psycopg2 as _pg
 
         bg_conn = get_db()
@@ -594,45 +536,12 @@ def api_cron_scrape():
             scored_total = 0
             for p in profiles_data:
                 try:
-                    profile_id = p['id']
-                    user_id = p['user_id']
                     zones_data = [dict(z) for z in (p.get('zones') or []) if isinstance(z, dict) and z.get('city')]
 
                     bg_cur.execute("SELECT * FROM properties WHERE is_active = TRUE AND transaction = %s",
                                 (p.get('transaction', 'location'),))
                     properties = bg_cur.fetchall()
-
-                    for prop in properties:
-                        prop = dict(prop)
-                        result = score_property(prop, p, zones_data)
-                        bg_cur.execute("""
-                            INSERT INTO scored_properties
-                                (property_id, profile_id, user_id, total_score, grade,
-                                 score_zone, score_budget, score_type, score_surface,
-                                 score_equipment, score_freshness, distance_km)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                            ON CONFLICT (property_id, profile_id)
-                            DO UPDATE SET
-                                total_score = EXCLUDED.total_score,
-                                grade = EXCLUDED.grade,
-                                score_zone = EXCLUDED.score_zone,
-                                score_budget = EXCLUDED.score_budget,
-                                score_type = EXCLUDED.score_type,
-                                score_surface = EXCLUDED.score_surface,
-                                score_equipment = EXCLUDED.score_equipment,
-                                score_freshness = EXCLUDED.score_freshness,
-                                distance_km = EXCLUDED.distance_km,
-                                scored_at = NOW()
-                        """, (
-                            prop['id'], profile_id, user_id,
-                            result['total_score'], result['grade'],
-                            result['score_zone'], result['score_budget'],
-                            result['score_type'], result['score_surface'],
-                            result['score_equipment'], result['score_freshness'],
-                            result['distance_km']
-                        ))
-                        scored_total += 1
-
+                    scored_total += upsert_scored_properties(bg_cur, properties, p, zones_data, user_id=p['user_id'])
                     bg_conn.commit()
                 except Exception as e:
                     log.error(f"Cron: scoring failed for profile {p.get('id')}: {e}")

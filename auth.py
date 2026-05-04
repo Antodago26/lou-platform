@@ -577,7 +577,7 @@ def update_profile():
             import threading
             def _bg_scrape_and_score(city_list, scrape_list, tx, pid, uid):
                 from scrapers import scrape_all, save_to_db
-                from scoring_engine import score_property
+                from scoring_engine import upsert_scored_properties
                 # v6.3.2 Bug #5: lors d'un redéploiement, le pool de connexions
                 # peut être fermé pendant que ce thread démarre. get_db() ou
                 # .cursor() throw InterfaceError/OperationalError et le thread
@@ -630,33 +630,7 @@ def update_profile():
                         params.append(int(float(profile['budget_max']) * 1.3))
                     bg_cur.execute(query, params)
                     properties = bg_cur.fetchall()
-
-                    scored = 0
-                    for prop in properties:
-                        prop = dict(prop)
-                        result = score_property(prop, profile, zones_data)
-                        bg_cur.execute("""
-                            INSERT INTO scored_properties
-                                (property_id, profile_id, user_id, total_score, grade,
-                                 score_zone, score_budget, score_type, score_surface,
-                                 score_equipment, score_freshness, distance_km)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                            ON CONFLICT (property_id, profile_id)
-                            DO UPDATE SET
-                                total_score = EXCLUDED.total_score, grade = EXCLUDED.grade,
-                                score_zone = EXCLUDED.score_zone, score_budget = EXCLUDED.score_budget,
-                                score_type = EXCLUDED.score_type, score_surface = EXCLUDED.score_surface,
-                                score_equipment = EXCLUDED.score_equipment, score_freshness = EXCLUDED.score_freshness,
-                                distance_km = EXCLUDED.distance_km, scored_at = NOW()
-                        """, (
-                            prop['id'], pid, uid,
-                            result['total_score'], result['grade'],
-                            result['score_zone'], result['score_budget'],
-                            result['score_type'], result['score_surface'],
-                            result['score_equipment'], result['score_freshness'],
-                            result['distance_km']
-                        ))
-                        scored += 1
+                    scored = upsert_scored_properties(bg_cur, properties, profile, zones_data, user_id=uid)
                     bg_conn.commit()
                     log.info(f"Profile update scoring: {scored} properties scored for profile {pid}")
                 except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:

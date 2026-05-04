@@ -960,6 +960,70 @@ def score_property(prop, profile, zones):
     }
 
 
+_SCORED_UPSERT_SQL = """
+    INSERT INTO scored_properties
+        (property_id, profile_id, user_id, total_score, grade,
+         score_zone, score_budget, score_type, score_surface,
+         score_equipment, score_freshness, distance_km)
+    VALUES %s
+    ON CONFLICT (property_id, profile_id)
+    DO UPDATE SET
+        total_score = EXCLUDED.total_score,
+        grade = EXCLUDED.grade,
+        score_zone = EXCLUDED.score_zone,
+        score_budget = EXCLUDED.score_budget,
+        score_type = EXCLUDED.score_type,
+        score_surface = EXCLUDED.score_surface,
+        score_equipment = EXCLUDED.score_equipment,
+        score_freshness = EXCLUDED.score_freshness,
+        distance_km = EXCLUDED.distance_km,
+        scored_at = NOW()
+"""
+
+
+def upsert_scored_properties(cur, properties, profile, zones, user_id=None, page_size=500):
+    """Score `properties` for `profile` and batch-upsert into scored_properties.
+
+    Audit H12 (2026-05) : avant ce commit ce bloc UPSERT était dupliqué 5x
+    dans le code (app.py boot, auth.py profile-update, routes_scraping ×3).
+    Ajouter une colonne demandait 5 modifs synchronisées — bug-prone.
+
+    Args:
+        cur:        psycopg2 cursor — caller owns the transaction (commit/rollback).
+        properties: iterable of property rows (dict or RealDictRow).
+        profile:    profile dict — must contain 'id' (and 'user_id' if user_id arg
+                    is None).
+        zones:      list of zone dicts for distance scoring.
+        user_id:    explicit user_id (overrides profile['user_id'] if given).
+        page_size:  rows per execute_values batch (500 = ~1 round-trip / 500
+                    properties).
+
+    Returns:
+        Number of rows upserted.
+    """
+    if user_id is None:
+        user_id = profile.get('user_id')
+    profile_id = profile['id']
+
+    rows = []
+    for prop in properties:
+        if not isinstance(prop, dict):
+            prop = dict(prop)
+        result = score_property(prop, profile, zones)
+        rows.append((
+            prop['id'], profile_id, user_id,
+            result['total_score'], result['grade'],
+            result['score_zone'], result['score_budget'],
+            result['score_type'], result['score_surface'],
+            result['score_equipment'], result['score_freshness'],
+            result['distance_km'],
+        ))
+
+    if rows:
+        execute_values(cur, _SCORED_UPSERT_SQL, rows, page_size=page_size)
+    return len(rows)
+
+
 def score_all_for_profile(db, profile_id):
     """
     Score toutes les annonces actives pour un profil donné.
@@ -1022,46 +1086,8 @@ def score_all_for_profile(db, profile_id):
         cur.execute(query, params)
         properties = cur.fetchall()
 
-        # Audit C4 (2026-05) : avant ce commit on faisait 1 INSERT par property
-        # × profile = ~400k round-trips par cron (50 profils × 8000 props),
-        # ~30 min sur Postgres free Render. Maintenant : execute_values batche
-        # par paquets de 500 → 1 round-trip pour 500 lignes, ~3 min total.
-        rows = []
-        user_id = profile['user_id']
-        for prop in properties:
-            prop = dict(prop)
-            result = score_property(prop, profile, zones)
-            rows.append((
-                prop['id'], profile_id, user_id,
-                result['total_score'], result['grade'],
-                result['score_zone'], result['score_budget'],
-                result['score_type'], result['score_surface'],
-                result['score_equipment'], result['score_freshness'],
-                result['distance_km'],
-            ))
-
-        if rows:
-            execute_values(cur, """
-                INSERT INTO scored_properties
-                    (property_id, profile_id, user_id, total_score, grade,
-                     score_zone, score_budget, score_type, score_surface,
-                     score_equipment, score_freshness, distance_km)
-                VALUES %s
-                ON CONFLICT (property_id, profile_id)
-                DO UPDATE SET
-                    total_score = EXCLUDED.total_score,
-                    grade = EXCLUDED.grade,
-                    score_zone = EXCLUDED.score_zone,
-                    score_budget = EXCLUDED.score_budget,
-                    score_type = EXCLUDED.score_type,
-                    score_surface = EXCLUDED.score_surface,
-                    score_equipment = EXCLUDED.score_equipment,
-                    score_freshness = EXCLUDED.score_freshness,
-                    distance_km = EXCLUDED.distance_km,
-                    scored_at = NOW()
-            """, rows, page_size=500)
-
+        scored = upsert_scored_properties(cur, properties, profile, zones)
         db.commit()
-        return len(rows)
+        return scored
     finally:
         cur.close()
