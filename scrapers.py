@@ -3,8 +3,9 @@ Bon Home — Scrapers immobiliers suisses (v3 — ScrapingBee)
 Utilise ScrapingBee pour contourner Cloudflare et scraper tous les portails.
 
 Portails couverts:
-  - Homegate, ImmoScout24, Immobilier.ch, Anibis, Acheter-Louer
+  - Homegate, ImmoScout24, Immobilier.ch, Acheter-Louer
   - Flatfox (API directe), Comparis, Properstar
+  - Régies NE : Jouval, Muller&Christe, Fidimmobil
 
 Usage:
     from scrapers import scrape_all
@@ -64,7 +65,6 @@ SOURCE_DOMAINS = {
     'Homegate':       ['homegate.ch'],
     'ImmoScout24':    ['immoscout24.ch'],
     'Immobilier.ch':  ['immobilier.ch'],
-    'Anibis':         ['anibis.ch'],
     'Acheter-Louer':  ['acheter-louer.ch'],
     'Flatfox':        ['flatfox.ch'],
     'Comparis':       ['comparis.ch'],
@@ -1608,166 +1608,6 @@ def scrape_immobilier_ch(city="Lausanne", transaction="location", max_pages=2):
 
 
 # ============================================================
-# ANIBIS — via ScrapingBee
-# ============================================================
-
-def scrape_anibis(city="Lausanne", transaction="location", max_pages=2):
-    """Scrape Anibis.ch via SSR HTML + __NEXT_DATA__ (Next.js app).
-    The GraphQL API at c.anibis.ch is behind Cloudflare and returns 403.
-    Instead, we fetch the SSR-rendered real estate page and parse __NEXT_DATA__
-    which contains the dehydrated React Query state with listings."""
-    log.info(f"[Anibis] Searching {city} ({transaction})")
-    results = []
-    city_norm = _normalize_city(city)
-    canton = CITY_CANTONS.get(city.lower(), '').upper()
-
-    # Anibis real estate pages — these are SSR with __NEXT_DATA__
-    # /fr/immobilien is the main real estate page (all listings)
-    # The search is done via opaque search tokens, but the landing page has listings
-    urls_to_try = [
-        'https://www.anibis.ch/fr/immobilien',  # Main real estate page with ~18K rental listings
-    ]
-
-    for url in urls_to_try:
-        status, html = _sb_get(url, render_js=True)
-        if status != 200 or len(html) < 5000:
-            log.warning(f"[Anibis] {url[:60]}... → HTTP {status}")
-            continue
-
-        soup = BeautifulSoup(html, 'html.parser')
-
-        # Parse __NEXT_DATA__ — contains dehydrated React Query state
-        nd = soup.select_one('script#__NEXT_DATA__')
-        if not nd:
-            log.warning("[Anibis] No __NEXT_DATA__ found")
-            continue
-
-        try:
-            ndata = json.loads(nd.string or '{}')
-            page_props = ndata.get('props', {}).get('pageProps', {})
-
-            # Navigate dehydratedState → queries → state.data for listings
-            dehydrated = page_props.get('dehydratedState', {})
-            queries = dehydrated.get('queries', [])
-            all_items = []
-
-            for q in queries:
-                state_data = q.get('state', {}).get('data', {})
-                # Check multiple possible locations for listings
-                for key in ['listings', 'searchListingsByConstraints', 'edges', 'nodes', 'items']:
-                    items = state_data.get(key, [])
-                    if items:
-                        # Handle edges/node pattern
-                        if items and isinstance(items[0], dict) and 'node' in items[0]:
-                            items = [e['node'] for e in items if 'node' in e]
-                        all_items.extend(items)
-                        break
-
-                # Also check nested search results
-                search_results = state_data.get('searchListingsByConstraints', {})
-                if isinstance(search_results, dict):
-                    edges = search_results.get('edges', [])
-                    for e in edges:
-                        if 'node' in e:
-                            all_items.append(e['node'])
-
-            log.info(f"[Anibis] Found {len(all_items)} items in __NEXT_DATA__")
-
-            for item in all_items:
-                lid = str(item.get('listingID', '') or item.get('id', ''))
-                if not lid:
-                    continue
-
-                title = item.get('title', '')
-
-                # Price
-                price = _clean_price(item.get('formattedPrice') or item.get('price'))
-
-                # Location info
-                postcode_info = item.get('postcodeInformation', {}) or {}
-                loc_name = postcode_info.get('locationName', '')
-                postcode = postcode_info.get('postcode', '')
-                item_canton = (postcode_info.get('canton', {}) or {}).get('shortName', '')
-
-                # Filter by canton if specified (Anibis returns all of Switzerland)
-                if canton and item_canton and item_canton != canton:
-                    continue
-
-                # Filter by city (fuzzy match on location name)
-                if loc_name and city_norm:
-                    loc_norm = _normalize_city(loc_name)
-                    if city_norm not in loc_norm and loc_norm not in city_norm:
-                        # Allow same postal code area
-                        if not postcode:
-                            continue
-
-                # Images
-                images = []
-                thumb = item.get('thumbnail', {}) or {}
-                retina = (thumb.get('retinaRendition') or {}).get('src', '')
-                normal = (thumb.get('normalRendition') or {}).get('src', '')
-                if retina:
-                    images.append(retina)
-                elif normal:
-                    images.append(normal)
-                # Additional images from imageUrls if present
-                for img in (item.get('images') or item.get('imageUrls') or []):
-                    if isinstance(img, dict):
-                        src = (img.get('retinaRendition') or {}).get('src', '') or (img.get('normalRendition') or {}).get('src', '')
-                    elif isinstance(img, str):
-                        src = img
-                    else:
-                        continue
-                    if src and src not in images:
-                        images.append(src)
-                images = [u for u in images if u and u.startswith('http')][:5]
-
-                # SEO slug for detail URL
-                seo_info = item.get('seoInformation', {}) or {}
-                fr_slug = seo_info.get('frSlug', '')
-                detail_url = f"https://www.anibis.ch/fr/vi/{fr_slug}/{lid}" if fr_slug else f"https://www.anibis.ch/fr/vi/{lid}"
-
-                # Rooms and surface from properties/attributes
-                rooms = None
-                surface = None
-                for prop in (item.get('properties') or item.get('attributes') or []):
-                    prop_id = (prop.get('listingPropertyID') or prop.get('name') or '').lower()
-                    prop_text = prop.get('text', '') or prop.get('value', '')
-                    if 'room' in prop_id or 'piece' in prop_id:
-                        rooms = _clean_rooms(str(prop_text))
-                    elif 'size' in prop_id or 'surface' in prop_id or 'area' in prop_id:
-                        surface = _clean_surface(str(prop_text))
-
-                if not rooms:
-                    rooms = _clean_rooms(title)
-
-                results.append(_make_property(
-                    external_id=f"anibis-{lid}", source='Anibis',
-                    source_url=detail_url,
-                    title=title, description=(item.get('body') or '')[:1500],
-                    property_type=_guess_type(title),
-                    transaction=transaction,
-                    price=price, rooms=rooms, surface=surface, floor=None,
-                    address=loc_name or city,
-                    city=loc_name or city,
-                    canton=item_canton or canton or CITY_CANTONS.get(city.lower(), ''),
-                    postal_code=str(postcode) if postcode else None,
-                    latitude=None, longitude=None,
-                    features=[], images=images, published_at=item.get('timestamp'),
-                                    search_city=city,
-))
-
-        except Exception as e:
-            log.error(f"[Anibis] __NEXT_DATA__ parse error: {e}")
-
-        if results:
-            break  # Got results from this URL, no need to try more
-
-    log.info(f"[Anibis] Total: {len(results)} listings")
-    return results
-
-
-# ============================================================
 # ACHETER-LOUER — via ScrapingBee
 # ============================================================
 
@@ -2909,7 +2749,6 @@ def scrape_all(city="Lausanne", transaction="location", skip_nearby=False,
         ('Homegate', scrape_homegate),
         ('ImmoScout24', scrape_immoscout),
         ('Immobilier.ch', scrape_immobilier_ch),
-        # ('Anibis', scrape_anibis),  # DISABLED: __NEXT_DATA__ returns 0 items — wastes credits. To re-enable, fix the parser.
         ('Acheter-Louer', scrape_acheter_louer),
         ('Comparis', scrape_comparis),
         ('Properstar', scrape_properstar),
