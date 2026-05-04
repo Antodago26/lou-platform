@@ -14,6 +14,8 @@ import re
 import unicodedata
 from datetime import datetime
 
+from psycopg2.extras import execute_values
+
 
 def haversine(lat1, lon1, lat2, lon2):
     """Distance en km entre deux points GPS."""
@@ -1020,18 +1022,31 @@ def score_all_for_profile(db, profile_id):
         cur.execute(query, params)
         properties = cur.fetchall()
 
-        # Score each property
-        scored = 0
+        # Audit C4 (2026-05) : avant ce commit on faisait 1 INSERT par property
+        # × profile = ~400k round-trips par cron (50 profils × 8000 props),
+        # ~30 min sur Postgres free Render. Maintenant : execute_values batche
+        # par paquets de 500 → 1 round-trip pour 500 lignes, ~3 min total.
+        rows = []
+        user_id = profile['user_id']
         for prop in properties:
             prop = dict(prop)
             result = score_property(prop, profile, zones)
+            rows.append((
+                prop['id'], profile_id, user_id,
+                result['total_score'], result['grade'],
+                result['score_zone'], result['score_budget'],
+                result['score_type'], result['score_surface'],
+                result['score_equipment'], result['score_freshness'],
+                result['distance_km'],
+            ))
 
-            cur.execute("""
+        if rows:
+            execute_values(cur, """
                 INSERT INTO scored_properties
                     (property_id, profile_id, user_id, total_score, grade,
                      score_zone, score_budget, score_type, score_surface,
                      score_equipment, score_freshness, distance_km)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES %s
                 ON CONFLICT (property_id, profile_id)
                 DO UPDATE SET
                     total_score = EXCLUDED.total_score,
@@ -1044,17 +1059,9 @@ def score_all_for_profile(db, profile_id):
                     score_freshness = EXCLUDED.score_freshness,
                     distance_km = EXCLUDED.distance_km,
                     scored_at = NOW()
-            """, (
-                prop['id'], profile_id, profile['user_id'],
-                result['total_score'], result['grade'],
-                result['score_zone'], result['score_budget'],
-                result['score_type'], result['score_surface'],
-                result['score_equipment'], result['score_freshness'],
-                result['distance_km']
-            ))
-            scored += 1
+            """, rows, page_size=500)
 
         db.commit()
-        return scored
+        return len(rows)
     finally:
         cur.close()
