@@ -567,6 +567,32 @@ if os.environ.get('DATABASE_URL', ''):
             except Exception:
                 pass
 
+    # v6.4.5 schema : 4 indexes manquants identifiés par l'audit 2026-05-04.
+    # Cross-portal dedup, link-health select, first-seen-active, scored-zone.
+    # CREATE INDEX IF NOT EXISTS — idempotent.
+    conn = None
+    conn_broken = False
+    try:
+        import psycopg2 as _pg
+        from migrations.schema_v645 import run_schema_v645
+        conn = get_db()
+        stats = run_schema_v645(conn)
+        log.info(f"v6.4.5 schema stats: {stats}")
+    except Exception as e:
+        try:
+            import psycopg2 as _pg
+            if isinstance(e, (_pg.OperationalError, _pg.InterfaceError)):
+                conn_broken = True
+        except Exception:
+            pass
+        log.warning(f"v6.4.5 schema error (boot continues, will retry next boot): {e}")
+    finally:
+        if conn is not None:
+            try:
+                return_db(conn, close=conn_broken)
+            except Exception:
+                pass
+
     # v6.3 backfills: rooms (NULL/0), Homegate titles (.â mojibake),
     # addresses (leading 'CH '/NPA/dots), properties GPS.
     # Doit tourner APRÈS _run_migrations() (qui backfill les zones GPS) et
