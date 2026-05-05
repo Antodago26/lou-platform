@@ -175,6 +175,21 @@ class HomegateOptimizationTest(unittest.TestCase):
     lieu de qa_recall_snapshots (le snapshot ne stocke pas live_ids).
     Si scraped_at < 7 days, on skip ScrapingBee → status='ok' silencieux."""
 
+    def setUp(self):
+        # Audit C3 (2026-05) : run_link_health_check ouvre un advisory lock
+        # via psycopg2.connect(DATABASE_URL) en début de fonction. En tests
+        # DATABASE_URL est bidon → la conn échoue → la fonction sort en
+        # early-return "concurrent_run". On patche le lock pour qu'il rende
+        # toujours un mock truthy = "lock acquired".
+        import qa_link_health_worker as worker
+        from unittest.mock import MagicMock
+        lock_acquire_patcher = patch.object(worker, '_acquire_run_lock', return_value=MagicMock())
+        lock_release_patcher = patch.object(worker, '_release_run_lock')
+        lock_acquire_patcher.start()
+        lock_release_patcher.start()
+        self.addCleanup(lock_acquire_patcher.stop)
+        self.addCleanup(lock_release_patcher.stop)
+
     def _setup_db(self, scraped_at_days_ago):
         """Construit un mock DB qui retourne 1 seule property Homegate
         avec scraped_at = NOW() - scraped_at_days_ago."""
@@ -302,6 +317,17 @@ class HomegateOptimizationTest(unittest.TestCase):
 # ============================================================
 
 class NonHomegateRoutingTest(unittest.TestCase):
+    def setUp(self):
+        # Cf. HomegateOptimizationTest.setUp pour le pourquoi.
+        import qa_link_health_worker as worker
+        from unittest.mock import MagicMock
+        lock_acquire_patcher = patch.object(worker, '_acquire_run_lock', return_value=MagicMock())
+        lock_release_patcher = patch.object(worker, '_release_run_lock')
+        lock_acquire_patcher.start()
+        lock_release_patcher.start()
+        self.addCleanup(lock_acquire_patcher.stop)
+        self.addCleanup(lock_release_patcher.stop)
+
     def test_non_homegate_uses_head_not_scrapingbee(self):
         """URL Jouval → HEAD direct, pas ScrapingBee, peu importe scraped_at."""
         import qa_link_health_worker as worker
