@@ -3,6 +3,7 @@ import re
 import io
 import csv
 import json
+import math
 import logging
 
 from flask import Blueprint, jsonify, request, make_response
@@ -13,6 +14,280 @@ from helpers import days_since
 
 log = logging.getLogger('lou-app')
 properties_bp = Blueprint('properties', __name__)
+
+
+# ============================================================
+# Cross-portal merge helpers (audit H14, 2026-05-06).
+# Lifted from get_properties closures to module level so favorites/exports
+# can reuse the same dedup logic. Strictly behavior-preserving move —
+# the merge result for a given input must be identical to the legacy code.
+# ============================================================
+
+_MERGE_STREET_STOPWORDS = {
+    'rue', 'avenue', 'route', 'chemin', 'place', 'boulevard', 'quai',
+    'strasse', 'gasse', 'weg', 'platz', 'allee',
+    'suisse', 'svizzera', 'canton', 'neuchatel', 'lausanne', 'geneve',
+    'appartement', 'maison', 'immeuble', 'villa', 'studio',
+}
+
+
+def _street_tokens(addr):
+    """Tokens from an address with stop-words removed. Used to fuzzy-match
+    two listings that share the same street."""
+    if not addr:
+        return set()
+    tokens = re.findall(r'[A-Za-zÀ-ÿ]{4,}', str(addr).lower())
+    return set(t for t in tokens if t not in _MERGE_STREET_STOPWORDS)
+
+
+def _haversine_km(lat1, lng1, lat2, lng2):
+    """Distance in km between two GPS points. Returns None if any value
+    can't be coerced to float."""
+    try:
+        R = 6371
+        la1, lo1, la2, lo2 = float(lat1), float(lng1), float(lat2), float(lng2)
+        dla = math.radians(la2 - la1)
+        dlo = math.radians(lo2 - lo1)
+        a = (math.sin(dla / 2) ** 2
+             + math.cos(math.radians(la1)) * math.cos(math.radians(la2))
+             * math.sin(dlo / 2) ** 2)
+        return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    except Exception:
+        return None
+
+
+def _can_merge(existing, new):
+    """True if `new` listing should be merged into `existing`. Order:
+    GPS distance (≤300m yes, >1km no), postal code match, street-token overlap."""
+    lat1, lng1 = existing.get('latitude'), existing.get('longitude')
+    lat2, lng2 = new.get('latitude'), new.get('longitude')
+    if lat1 and lng1 and lat2 and lng2:
+        d = _haversine_km(lat1, lng1, lat2, lng2)
+        if d is not None:
+            if d <= 0.3:
+                return True
+            if d > 1.0:
+                return False
+    pc1 = (existing.get('postal_code') or '').strip()
+    pc2 = (new.get('postal_code') or '').strip()
+    if pc1 and pc2:
+        return pc1 == pc2
+    t1 = _street_tokens(existing.get('address', ''))
+    t2 = _street_tokens(new.get('address', ''))
+    if t1 and t2:
+        return len(t1 & t2) >= 1
+    return False
+
+
+def _merge_keys(p):
+    """Bucket keys for first-pass merge candidates. Returns a list because
+    the same listing can hash into multiple buckets (npa-based, city-based,
+    rooms-based, surface-based) — we accept any match then validate via
+    _can_merge."""
+    keys = []
+    postal = (p.get('postal_code') or '').strip()
+    price = int(p.get('price') or 0)
+    rooms = p.get('rooms')
+    rooms_norm = str(round(float(rooms) * 2) / 2) if rooms else ''
+    surface = p.get('surface') or 0
+    surface_bucket = round(surface / 5) * 5 if surface else 0
+    city = (p.get('city') or '').lower().strip()
+
+    if price and price < 10000:
+        price_bucket = round(price / 50) * 50
+    elif price:
+        step = max(5000, int(price * 0.02))
+        price_bucket = round(price / step) * step
+    else:
+        price_bucket = 0
+
+    if postal and price_bucket and rooms_norm and surface_bucket:
+        keys.append(f"npa:{postal}:{price_bucket}:{rooms_norm}:{surface_bucket}")
+    if city and price_bucket and rooms_norm and surface_bucket:
+        keys.append(f"city:{city}:{price_bucket}:{rooms_norm}:{surface_bucket}")
+    if postal and price_bucket and rooms_norm:
+        keys.append(f"nparooms:{postal}:{price_bucket}:{rooms_norm}")
+    if city and price_bucket and rooms_norm:
+        keys.append(f"cityrooms:{city}:{price_bucket}:{rooms_norm}")
+    if postal and price_bucket and surface_bucket and not rooms_norm:
+        keys.append(f"npasurf:{postal}:{price_bucket}:{surface_bucket}")
+    if city and price_bucket and surface_bucket and not rooms_norm:
+        keys.append(f"citysurf:{city}:{price_bucket}:{surface_bucket}")
+
+    if not keys:
+        title_norm = re.sub(r'[^a-z0-9]', '', (p.get('title') or '').lower())[:30]
+        if title_norm:
+            keys.append(f"title:{city}:{price_bucket}:{title_norm}")
+        elif price_bucket:
+            keys.append(f"priceonly:{city}:{price_bucket}")
+    return keys
+
+
+def _merge_cross_portal(properties):
+    """Group properties that look like the same listing across portals.
+    Returns a dict {group_id: enriched_property} with two extra keys:
+      - _all_sources: list of {source, url} for every portal carrying this listing
+      - _best_images: deduped image list across all merged sources
+    """
+    merged = {}
+    key_to_group = {}
+    merge_debug = {}
+
+    for p in properties:
+        keys = _merge_keys(p)
+        src = p.get('source') or 'unknown'
+
+        group_id = None
+        for k in keys:
+            if k in key_to_group:
+                candidate = key_to_group[k]
+                if candidate in merged and _can_merge(merged[candidate], p):
+                    group_id = candidate
+                    break
+
+        if group_id is None:
+            group_id = p['id']
+            merged[group_id] = p
+            merged[group_id]['_all_sources'] = [
+                {'source': p['source'] or '', 'url': p['source_url'] or ''}
+            ]
+            merged[group_id]['_best_images'] = p['images'] or []
+            for k in keys:
+                if k not in key_to_group:
+                    key_to_group[k] = group_id
+            merge_debug[group_id] = [
+                f"{src}(id={p['id']},price={p.get('price')},rooms={p.get('rooms')},"
+                f"postal={p.get('postal_code')},city={p.get('city')})"
+            ]
+        else:
+            for k in keys:
+                if k not in key_to_group:
+                    key_to_group[k] = group_id
+            merge_debug[group_id].append(
+                f"{src}(id={p['id']},price={p.get('price')},rooms={p.get('rooms')},"
+                f"postal={p.get('postal_code')},city={p.get('city')})"
+            )
+            new_src = p['source'] or ''
+            existing_sources = {s['source'] for s in merged[group_id]['_all_sources']}
+            if new_src not in existing_sources:
+                merged[group_id]['_all_sources'].append(
+                    {'source': new_src, 'url': p['source_url'] or ''}
+                )
+            if p['images']:
+                existing_imgs = set(merged[group_id]['_best_images'])
+                for img in p['images']:
+                    if img and img not in existing_imgs:
+                        merged[group_id]['_best_images'].append(img)
+                        existing_imgs.add(img)
+            if (p['total_score'] or 0) > (merged[group_id]['total_score'] or 0):
+                old_sources = merged[group_id]['_all_sources']
+                old_images = merged[group_id]['_best_images']
+                merged[group_id] = p
+                merged[group_id]['_all_sources'] = old_sources
+                merged[group_id]['_best_images'] = old_images
+
+    multi_source = {k: v for k, v in merge_debug.items() if len(v) > 1}
+    if multi_source:
+        log.info(f"Merge: {len(multi_source)} groups merged from "
+                 f"{sum(len(v) for v in multi_source.values())} properties")
+        for gid, sources in list(multi_source.items())[:5]:
+            log.info(f"  Merged group {gid}: {sources}")
+    log.info(f"Merge total: {len(properties)} properties -> {len(merged)} unique results")
+    return merged
+
+
+def _enrich_with_property_sources(cur, merged):
+    """Append cross-portal sources stored in property_sources to each merged
+    listing's _all_sources. Mutates `merged` in place."""
+    if not merged:
+        return
+    placeholders = ','.join(['%s'] * len(merged))
+    cur.execute(f"""
+        SELECT property_id, source, source_url
+        FROM property_sources
+        WHERE property_id IN ({placeholders})
+    """, list(merged.keys()))
+    for row in cur.fetchall():
+        pid = row['property_id']
+        if pid in merged:
+            existing = {s['source'] for s in merged[pid].get('_all_sources', [])}
+            if row['source'] and row['source'] not in existing:
+                merged[pid]['_all_sources'].append({
+                    'source': row['source'],
+                    'url': row['source_url'] or '',
+                })
+
+
+def _format_property(p):
+    """Shape one merged property dict into the JSON response format."""
+    all_sources = p.pop('_all_sources', [])
+    best_images = p.pop('_best_images', [])
+    out = {
+        'id': p['id'],
+        'title': (p['title'] or '').strip() or (
+            f"{float(p['rooms'])} pcs, {p['surface']} m2"
+            if p.get('rooms') and p.get('surface')
+            else f"{p.get('city') or 'Bien immobilier'}"
+        ),
+        'address': (p['address'] or '').strip(),
+        'price': p['price'] or 0,
+        'unit': (
+            f"{(p['currency'] or 'CHF').encode('ascii', 'ignore').decode()}/"
+            f"{(p['price_unit'] or 'mois').encode('ascii', 'ignore').decode()}"
+        ),
+        'rooms': float(p['rooms']) if p['rooms'] else 0,
+        'surface': p['surface'] or 0,
+        'floor': p['floor'],
+        'features': p['features'] or [],
+        'source': all_sources[0]['source'] if all_sources else '',
+        'source_url': all_sources[0]['url'] if all_sources else '',
+        'all_sources': all_sources,
+        'description': (p.get('description') or '').strip(),
+        'contact_name': p['contact_name'] or '',
+        'contact_phone': p['contact_phone'] or '',
+        'contact_email': p['contact_email'] or '',
+        'images': best_images or p['images'] or [],
+        'score': p['total_score'],
+        'grade': p['grade'],
+        'latitude': p.get('latitude'),
+        'longitude': p.get('longitude'),
+        'city': p.get('city'),
+        'property_type': p.get('property_type') or '',
+        'transaction': p.get('transaction') or '',
+        'distance_km': float(p['distance_km']) if p['distance_km'] else None,
+        'score_detail': {
+            'zone': p['score_zone'],
+            'budget': p['score_budget'],
+            'type': p['score_type'],
+            'surface': p['score_surface'],
+            'equipment': p['score_equipment'],
+            'freshness': p['score_freshness'],
+        },
+        'published_at': p['published_at'].isoformat() if p['published_at'] else None,
+        'is_favorite': p['is_favorite'],
+        'first_seen_at': (
+            p['first_seen_at'].isoformat() if p.get('first_seen_at')
+            else p['scraped_at'].isoformat() if p.get('scraped_at')
+            else None
+        ),
+        'days_online': days_since(p.get('first_seen_at') or p.get('scraped_at')),
+        'price_drop': None,
+    }
+
+    price_changes = p.get('price_changes')
+    if price_changes and isinstance(price_changes, list) and len(price_changes) > 0:
+        latest = price_changes[0]
+        if latest.get('change_pct') and latest['change_pct'] < 0:
+            detected = latest['detected_at']
+            out['price_drop'] = {
+                'old_price': latest['old_price'],
+                'new_price': latest['new_price'],
+                'change_pct': float(latest['change_pct']),
+                'detected_at': (
+                    detected.isoformat() if hasattr(detected, 'isoformat') else str(detected)
+                ),
+            }
+    return out
 
 
 @properties_bp.route('/api/properties', methods=['GET'])
@@ -144,225 +419,9 @@ def get_properties():
             row = cur.fetchone()
             nearby_available = int(row['n']) if row and row.get('n') is not None else 0
 
-        # Cross-portal merge (kept identical to legacy logic)
-        def _street_tokens(addr):
-            if not addr:
-                return set()
-            tokens = re.findall(r'[A-Za-zÀ-ÿ]{4,}', str(addr).lower())
-            stop = {
-                'rue', 'avenue', 'route', 'chemin', 'place', 'boulevard', 'quai',
-                'strasse', 'gasse', 'weg', 'platz', 'allee',
-                'suisse', 'svizzera', 'canton', 'neuchatel', 'lausanne', 'geneve',
-                'appartement', 'maison', 'immeuble', 'villa', 'studio',
-            }
-            return set(t for t in tokens if t not in stop)
-
-        def _haversine_km(lat1, lng1, lat2, lng2):
-            try:
-                import math as _m
-                R = 6371
-                la1, lo1, la2, lo2 = float(lat1), float(lng1), float(lat2), float(lng2)
-                dla = _m.radians(la2 - la1); dlo = _m.radians(lo2 - lo1)
-                a = _m.sin(dla / 2) ** 2 + _m.cos(_m.radians(la1)) * _m.cos(_m.radians(la2)) * _m.sin(dlo / 2) ** 2
-                return R * 2 * _m.atan2(_m.sqrt(a), _m.sqrt(1 - a))
-            except Exception:
-                return None
-
-        def _can_merge(existing, new):
-            lat1, lng1 = existing.get('latitude'), existing.get('longitude')
-            lat2, lng2 = new.get('latitude'), new.get('longitude')
-            if lat1 and lng1 and lat2 and lng2:
-                d = _haversine_km(lat1, lng1, lat2, lng2)
-                if d is not None:
-                    if d <= 0.3:
-                        return True
-                    if d > 1.0:
-                        return False
-            pc1 = (existing.get('postal_code') or '').strip()
-            pc2 = (new.get('postal_code') or '').strip()
-            if pc1 and pc2:
-                if pc1 != pc2:
-                    return False
-                return True
-            t1 = _street_tokens(existing.get('address', ''))
-            t2 = _street_tokens(new.get('address', ''))
-            if t1 and t2:
-                return len(t1 & t2) >= 1
-            return False
-
-        def _merge_keys(p):
-            keys = []
-            postal = (p.get('postal_code') or '').strip()
-            price = int(p.get('price') or 0)
-            rooms = p.get('rooms')
-            rooms_norm = str(round(float(rooms) * 2) / 2) if rooms else ''
-            surface = p.get('surface') or 0
-            surface_bucket = round(surface / 5) * 5 if surface else 0
-            city = (p.get('city') or '').lower().strip()
-
-            if price and price < 10000:
-                price_bucket = round(price / 50) * 50
-            elif price:
-                step = max(5000, int(price * 0.02))
-                price_bucket = round(price / step) * step
-            else:
-                price_bucket = 0
-
-            if postal and price_bucket and rooms_norm and surface_bucket:
-                keys.append(f"npa:{postal}:{price_bucket}:{rooms_norm}:{surface_bucket}")
-            if city and price_bucket and rooms_norm and surface_bucket:
-                keys.append(f"city:{city}:{price_bucket}:{rooms_norm}:{surface_bucket}")
-            if postal and price_bucket and rooms_norm:
-                keys.append(f"nparooms:{postal}:{price_bucket}:{rooms_norm}")
-            if city and price_bucket and rooms_norm:
-                keys.append(f"cityrooms:{city}:{price_bucket}:{rooms_norm}")
-            if postal and price_bucket and surface_bucket and not rooms_norm:
-                keys.append(f"npasurf:{postal}:{price_bucket}:{surface_bucket}")
-            if city and price_bucket and surface_bucket and not rooms_norm:
-                keys.append(f"citysurf:{city}:{price_bucket}:{surface_bucket}")
-
-            if not keys:
-                title_norm = re.sub(r'[^a-z0-9]', '', (p.get('title') or '').lower())[:30]
-                if title_norm:
-                    keys.append(f"title:{city}:{price_bucket}:{title_norm}")
-                elif price_bucket:
-                    keys.append(f"priceonly:{city}:{price_bucket}")
-            return keys
-
-        merged = {}
-        key_to_group = {}
-        merge_debug = {}
-        for p in properties:
-            keys = _merge_keys(p)
-            src = p.get('source') or 'unknown'
-
-            group_id = None
-            for k in keys:
-                if k in key_to_group:
-                    candidate = key_to_group[k]
-                    if candidate in merged and _can_merge(merged[candidate], p):
-                        group_id = candidate
-                        break
-
-            if group_id is None:
-                group_id = p['id']
-                merged[group_id] = p
-                merged[group_id]['_all_sources'] = [{'source': p['source'] or '', 'url': p['source_url'] or ''}]
-                merged[group_id]['_best_images'] = p['images'] or []
-                for k in keys:
-                    if k not in key_to_group:
-                        key_to_group[k] = group_id
-                merge_debug[group_id] = [f"{src}(id={p['id']},price={p.get('price')},rooms={p.get('rooms')},postal={p.get('postal_code')},city={p.get('city')})"]
-            else:
-                for k in keys:
-                    if k not in key_to_group:
-                        key_to_group[k] = group_id
-                merge_debug[group_id].append(f"{src}(id={p['id']},price={p.get('price')},rooms={p.get('rooms')},postal={p.get('postal_code')},city={p.get('city')})")
-                new_src = p['source'] or ''
-                existing_sources = {s['source'] for s in merged[group_id]['_all_sources']}
-                if new_src not in existing_sources:
-                    merged[group_id]['_all_sources'].append({'source': new_src, 'url': p['source_url'] or ''})
-                if p['images']:
-                    existing_imgs = set(merged[group_id]['_best_images'])
-                    for img in p['images']:
-                        if img and img not in existing_imgs:
-                            merged[group_id]['_best_images'].append(img)
-                            existing_imgs.add(img)
-                if (p['total_score'] or 0) > (merged[group_id]['total_score'] or 0):
-                    old_sources = merged[group_id]['_all_sources']
-                    old_images = merged[group_id]['_best_images']
-                    merged[group_id] = p
-                    merged[group_id]['_all_sources'] = old_sources
-                    merged[group_id]['_best_images'] = old_images
-
-        multi_source = {k: v for k, v in merge_debug.items() if len(v) > 1}
-        if multi_source:
-            log.info(f"Merge: {len(multi_source)} groups merged from {sum(len(v) for v in multi_source.values())} properties")
-            for gid, sources in list(multi_source.items())[:5]:
-                log.info(f"  Merged group {gid}: {sources}")
-        log.info(f"Merge total: {len(properties)} properties -> {len(merged)} unique results")
-
-        # Enrich with cross-portal sources stored in property_sources table.
-        # These are recorded during scraping when a duplicate listing on another
-        # portal is detected.  The in-memory merge above only sees rows in
-        # scored_properties (one per property), so secondary portals would be
-        # missing from all_sources without this step.
-        merged_ids = [pid for pid in merged]
-        if merged_ids:
-            placeholders = ','.join(['%s'] * len(merged_ids))
-            cur.execute(f"""
-                SELECT property_id, source, source_url
-                FROM property_sources
-                WHERE property_id IN ({placeholders})
-            """, merged_ids)
-            for row in cur.fetchall():
-                pid = row['property_id']
-                if pid in merged:
-                    existing = {s['source'] for s in merged[pid].get('_all_sources', [])}
-                    if row['source'] and row['source'] not in existing:
-                        merged[pid]['_all_sources'].append({
-                            'source': row['source'],
-                            'url': row['source_url'] or ''
-                        })
-
-        results = []
-        for p in merged.values():
-            all_sources = p.pop('_all_sources', [])
-            best_images = p.pop('_best_images', [])
-            results.append({
-                'id': p['id'],
-                'title': (p['title'] or '').strip() or (
-                    f"{float(p['rooms'])} pcs, {p['surface']} m2" if p.get('rooms') and p.get('surface')
-                    else f"{p.get('city') or 'Bien immobilier'}"
-                ),
-                'address': (p['address'] or '').strip(),
-                'price': p['price'] or 0,
-                'unit': f"{(p['currency'] or 'CHF').encode('ascii', 'ignore').decode()}/{(p['price_unit'] or 'mois').encode('ascii', 'ignore').decode()}",
-                'rooms': float(p['rooms']) if p['rooms'] else 0,
-                'surface': p['surface'] or 0,
-                'floor': p['floor'],
-                'features': p['features'] or [],
-                'source': all_sources[0]['source'] if all_sources else '',
-                'source_url': all_sources[0]['url'] if all_sources else '',
-                'all_sources': all_sources,
-                'description': (p.get('description') or '').strip(),
-                'contact_name': p['contact_name'] or '',
-                'contact_phone': p['contact_phone'] or '',
-                'contact_email': p['contact_email'] or '',
-                'images': best_images or p['images'] or [],
-                'score': p['total_score'],
-                'grade': p['grade'],
-                'latitude': p.get('latitude'),
-                'longitude': p.get('longitude'),
-                'city': p.get('city'),
-                'property_type': p.get('property_type') or '',
-                'transaction': p.get('transaction') or '',
-                'distance_km': float(p['distance_km']) if p['distance_km'] else None,
-                'score_detail': {
-                    'zone': p['score_zone'],
-                    'budget': p['score_budget'],
-                    'type': p['score_type'],
-                    'surface': p['score_surface'],
-                    'equipment': p['score_equipment'],
-                    'freshness': p['score_freshness']
-                },
-                'published_at': p['published_at'].isoformat() if p['published_at'] else None,
-                'is_favorite': p['is_favorite'],
-                'first_seen_at': p['first_seen_at'].isoformat() if p.get('first_seen_at') else p['scraped_at'].isoformat() if p.get('scraped_at') else None,
-                'days_online': days_since(p.get('first_seen_at') or p.get('scraped_at')),
-                'price_drop': None,
-            })
-
-            price_changes = p.get('price_changes')
-            if price_changes and isinstance(price_changes, list) and len(price_changes) > 0:
-                latest = price_changes[0]
-                if latest.get('change_pct') and latest['change_pct'] < 0:
-                    results[-1]['price_drop'] = {
-                        'old_price': latest['old_price'],
-                        'new_price': latest['new_price'],
-                        'change_pct': float(latest['change_pct']),
-                        'detected_at': latest['detected_at'].isoformat() if hasattr(latest['detected_at'], 'isoformat') else str(latest['detected_at'])
-                    }
+        merged = _merge_cross_portal(properties)
+        _enrich_with_property_sources(cur, merged)
+        results = [_format_property(p) for p in merged.values()]
 
         total = len(results)
         page_results = results[offset:offset + per_page]
