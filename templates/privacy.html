@@ -3,40 +3,86 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Politique de confidentialité — Bon Home</title>
+  <title>Politique de confidentialité — bonhome.</title>
+  <meta name="description" content="Comment bonhome. collecte, utilise et protège vos données. Conforme à la LPD suisse révisée (septembre 2023).">
+  <meta name="theme-color" content="#2A6670">
   <link rel="canonical" href="https://bonhome.ch/privacy">
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/svg+xml" href="/static/logos/favicon.svg">
+  <link rel="stylesheet" href="{{ static_url('fonts/google-fonts.css') }}">
+  <link rel="stylesheet" href="{{ static_url('brand.css') }}">
+  <link rel="stylesheet" href="{{ static_url('components.css') }}">
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-    :root { --dark: #0f172a; --blue: #0369a1; --gray-50: #f8fafc; --gray-100: #f1f5f9; --gray-500: #64748b; --gray-700: #334155; --white: #fff; }
-    body { font-family: 'Inter', system-ui, sans-serif; color: var(--dark); background: var(--white); -webkit-font-smoothing: antialiased; }
-    h1, h2, h3 { font-family: 'Playfair Display', Georgia, serif; }
-    .nav { display: flex; justify-content: space-between; align-items: center; padding: 18px 5%; max-width: 1280px; margin: 0 auto; }
-    .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--dark); }
-    .nav-logo .logo-text { font-family: 'Playfair Display', Georgia, serif; font-size: 22px; font-weight: 800; }
+    body { font-family: var(--bh-font-sans); color: var(--bh-ink); background: var(--bh-paper); -webkit-font-smoothing: antialiased; font-feature-settings: "ss01" on, "ss02" on; }
+    h1, h2, h3 { font-family: var(--bh-font-serif); font-weight: var(--bh-weight-light); letter-spacing: var(--bh-track-snug); font-variation-settings: "opsz" 144; }
+    .nav { display: flex; justify-content: space-between; align-items: center; padding: 18px 5%; max-width: 1280px; margin: 0 auto; position: relative; }
+    .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--bh-ink); }
+    .nav-links { display: flex; gap: 24px; align-items: center; }
+    .nav-links a { color: var(--bh-ink-soft); font-weight: 500; font-size: 15px; text-decoration: none; }
+    .nav-toggle { display: none; background: none; border: 0; padding: 8px; cursor: pointer; width: 40px; height: 40px; flex-direction: column; justify-content: center; gap: 5px; }
+    .nav-toggle span { display: block; width: 22px; height: 2px; background: var(--bh-ink); border-radius: 2px; transition: transform .2s, opacity .2s; }
+    .nav-toggle[aria-expanded="true"] span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+    .nav-toggle[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
+    .nav-toggle[aria-expanded="true"] span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+    @media (max-width: 768px) {
+      .nav-toggle { display: flex; }
+      .nav-links { display: none; position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; align-items: stretch; gap: 0; padding: 12px 5% 20px; background: var(--bh-paper-raised); border-top: 1px solid var(--bh-line-soft); box-shadow: 0 12px 24px rgba(30, 42, 68,.08); z-index: 50; }
+      .nav-links.open { display: flex; }
+      .nav-links a { padding: 14px 8px; border-bottom: 1px solid var(--bh-line-soft); font-size: 16px; }
+      .nav-links a:last-child { border-bottom: 0; }
+      .content h1 { font-size: 30px; }
+      .content { padding: 40px 5% 60px; }
+    }
     .content { max-width: 780px; margin: 0 auto; padding: 60px 5% 80px; }
-    .content h1 { font-size: 36px; margin-bottom: 12px; }
-    .content .subtitle { color: var(--gray-500); font-size: 15px; margin-bottom: 40px; }
-    .content h2 { font-size: 22px; margin-top: 36px; margin-bottom: 12px; color: var(--dark); }
-    .content p { font-size: 15px; line-height: 1.8; color: var(--gray-700); margin-bottom: 16px; }
-    .footer { background: var(--gray-50); border-top: 1px solid var(--gray-100); padding: 40px 5%; text-align: center; }
-    .footer p { font-size: 13px; color: var(--gray-500); }
+    .content h1 { font-size: 40px; margin-bottom: 12px; }
+    .content .subtitle { color: var(--bh-ink-mute); font-size: 16px; margin-bottom: 48px; }
+    .content h2 { font-size: 22px; margin-top: 36px; margin-bottom: 12px; color: var(--bh-ink); }
+    .content p { font-size: 15px; line-height: 1.8; color: var(--bh-ink-soft); margin-bottom: 16px; }
+    .content a { color: var(--bh-teal); text-decoration: none; border-bottom: 1px solid transparent; transition: border-color .15s; }
+    .content a:hover { border-bottom-color: var(--bh-teal); }
+    .footer { background: var(--bh-paper-soft); border-top: 1px solid var(--bh-line-soft); padding: 40px 5%; text-align: center; }
+    .footer p { font-size: 13px; color: var(--bh-ink-mute); }
   </style>
 </head>
 <body>
   <nav class="nav">
-    <a href="/" class="nav-logo">
-      <svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" style="width:32px;height:32px"><rect width="48" height="48" rx="12" fill="#0369a1"/><circle cx="21" cy="20" r="11" fill="none" stroke="#fff" stroke-width="2.8"/><line x1="29" y1="28" x2="39" y2="38" stroke="#fff" stroke-width="2.8" stroke-linecap="round"/><path d="M21 13 L14 19 L15.5 19 L15.5 26 L26.5 26 L26.5 19 L28 19 Z" fill="#fff" opacity="0.95"/><rect x="19.5" y="22" width="3" height="4" rx="0.5" fill="#0369a1"/></svg>
-      <span class="logo-text">Bon Home</span>
-    </a>
+    <a href="/" class="nav-logo" aria-label="bonhome. — accueil"><span class="wordmark" style="font-size:26px">bonh<span class="wordmark__chevron-wrap"><svg class="wordmark__chevron" viewBox="0 0 20 12" aria-hidden="true"><path d="M2 10 L10 3 L18 10"/></svg>o</span>me<span class="wordmark__point">.</span></span></a>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false" aria-controls="nav-links">
+      <span></span><span></span><span></span>
+    </button>
+    <div class="nav-links" id="nav-links">
+      <a href="/#features">Fonctions</a>
+      <a href="/#how">Comment ça marche</a>
+      <a href="/pricing">Tarifs</a>
+      <a href="/faq">FAQ</a>
+      <a href="/?login=1">Connexion</a>
+    </div>
   </nav>
+  <script>
+    (function(){
+      var t = document.getElementById('nav-toggle');
+      var l = document.getElementById('nav-links');
+      if (t && l) {
+        t.addEventListener('click', function(){
+          var open = l.classList.toggle('open');
+          t.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+        l.querySelectorAll('a').forEach(function(a){
+          a.addEventListener('click', function(){
+            l.classList.remove('open');
+            t.setAttribute('aria-expanded', 'false');
+          });
+        });
+      }
+    })();
+  </script>
 
   <main class="content">
     <h1>Politique de confidentialité</h1>
-    <p class="subtitle">Dernière mise à jour : 7 avril 2026</p>
+    <p class="subtitle">Dernière mise à jour : 5 mai 2026</p>
 
     <h2>1. Responsable du traitement</h2>
-    <p>Bon Home est un service exploité par Antony D'Agostino, domicilié en Suisse. Pour toute question relative à la protection des données, vous pouvez nous contacter à l'adresse : contact@bonhome.ch.</p>
+    <p>bonhome. est un service exploité par Antony D'Agostino, domicilié en Suisse. Pour toute question relative à la protection des données, vous pouvez nous contacter à l'adresse : <a href="mailto:contact@bonhome.ch">contact@bonhome.ch</a>.</p>
 
     <h2>2. Données collectées</h2>
     <p>Nous collectons uniquement les données nécessaires au fonctionnement du service : votre adresse e-mail et votre nom lors de la création de compte, vos critères de recherche immobilière (type de bien, budget, localisation, surface, etc.), ainsi que l'historique de vos conversations avec l'assistant IA Lou. Nous ne collectons aucune donnée sensible au sens de la loi fédérale sur la protection des données (LPD).</p>
@@ -45,26 +91,34 @@
     <p>Vos données sont utilisées exclusivement pour fournir le service de recherche immobilière : personnaliser les résultats selon vos critères, scorer et classer les annonces, et améliorer les recommandations de l'assistant IA. Nous n'utilisons pas vos données à des fins publicitaires et ne les vendons jamais à des tiers.</p>
 
     <h2>4. Sous-traitants et transfert de données</h2>
-    <p>Pour le fonctionnement du service, nous faisons appel aux sous-traitants suivants : Render (hébergement, serveurs aux États-Unis), Anthropic (API d'intelligence artificielle, États-Unis) et Decodo/SmartProxy (proxy résidentiel). Vos critères de recherche sont transmis à l'API Anthropic sous forme anonymisée pour alimenter les conversations avec Lou. Aucune donnée personnelle identifiante n'est transmise à Anthropic.</p>
+    <p>Pour le fonctionnement du service, nous faisons appel aux sous-traitants suivants :</p>
+    <p>
+      <strong>Render</strong> (hébergement et base de données, serveurs aux États-Unis) ;<br>
+      <strong>Anthropic</strong> (API d'intelligence artificielle pour Lou, États-Unis) — vos critères sont transmis sous forme anonymisée, sans donnée personnelle identifiante ;<br>
+      <strong>Decodo / SmartProxy</strong> (proxy résidentiel pour le scraping des portails immobiliers) ;<br>
+      <strong>Cloudflare / hCaptcha</strong> (protection anti-bot lors de l'inscription, vérification CAPTCHA) — votre adresse IP et un identifiant de session sont transmis pour valider que vous n'êtes pas un robot ;<br>
+      <strong>Resend</strong> (envoi des e-mails d'alerte de nouvelles annonces, États-Unis).
+    </p>
+    <p>Depuis mai 2026, les polices d'écriture du site sont auto-hébergées sur nos serveurs : Google Fonts ne reçoit plus votre adresse IP lorsque vous consultez les pages publiques de bonhome.</p>
 
     <h2>5. Durée de conservation</h2>
     <p>Vos données sont conservées aussi longtemps que votre compte est actif. En cas de suppression de compte, toutes vos données personnelles, critères de recherche et historiques de conversation sont supprimés dans un délai de 30 jours.</p>
 
     <h2>6. Vos droits</h2>
-    <p>Conformément à la loi fédérale sur la protection des données (LPD, révisée en septembre 2023), vous disposez d'un droit d'accès, de rectification, de suppression et de portabilité de vos données. Vous pouvez également vous opposer au traitement de vos données ou demander la limitation de celui-ci. Pour exercer ces droits, contactez-nous à contact@bonhome.ch.</p>
+    <p>Conformément à la loi fédérale sur la protection des données (LPD, révisée en septembre 2023), vous disposez d'un droit d'accès, de rectification, de suppression et de portabilité de vos données. Vous pouvez également vous opposer au traitement de vos données ou demander la limitation de celui-ci. Pour exercer ces droits, contactez-nous à <a href="mailto:contact@bonhome.ch">contact@bonhome.ch</a>.</p>
 
     <h2>7. Sécurité</h2>
-    <p>Nous prenons des mesures techniques et organisationnelles appropriées pour protéger vos données contre tout accès non autorisé, perte ou destruction. Les mots de passe sont hashés avec bcrypt et les communications sont chiffrées via HTTPS.</p>
+    <p>Nous prenons des mesures techniques et organisationnelles appropriées pour protéger vos données contre tout accès non autorisé, perte ou destruction. Les mots de passe sont hashés avec bcrypt, les communications sont chiffrées via HTTPS (HSTS activé), et l'application impose des entêtes de sécurité strictes (CSP, X-Frame-Options, Permissions-Policy).</p>
 
-    <h2>8. Cookies</h2>
-    <p>Bon Home utilise uniquement le stockage local du navigateur (localStorage) pour conserver votre session de connexion. Nous n'utilisons pas de cookies tiers, de trackers publicitaires ni d'outils d'analyse comportementale.</p>
+    <h2>8. Cookies et stockage local</h2>
+    <p>bonhome. n'utilise pas de cookies tiers, de trackers publicitaires ni d'outils d'analyse comportementale. Le navigateur stocke localement (via <code>localStorage</code>) votre jeton de session après connexion et la préférence de critères de recherche en mode invité — ces données ne quittent jamais votre appareil sauf lors d'un appel API explicite.</p>
 
     <h2>9. Modifications</h2>
     <p>Nous nous réservons le droit de modifier cette politique de confidentialité. Toute modification sera publiée sur cette page avec la date de mise à jour. En cas de modification substantielle, nous vous en informerons par e-mail.</p>
   </main>
 
   <footer class="footer">
-    <p>&copy; 2026 Bon Home — Le bon home, au bon moment.</p>
+    <p>© 2026 bonhome.ch — Le bon home, au bon moment.</p>
   </footer>
 </body>
 </html>

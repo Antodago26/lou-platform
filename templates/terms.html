@@ -3,40 +3,86 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Conditions d'utilisation — Bon Home</title>
+  <title>Conditions d'utilisation — bonhome.</title>
+  <meta name="description" content="Conditions générales d'utilisation de bonhome. : objet du service, comptes, sources des annonces, responsabilité, droit applicable.">
+  <meta name="theme-color" content="#2A6670">
   <link rel="canonical" href="https://bonhome.ch/terms">
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/svg+xml" href="/static/logos/favicon.svg">
+  <link rel="stylesheet" href="{{ static_url('fonts/google-fonts.css') }}">
+  <link rel="stylesheet" href="{{ static_url('brand.css') }}">
+  <link rel="stylesheet" href="{{ static_url('components.css') }}">
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-    :root { --dark: #0f172a; --blue: #0369a1; --gray-50: #f8fafc; --gray-100: #f1f5f9; --gray-500: #64748b; --gray-700: #334155; --white: #fff; }
-    body { font-family: 'Inter', system-ui, sans-serif; color: var(--dark); background: var(--white); -webkit-font-smoothing: antialiased; }
-    h1, h2, h3 { font-family: 'Playfair Display', Georgia, serif; }
-    .nav { display: flex; justify-content: space-between; align-items: center; padding: 18px 5%; max-width: 1280px; margin: 0 auto; }
-    .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--dark); }
-    .nav-logo .logo-text { font-family: 'Playfair Display', Georgia, serif; font-size: 22px; font-weight: 800; }
+    body { font-family: var(--bh-font-sans); color: var(--bh-ink); background: var(--bh-paper); -webkit-font-smoothing: antialiased; font-feature-settings: "ss01" on, "ss02" on; }
+    h1, h2, h3 { font-family: var(--bh-font-serif); font-weight: var(--bh-weight-light); letter-spacing: var(--bh-track-snug); font-variation-settings: "opsz" 144; }
+    .nav { display: flex; justify-content: space-between; align-items: center; padding: 18px 5%; max-width: 1280px; margin: 0 auto; position: relative; }
+    .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--bh-ink); }
+    .nav-links { display: flex; gap: 24px; align-items: center; }
+    .nav-links a { color: var(--bh-ink-soft); font-weight: 500; font-size: 15px; text-decoration: none; }
+    .nav-toggle { display: none; background: none; border: 0; padding: 8px; cursor: pointer; width: 40px; height: 40px; flex-direction: column; justify-content: center; gap: 5px; }
+    .nav-toggle span { display: block; width: 22px; height: 2px; background: var(--bh-ink); border-radius: 2px; transition: transform .2s, opacity .2s; }
+    .nav-toggle[aria-expanded="true"] span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+    .nav-toggle[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
+    .nav-toggle[aria-expanded="true"] span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+    @media (max-width: 768px) {
+      .nav-toggle { display: flex; }
+      .nav-links { display: none; position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; align-items: stretch; gap: 0; padding: 12px 5% 20px; background: var(--bh-paper-raised); border-top: 1px solid var(--bh-line-soft); box-shadow: 0 12px 24px rgba(30, 42, 68,.08); z-index: 50; }
+      .nav-links.open { display: flex; }
+      .nav-links a { padding: 14px 8px; border-bottom: 1px solid var(--bh-line-soft); font-size: 16px; }
+      .nav-links a:last-child { border-bottom: 0; }
+      .content h1 { font-size: 30px; }
+      .content { padding: 40px 5% 60px; }
+    }
     .content { max-width: 780px; margin: 0 auto; padding: 60px 5% 80px; }
-    .content h1 { font-size: 36px; margin-bottom: 12px; }
-    .content .subtitle { color: var(--gray-500); font-size: 15px; margin-bottom: 40px; }
-    .content h2 { font-size: 22px; margin-top: 36px; margin-bottom: 12px; color: var(--dark); }
-    .content p { font-size: 15px; line-height: 1.8; color: var(--gray-700); margin-bottom: 16px; }
-    .footer { background: var(--gray-50); border-top: 1px solid var(--gray-100); padding: 40px 5%; text-align: center; }
-    .footer p { font-size: 13px; color: var(--gray-500); }
+    .content h1 { font-size: 40px; margin-bottom: 12px; }
+    .content .subtitle { color: var(--bh-ink-mute); font-size: 16px; margin-bottom: 48px; }
+    .content h2 { font-size: 22px; margin-top: 36px; margin-bottom: 12px; color: var(--bh-ink); }
+    .content p { font-size: 15px; line-height: 1.8; color: var(--bh-ink-soft); margin-bottom: 16px; }
+    .content a { color: var(--bh-teal); text-decoration: none; border-bottom: 1px solid transparent; transition: border-color .15s; }
+    .content a:hover { border-bottom-color: var(--bh-teal); }
+    .footer { background: var(--bh-paper-soft); border-top: 1px solid var(--bh-line-soft); padding: 40px 5%; text-align: center; }
+    .footer p { font-size: 13px; color: var(--bh-ink-mute); }
   </style>
 </head>
 <body>
   <nav class="nav">
-    <a href="/" class="nav-logo">
-      <svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" style="width:32px;height:32px"><rect width="48" height="48" rx="12" fill="#0369a1"/><circle cx="21" cy="20" r="11" fill="none" stroke="#fff" stroke-width="2.8"/><line x1="29" y1="28" x2="39" y2="38" stroke="#fff" stroke-width="2.8" stroke-linecap="round"/><path d="M21 13 L14 19 L15.5 19 L15.5 26 L26.5 26 L26.5 19 L28 19 Z" fill="#fff" opacity="0.95"/><rect x="19.5" y="22" width="3" height="4" rx="0.5" fill="#0369a1"/></svg>
-      <span class="logo-text">Bon Home</span>
-    </a>
+    <a href="/" class="nav-logo" aria-label="bonhome. — accueil"><span class="wordmark" style="font-size:26px">bonh<span class="wordmark__chevron-wrap"><svg class="wordmark__chevron" viewBox="0 0 20 12" aria-hidden="true"><path d="M2 10 L10 3 L18 10"/></svg>o</span>me<span class="wordmark__point">.</span></span></a>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false" aria-controls="nav-links">
+      <span></span><span></span><span></span>
+    </button>
+    <div class="nav-links" id="nav-links">
+      <a href="/#features">Fonctions</a>
+      <a href="/#how">Comment ça marche</a>
+      <a href="/pricing">Tarifs</a>
+      <a href="/faq">FAQ</a>
+      <a href="/?login=1">Connexion</a>
+    </div>
   </nav>
+  <script>
+    (function(){
+      var t = document.getElementById('nav-toggle');
+      var l = document.getElementById('nav-links');
+      if (t && l) {
+        t.addEventListener('click', function(){
+          var open = l.classList.toggle('open');
+          t.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+        l.querySelectorAll('a').forEach(function(a){
+          a.addEventListener('click', function(){
+            l.classList.remove('open');
+            t.setAttribute('aria-expanded', 'false');
+          });
+        });
+      }
+    })();
+  </script>
 
   <main class="content">
     <h1>Conditions générales d'utilisation</h1>
-    <p class="subtitle">Dernière mise à jour : 7 avril 2026</p>
+    <p class="subtitle">Dernière mise à jour : 5 mai 2026</p>
 
     <h2>1. Objet du service</h2>
-    <p>Bon Home (bonhome.ch) est un outil de recherche immobilière assisté par intelligence artificielle. Le service agrège des annonces immobilières publiées publiquement sur des portails suisses et les classe selon les critères définis par l'utilisateur. Bon Home n'est pas une agence immobilière, ne propose pas de biens à la vente ou à la location et n'intervient pas dans les transactions entre acheteurs et vendeurs ou entre locataires et bailleurs.</p>
+    <p>bonhome. (bonhome.ch) est un outil de recherche immobilière assisté par intelligence artificielle. Le service agrège des annonces immobilières publiées publiquement sur des portails suisses et les classe selon les critères définis par l'utilisateur. bonhome. n'est pas une agence immobilière, ne propose pas de biens à la vente ou à la location et n'intervient pas dans les transactions entre acheteurs et vendeurs ou entre locataires et bailleurs.</p>
 
     <h2>2. Inscription et compte</h2>
     <p>L'accès au service nécessite la création d'un compte avec une adresse e-mail valide. Vous êtes responsable de la confidentialité de vos identifiants de connexion. Chaque compte est personnel et ne peut être partagé ou cédé.</p>
@@ -45,7 +91,7 @@
     <p>Le service est actuellement proposé gratuitement. Nous nous réservons le droit d'introduire des fonctionnalités payantes à l'avenir, auquel cas vous en serez informé préalablement. L'accès aux fonctionnalités gratuites existantes ne sera pas restreint sans préavis.</p>
 
     <h2>4. Exactitude des informations</h2>
-    <p>Les annonces affichées sur Bon Home proviennent de sources tierces (portails immobiliers publics). Nous ne garantissons pas l'exactitude, l'exhaustivité ni l'actualité des informations présentées, notamment les prix, les surfaces, la disponibilité ou les descriptions des biens. L'utilisateur est invité à vérifier toute information directement auprès de l'annonceur ou du propriétaire avant toute décision.</p>
+    <p>Les annonces affichées sur bonhome. proviennent de sources tierces (portails immobiliers publics). Nous ne garantissons pas l'exactitude, l'exhaustivité ni l'actualité des informations présentées, notamment les prix, les surfaces, la disponibilité ou les descriptions des biens. L'utilisateur est invité à vérifier toute information directement auprès de l'annonceur ou du propriétaire avant toute décision.</p>
 
     <h2>5. Assistant IA</h2>
     <p>L'assistant conversationnel Lou est alimenté par une intelligence artificielle. Ses réponses sont générées automatiquement et ne constituent en aucun cas un conseil juridique, financier ou immobilier. Lou peut commettre des erreurs. En cas de doute, consultez un professionnel qualifié.</p>
@@ -54,16 +100,16 @@
     <p>Vous vous engagez à utiliser le service de manière loyale et conforme à son objet. Il est notamment interdit d'utiliser le service à des fins de scraping ou d'extraction systématique de données, de tenter d'accéder à des fonctionnalités non autorisées, de perturber le fonctionnement du service, ou d'utiliser le service à des fins illicites.</p>
 
     <h2>7. Propriété intellectuelle et sources des annonces</h2>
-    <p>Le code source, le design, le nom et le logo de Bon Home sont la propriété de leur auteur. Les annonces immobilières affichées sur Bon Home proviennent de portails immobiliers tiers accessibles publiquement. Bon Home agit en tant que moteur de découverte : il référence ces annonces et renvoie systématiquement vers l'annonce originale sur le portail source via un lien direct. Les images affichées ne sont pas hébergées sur nos serveurs ; elles sont chargées directement depuis les sites des portails d'origine. Bon Home ne se substitue pas aux portails immobiliers et encourage ses utilisateurs à consulter l'annonce originale pour toute information complémentaire ou prise de contact. Si un éditeur ou un portail souhaite que ses annonces ne soient plus référencées, il peut nous contacter à contact@bonhome.ch et le retrait sera effectué dans les plus brefs délais.</p>
+    <p>Le code source, le design, le nom et le logo de bonhome. sont la propriété de leur auteur. Les annonces immobilières affichées sur bonhome. proviennent de portails immobiliers tiers accessibles publiquement. bonhome. agit en tant que moteur de découverte : il référence ces annonces et renvoie systématiquement vers l'annonce originale sur le portail source via un lien direct. Les images affichées ne sont pas hébergées sur nos serveurs ; elles sont chargées directement depuis les sites des portails d'origine. bonhome. ne se substitue pas aux portails immobiliers et encourage ses utilisateurs à consulter l'annonce originale pour toute information complémentaire ou prise de contact. Si un éditeur ou un portail souhaite que ses annonces ne soient plus référencées, il peut nous contacter à <a href="mailto:contact@bonhome.ch">contact@bonhome.ch</a> et le retrait sera effectué dans les plus brefs délais.</p>
 
     <h2>8. Limitation de responsabilité</h2>
-    <p>Bon Home est fourni « en l'état ». Nous ne saurions être tenus responsables de toute décision prise sur la base des informations présentées par le service, de toute interruption temporaire du service, de toute perte de données liée à un dysfonctionnement technique, ou de toute inexactitude dans les annonces ou dans les réponses de l'assistant IA.</p>
+    <p>bonhome. est fourni « en l'état ». Nous ne saurions être tenus responsables de toute décision prise sur la base des informations présentées par le service, de toute interruption temporaire du service, de toute perte de données liée à un dysfonctionnement technique, ou de toute inexactitude dans les annonces ou dans les réponses de l'assistant IA.</p>
 
     <h2>9. Protection des données</h2>
-    <p>Le traitement de vos données personnelles est régi par notre politique de confidentialité, accessible à l'adresse bonhome.ch/privacy.</p>
+    <p>Le traitement de vos données personnelles est régi par notre <a href="/privacy">politique de confidentialité</a>.</p>
 
     <h2>10. Résiliation</h2>
-    <p>Vous pouvez supprimer votre compte à tout moment en nous contactant à contact@bonhome.ch. Nous nous réservons le droit de suspendre ou supprimer un compte en cas de violation des présentes conditions.</p>
+    <p>Vous pouvez supprimer votre compte à tout moment en nous contactant à <a href="mailto:contact@bonhome.ch">contact@bonhome.ch</a>. Nous nous réservons le droit de suspendre ou supprimer un compte en cas de violation des présentes conditions.</p>
 
     <h2>11. Droit applicable et for juridique</h2>
     <p>Les présentes conditions sont régies par le droit suisse. Tout litige relatif à l'utilisation du service sera soumis aux tribunaux compétents du canton de Neuchâtel, Suisse.</p>
@@ -73,7 +119,7 @@
   </main>
 
   <footer class="footer">
-    <p>&copy; 2026 Bon Home — Le bon home, au bon moment.</p>
+    <p>© 2026 bonhome.ch — Le bon home, au bon moment.</p>
   </footer>
 </body>
 </html>
