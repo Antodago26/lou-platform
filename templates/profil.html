@@ -5,8 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Bon Home — Mon Profil</title>
 <meta name="robots" content="noindex, nofollow">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- Self-hosted fonts (audit H18, 2026-05). Google Fonts ne reçoit plus
+     l'IP des visiteurs sur cette page. Le google-fonts.css partagé
+     contient Fraunces + Inter 400/500/600/700 — couvre profil.html. -->
+<link rel="stylesheet" href="{{ static_url('fonts/google-fonts.css') }}">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#0f172a;--card:#1e293b;--bd:#334155;--ac:#0ea5e9;--ac2:#0284c7;--tx:#f1f5f9;--mt:#94a3b8;--gn:#059669;--rd:#ef4444;--amber:#f59e0b}

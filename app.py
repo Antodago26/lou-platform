@@ -316,16 +316,19 @@ def create_app():
     CORS(flask_app, resources={r"/api/*": {"origins": allowed_origins}})
 
     # Security headers on every response.
-    # CSP allowlist (audit M1, 2026-05-04): allows hCaptcha, Google Fonts,
-    # Leaflet via unpkg, Swiss federal geo API. 'unsafe-inline' is kept for
-    # script-src and style-src because the HTML pages embed inline blocks
-    # (TODO: move to nonces or external files, then drop unsafe-inline).
-    # X-XSS-Protection dropped — deprecated and can introduce XS-Leak issues.
+    # CSP allowlist (audit M1, 2026-05-04 ; tightened H18, 2026-05-06).
+    # 2026-05-06 : fonts.googleapis.com et fonts.gstatic.com drop après
+    # auto-hébergement complet (toutes les templates utilisent maintenant
+    # /static/fonts/google-fonts.css). Plus aucune fuite d'IP vers Google.
+    # 'unsafe-inline' est conservé pour script-src et style-src parce que
+    # les HTML embarquent des blocs inline (TODO : passer aux nonces, puis
+    # drop unsafe-inline).
+    # X-XSS-Protection dropped — deprecated et peut introduire des XS-Leaks.
     _CSP = (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline' https://js.hcaptcha.com https://*.hcaptcha.com https://unpkg.com; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; "
-        "font-src 'self' https://fonts.gstatic.com; "
+        "style-src 'self' 'unsafe-inline' https://unpkg.com; "
+        "font-src 'self'; "
         "img-src 'self' https: data:; "
         "connect-src 'self' https://api.hcaptcha.com https://*.hcaptcha.com https://api3.geo.admin.ch; "
         "frame-src https://*.hcaptcha.com https://newassets.hcaptcha.com; "
