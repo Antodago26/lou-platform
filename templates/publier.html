@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Publier mon bien — bonhome.</title>
+  <meta name="description" content="Publie ton bien immobilier en quelques minutes. Lou s'occupe de presque tout : prix conseillé, description, mise en ligne.">
+  <meta name="theme-color" content="#2A6670">
+  <meta name="robots" content="noindex">
+  <link rel="icon" type="image/svg+xml" href="/static/logos/favicon.svg">
+  <link rel="stylesheet" href="{{ static_url('fonts/google-fonts.css') }}">
+  <link rel="stylesheet" href="{{ static_url('brand.css') }}">
+  <link rel="stylesheet" href="{{ static_url('components.css') }}">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--bh-font-sans); color: var(--bh-ink); background: var(--bh-paper); -webkit-font-smoothing: antialiased; }
+    h1, h2 { font-family: var(--bh-font-serif); font-weight: var(--bh-weight-light); letter-spacing: -.01em; }
+    .wrap { max-width: 560px; margin: 0 auto; padding: 28px 20px 60px; }
+    .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; }
+    .wordmark { font-family: var(--bh-font-serif); font-weight: 300; font-size: 24px; color: var(--bh-ink); text-decoration: none; }
+    .wordmark span { color: var(--bh-terracotta); }
+    .rail { display: flex; gap: 5px; margin-bottom: 22px; }
+    .rail i { flex: 1; height: 4px; border-radius: 3px; background: var(--bh-paper-sunk); }
+    .rail i.on { background: var(--bh-teal); }
+    .lou { display: flex; gap: 10px; margin-bottom: 16px; }
+    .lou .av { width: 30px; height: 30px; border-radius: 50%; background: var(--bh-teal); color: #fff; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; font-size: 15px; }
+    .bub { background: var(--bh-paper-raised); border: 1px solid var(--bh-line-soft); border-radius: 14px; border-top-left-radius: 4px; padding: 12px 14px; font-size: 15px; line-height: 1.55; }
+    .card { background: var(--bh-paper-raised); border: 1px solid var(--bh-line-soft); border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+    label.fld { display: block; font-size: 13px; color: var(--bh-ink-soft); margin: 12px 0 5px; }
+    input, textarea, select { width: 100%; font: inherit; font-size: 15px; color: var(--bh-ink); background: var(--bh-paper-raised); border: 1px solid var(--bh-line-soft); border-radius: 11px; padding: 11px 13px; }
+    input:focus, textarea:focus { outline: none; border-color: var(--bh-teal); }
+    .row { display: flex; gap: 10px; }
+    .row > * { flex: 1; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; width: 100%; border: 0; border-radius: 12px; background: var(--bh-teal); color: #fff; font: inherit; font-size: 15px; font-weight: 500; padding: 13px; cursor: pointer; }
+    .btn.ghost { background: transparent; border: 1px solid var(--bh-teal); color: var(--bh-teal); }
+    .btn.terra { background: var(--bh-terracotta); }
+    .btn[disabled] { opacity: .5; cursor: default; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip { font-size: 13px; padding: 7px 13px; border-radius: 22px; border: 1px solid var(--bh-line-soft); background: var(--bh-paper); color: var(--bh-ink-soft); cursor: pointer; user-select: none; }
+    .chip.on { background: #E1ECEA; border-color: var(--bh-teal); color: var(--bh-teal); }
+    .suggest { position: relative; }
+    .ac { position: absolute; left: 0; right: 0; top: 100%; z-index: 5; background: var(--bh-paper-raised); border: 1px solid var(--bh-line-soft); border-radius: 11px; margin-top: 4px; overflow: hidden; }
+    .ac div { padding: 10px 13px; font-size: 14px; cursor: pointer; }
+    .ac div:hover { background: var(--bh-paper-soft); }
+    .tag { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--bh-teal); }
+    .nav { display: flex; gap: 10px; margin-top: 20px; }
+    .nav button { flex: 1; border: 1px solid var(--bh-line-soft); background: var(--bh-paper-raised); color: var(--bh-ink); border-radius: 11px; padding: 11px; font: inherit; font-size: 14px; cursor: pointer; }
+    .nav button[disabled] { opacity: .4; cursor: default; }
+    .mini { display: flex; justify-content: space-between; font-size: 13px; color: var(--bh-ink-soft); padding: 7px 0; border-bottom: 1px solid var(--bh-line-soft); }
+    .big { font-family: var(--bh-font-serif); font-weight: 300; font-size: 34px; color: var(--bh-ink); }
+    .muted { font-size: 13px; color: var(--bh-ink-mute); }
+    .hidden { display: none; }
+    .center { text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <a href="/" class="wordmark">bonhome<span>.</span></a>
+      <span class="tag" id="stepLbl">Étape 1 / 8</span>
+    </div>
+    <div class="rail" id="rail"></div>
+    <div id="steps"></div>
+    <div class="nav">
+      <button id="prev" disabled>← Précédent</button>
+      <button id="next">Suivant →</button>
+    </div>
+  </div>
+
+  <script>
+  (function(){
+    var token = localStorage.getItem('lou_token');
+    if (!token || token.split('.').length !== 3) {
+      window.location.href = '/?login=1&next=/publier';
+      return;
+    }
+    var H = { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
+    var S = { transaction:'location', property_type:'appartement', features:[], images:[] };
+
+    var FEATURES = ['Balcon','Terrasse','Cave','Place de parc','Ascenseur','Lave-vaisselle','Jardin','Vue'];
+    var LABELS = ['Type','Adresse','Caractéristiques','Prix conseillé','Description','Photos','Demande','Publication'];
+
+    function el(html){ var d=document.createElement('div'); d.innerHTML=html.trim(); return d.firstChild; }
+    function lou(text){ return '<div class="lou"><div class="av">L</div><div class="bub">'+text+'</div></div>'; }
+
+    var steps = [];
+
+    steps.push(function(){
+      var s = el('<div>'+lou("Salut, moi c'est Lou. Ton bien, tu le loues ou tu le vends ? Je remplis presque tout pour toi.")+
+        '<div class="row"><button class="btn" data-tx="location">Je loue</button>'+
+        '<button class="btn ghost" data-tx="achat">Je vends</button></div>'+
+        '<p class="muted center" style="margin-top:12px">Publier est 100% gratuit</p></div>');
+      s.querySelectorAll('[data-tx]').forEach(function(b){ b.onclick=function(){ S.transaction=b.dataset.tx; go(1); }; });
+      return s;
+    });
+
+    steps.push(function(){
+      var s = el('<div>'+lou("Donne-moi l'adresse du bien. Je récupère commune, NPA et coordonnées tout seul.")+
+        '<div class="suggest"><input id="addr" placeholder="Rue, numéro, ville" autocomplete="off"><div class="ac hidden" id="ac"></div></div>'+
+        '<div class="card hidden" id="found" style="margin-top:14px"></div></div>');
+      var inp = s.querySelector('#addr'), ac = s.querySelector('#ac'), found = s.querySelector('#found');
+      if (S.address) inp.value = S.address;
+      var t;
+      inp.oninput = function(){
+        clearTimeout(t);
+        if (inp.value.trim().length < 3){ ac.classList.add('hidden'); return; }
+        t = setTimeout(function(){
+          fetch('/api/publish/address?q='+encodeURIComponent(inp.value), {headers:H})
+            .then(function(r){return r.json();}).then(function(j){
+              ac.innerHTML=''; (j.suggestions||[]).forEach(function(sg){
+                var row = el('<div>'+sg.label+'</div>');
+                row.onclick = function(){
+                  S.address=sg.label; S.city=sg.city; S.postal_code=sg.postal_code;
+                  S.latitude=sg.lat; S.longitude=sg.lon; inp.value=sg.label;
+                  ac.classList.add('hidden');
+                  found.classList.remove('hidden');
+                  found.innerHTML='<div class="tag">Adresse résolue</div><div style="margin-top:6px;font-size:15px">'+
+                    (sg.city||'')+(sg.postal_code?' · '+sg.postal_code:'')+'</div>';
+                };
+                ac.appendChild(row);
+              });
+              ac.classList.toggle('hidden', !(j.suggestions||[]).length);
+            });
+        }, 250);
+      };
+      return s;
+    });
+
+    steps.push(function(){
+      var s = el('<div>'+lou("Quelques caractéristiques. Tu pourras tout ajuster.")+
+        '<div class="card">'+
+        '<label class="fld">Type de bien</label><select id="ptype">'+
+        ['appartement','maison','studio','terrain','parking','commercial'].map(function(x){
+          return '<option value="'+x+'"'+(S.property_type===x?' selected':'')+'>'+x+'</option>';}).join('')+'</select>'+
+        '<div class="row"><div><label class="fld">Pièces</label><input id="rooms" type="number" step="0.5" value="'+(S.rooms||'')+'"></div>'+
+        '<div><label class="fld">Surface (m²)</label><input id="surface" type="number" value="'+(S.surface||'')+'"></div></div>'+
+        '<label class="fld">Étage</label><input id="floor" value="'+(S.floor||'')+'"></div>'+
+        '<label class="fld">Équipements</label><div class="chips" id="feats"></div></div>');
+      var feats = s.querySelector('#feats');
+      FEATURES.forEach(function(f){
+        var c = el('<span class="chip'+(S.features.indexOf(f)>=0?' on':'')+'">'+f+'</span>');
+        c.onclick=function(){ var i=S.features.indexOf(f); if(i>=0)S.features.splice(i,1); else S.features.push(f); c.classList.toggle('on'); };
+        feats.appendChild(c);
+      });
+      s.querySelector('#ptype').onchange=function(e){ S.property_type=e.target.value; };
+      ['rooms','surface','floor'].forEach(function(k){ s.querySelector('#'+k).oninput=function(e){ S[k]=e.target.value; }; });
+      return s;
+    });
+
+    steps.push(function(){
+      var s = el('<div>'+lou("Je regarde les biens comparables dans ta zone…")+
+        '<div class="card" id="price"><p class="muted">Calcul en cours…</p></div>'+
+        '<label class="fld">Ton prix (CHF'+(S.transaction==='location'?' / mois':'')+')</label>'+
+        '<input id="myprice" type="number" value="'+(S.price||'')+'"></div>');
+      s.querySelector('#myprice').oninput=function(e){ S.price=e.target.value; };
+      var box = s.querySelector('#price');
+      fetch('/api/publish/price-suggestion?city='+encodeURIComponent(S.city||'')+'&transaction='+S.transaction+
+            '&property_type='+S.property_type+(S.rooms?'&rooms='+S.rooms:''), {headers:H})
+        .then(function(r){return r.json();}).then(function(j){
+          if(!j.enough_data){ box.innerHTML='<p class="muted">Pas encore assez de comparables sur '+(S.city||'ta zone')+' pour un prix conseillé. À toi de fixer.</p>'; return; }
+          box.style.borderColor='var(--bh-terracotta)';
+          box.innerHTML='<div class="tag" style="color:var(--bh-terracotta)">Prix conseillé bonhome</div>'+
+            '<div class="big">'+j.suggestion.toLocaleString('fr-CH')+'.–</div>'+
+            '<div class="muted">Fourchette marché '+j.range.low.toLocaleString('fr-CH')+' – '+j.range.high.toLocaleString('fr-CH')+' CHF · '+j.sample_size+' biens comparés</div>'+
+            '<div style="margin-top:10px">'+j.comps.slice(0,3).map(function(c){
+              return '<div class="mini"><span>'+(c.rooms||'?')+'p · '+(c.surface||'?')+'m²</span><span>'+c.price.toLocaleString('fr-CH')+'.–</span></div>';
+            }).join('')+'</div>';
+          if(!S.price){ S.price=j.suggestion; s.querySelector('#myprice').value=j.suggestion; }
+        });
+      return s;
+    });
+
+    steps.push(function(){
+      var s = el('<div>'+lou("Je te propose une description. Modifie-la si tu veux.")+
+        '<label class="fld">Ce que tu aimes dans ce bien (optionnel)</label><input id="hl" placeholder="proche du lac, lumineux…" value="'+(S.highlight||'')+'">'+
+        '<label class="fld">Description</label><textarea id="desc" rows="5">'+(S.description||'')+'</textarea>'+
+        '<button class="btn ghost" id="gen" style="margin-top:10px">Rédiger avec Lou</button></div>');
+      s.querySelector('#hl').oninput=function(e){ S.highlight=e.target.value; };
+      s.querySelector('#desc').oninput=function(e){ S.description=e.target.value; };
+      s.querySelector('#gen').onclick=function(){
+        var b=s.querySelector('#gen'); b.textContent='…'; b.disabled=true;
+        fetch('/api/publish/generate-description',{method:'POST',headers:H,body:JSON.stringify(S)})
+          .then(function(r){return r.json();}).then(function(j){
+            if(j.description){ S.description=j.description; s.querySelector('#desc').value=j.description; }
+            b.textContent='Régénérer'; b.disabled=false;
+          }).catch(function(){ b.textContent='Rédiger avec Lou'; b.disabled=false; });
+      };
+      return s;
+    });
+
+    steps.push(function(){
+      return el('<div>'+lou("Les annonces avec photos pro partent <b>2× plus vite</b>.")+
+        '<label class="fld">Tes photos</label><input type="file" accept="image/*" multiple>'+
+        '<div class="card" style="border:1.5px solid var(--bh-terracotta);margin-top:14px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center">'+
+        '<span class="tag" style="color:var(--bh-terracotta)">Pack photo pro</span>'+
+        '<span class="big" style="font-size:22px;color:var(--bh-terracotta)">500.–</span></div>'+
+        '<p class="muted" style="margin:6px 0 10px">Un photographe vient sublimer ton bien. Publier reste gratuit.</p>'+
+        '<button class="btn terra">Réserver un photographe</button></div>'+
+        '<p class="muted center" style="margin-top:6px">Upload des photos : à venir (MVP sans stockage).</p></div>');
+    });
+
+    steps.push(function(){
+      var s = el('<div><div class="card center" style="background:#E1ECEA;border-color:var(--bh-teal)">'+
+        '<div class="big" style="color:var(--bh-teal)" id="cnt">…</div>'+
+        '<p>chercheurs attendent déjà un bien comme le tien dans ta zone</p></div>'+
+        lou("Dès que tu publies, je les préviens. Ce soir, ton bien est sous leurs yeux.")+'</div>');
+      fetch('/api/publish/demand-signal?city='+encodeURIComponent(S.city||''),{headers:H})
+        .then(function(r){return r.json();}).then(function(j){ s.querySelector('#cnt').textContent=(j.searchers||0); });
+      return s;
+    });
+
+    steps.push(function(){
+      var s = el('<div>'+lou("Tout est prêt. Je mets ton bien en ligne ?")+
+        '<div class="card"><div class="mini"><span>Type</span><span>'+S.property_type+'</span></div>'+
+        '<div class="mini"><span>Lieu</span><span>'+(S.city||'—')+'</span></div>'+
+        '<div class="mini"><span>Prix</span><span>'+(S.price?Number(S.price).toLocaleString('fr-CH')+'.–':'—')+'</span></div>'+
+        '<div class="mini" style="border:0"><span>Pièces / surface</span><span>'+(S.rooms||'?')+'p · '+(S.surface||'?')+'m²</span></div></div>'+
+        '<label class="fld">Titre de l\'annonce</label><input id="title" value="'+(S.title||'')+'" placeholder="Bel appartement à '+(S.city||'…')+'">'+
+        '<button class="btn" id="pub" style="margin-top:14px">Publier gratuitement</button>'+
+        '<div id="done"></div></div>');
+      var ti=s.querySelector('#title');
+      if(!S.title && S.city) ti.value=(S.property_type==='maison'?'Maison':'Appartement')+' à '+S.city;
+      ti.oninput=function(e){ S.title=e.target.value; };
+      s.querySelector('#pub').onclick=function(){
+        S.title=ti.value; var b=s.querySelector('#pub'); b.textContent='Publication…'; b.disabled=true;
+        fetch('/api/publish/listing',{method:'POST',headers:H,body:JSON.stringify(S)})
+          .then(function(r){return r.json();}).then(function(j){
+            if(j.ok){ document.querySelector('.nav').classList.add('hidden');
+              s.querySelector('#done').innerHTML='<div class="card center" style="margin-top:14px;background:#E1ECEA;border-color:var(--bh-teal)">'+
+                '<div class="big" style="color:var(--bh-teal)">En ligne !</div>'+
+                '<p class="muted">Ton bien est publié et les alertes partent.</p>'+
+                '<a class="btn ghost" href="/dashboard" style="margin-top:12px;text-decoration:none">Voir mon espace</a></div>';
+              b.classList.add('hidden');
+            } else { b.textContent='Réessayer'; b.disabled=false; }
+          }).catch(function(){ b.textContent='Réessayer'; b.disabled=false; });
+      };
+      return s;
+    });
+
+    var i = 0;
+    var rail=document.getElementById('rail'), host=document.getElementById('steps');
+    var prev=document.getElementById('prev'), next=document.getElementById('next'), lbl=document.getElementById('stepLbl');
+    for(var k=0;k<steps.length;k++) rail.appendChild(el('<i></i>'));
+    function render(){
+      host.innerHTML=''; host.appendChild(steps[i]());
+      rail.querySelectorAll('i').forEach(function(x,k){ x.classList.toggle('on', k<=i); });
+      lbl.textContent='Étape '+(i+1)+' / '+steps.length+' · '+LABELS[i];
+      prev.disabled=(i===0); next.classList.toggle('hidden', i===steps.length-1);
+    }
+    function go(x){ i=Math.max(0,Math.min(steps.length-1,x)); render(); window.scrollTo(0,0); }
+    prev.onclick=function(){ go(i-1); };
+    next.onclick=function(){ go(i+1); };
+    render();
+  })();
+  </script>
+</body>
+</html>
