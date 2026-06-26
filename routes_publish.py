@@ -214,11 +214,38 @@ def generate_description():
         return jsonify({"ok": False, "error": "génération indisponible"}), 502
 
 
+def _index_listing_for_search(cur, prop_id):
+    """Ferme la boucle marketplace : score le bien fraichement publié pour
+    CHAQUE profil de recherche actif et l'upsert dans scored_properties. Le
+    bien devient ainsi visible dans les recherches qui matchent IMMEDIATEMENT,
+    sans attendre le cron nocturne.
+
+    Best-effort : l'appelant gère le try/except (si ça échoue, le cron
+    rattrapera — score_all_for_profile re-score toutes les annonces actives).
+    Réutilise upsert_scored_properties (la primitive du cron / du boot rescore).
+    Import paresseux pour ne jamais risquer le boot de l'app."""
+    from scoring_engine import upsert_scored_properties
+    cur.execute("SELECT * FROM properties WHERE id = %s", (prop_id,))
+    prop = cur.fetchone()
+    if not prop:
+        return 0
+    cur.execute("SELECT * FROM search_profiles WHERE is_active = TRUE")
+    profiles = [dict(p) for p in cur.fetchall()]
+    total = 0
+    for profile in profiles:
+        cur.execute("SELECT * FROM search_zones WHERE profile_id = %s", (profile['id'],))
+        zones = [dict(z) for z in cur.fetchall()]
+        total += upsert_scored_properties(cur, [prop], profile, zones,
+                                          user_id=profile.get('user_id'))
+    return total
+
+
 # ------------------------------------------ étape 8 : créer / publier le bien
 @publish_bp.route('/api/publish/listing', methods=['POST'])
 @token_required
 def create_listing():
-    """Insère une annonce de privé dans `properties` (source='prive')."""
+    """Insère une annonce de privé dans `properties` (source='prive') puis
+    l'indexe pour la recherche (scoring temps réel)."""
     d = request.json or {}
     transaction = 'achat' if d.get('transaction') == 'achat' else 'location'
     title = (d.get('title') or '').strip()[:200]
@@ -273,13 +300,27 @@ def create_listing():
         conn.commit()
     except Exception as e:
         conn.rollback()
-        log.exception("create_listing failed: %s", e)
-        return jsonify({"ok": False, "error": "insertion échouée"}), 500
-    finally:
         cur.close()
         return_db(conn)
+        log.exception("create_listing failed: %s", e)
+        return jsonify({"ok": False, "error": "insertion échouée"}), 500
 
-    return jsonify({"ok": True, "id": new_id, "status": status})
+    # Boucle fermée : indexer le bien tout de suite pour qu'il remonte dans les
+    # recherches qui matchent (sinon invisible jusqu'au cron du soir). Les
+    # alertes email, elles, partent au prochain cron (_send_alerts détecte le
+    # scored_at récent). Best-effort, non bloquant : le bien est déjà publié.
+    indexed = 0
+    if status == 'active':
+        try:
+            indexed = _index_listing_for_search(cur, new_id)
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            log.warning("index new listing %s failed (cron will catch it): %s", new_id, e)
+    cur.close()
+    return_db(conn)
+
+    return jsonify({"ok": True, "id": new_id, "status": status, "indexed_profiles": indexed})
 
 
 # ----------------------------------------------------- mes annonces (vendeur)
