@@ -99,6 +99,8 @@
   pointer-events: none;
 }
 .wordmark__point { color: var(--bh-teal); }  /* light bg : teal profond */
+/* Logo du nav (tout en haut) : point terracotta comme le footer — signal de marque. */
+.nav-logo .wordmark__point { color: var(--bh-terracotta); }
 
 /* Variante fond foncé (nav teal-deep, footer, hero dark) */
 .wordmark--on-dark { color: var(--bh-paper); }
