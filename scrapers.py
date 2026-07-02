@@ -91,6 +91,11 @@ def _is_valid_source_url(url, source):
     if not (low.startswith('http://') or low.startswith('https://')):
         return False
     expected = SOURCE_DOMAINS.get(source)
+    # Sources d'agences (pivot) : le nom de la source EST le domaine (ex
+    # 'bulliard.ch'), pas une cle du dict SOURCE_DOMAINS. On valide alors l'URL
+    # contre ce domaine directement.
+    if expected is None and '.' in (source or '') and ' ' not in source:
+        expected = [source.lower()]
     if expected:
         # Extract host from the URL
         try:
@@ -2827,6 +2832,133 @@ def scrape_all(city="Lausanne", transaction="location", skip_nearby=False,
             unique.append(p)
 
     log.info(f"Total: {len(unique)} unique listings from {len(scrapers)} portals")
+    return unique
+
+
+# --- Pivot « scraping direct des sites d'agences » --------------------------
+# Les agences (table agency_sources) sont scrapees UNE FOIS par run (pas par
+# ville) : chaque parser de backend renvoie tout le catalogue de l'agence, et le
+# scoring matche ensuite les biens aux zones des utilisateurs. On memoize donc
+# par (domaine, transaction) sur la duree du process, comme les agences NE.
+_AGENCY_RUN_CACHE = set()
+
+# Parser par backend (modele « 1 parser par backend »). Immomig couvre ~43% des
+# agences romandes ; Apimo/CASASOFT/Estatik viendront s'ajouter ici.
+def _agency_parser_for(backend):
+    if (backend or '').lower() == 'immomig':
+        from scraper_immomig import scrape_immomig_agency
+        return scrape_immomig_agency
+    return None
+
+
+def reset_agency_cache():
+    """A appeler au debut d'un run cron (comme reset_scraper_stats)."""
+    global _AGENCY_RUN_CACHE
+    _AGENCY_RUN_CACHE = set()
+
+
+def get_active_agencies(db):
+    """Liste les agences actives de la table agency_sources.
+    Renvoie [] si la table n'existe pas encore (migration v647 pas passee)."""
+    cur = db.cursor()
+    try:
+        cur.execute("""
+            SELECT domain, backend FROM agency_sources
+            WHERE status = 'active'
+            ORDER BY domain
+        """)
+        rows = cur.fetchall()
+    except Exception as e:
+        log.warning(f"[agencies] agency_sources illisible (migration v647 pas passee ?): {e}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return []
+    finally:
+        cur.close()
+    return [{'domain': r[0], 'backend': r[1]} for r in rows]
+
+
+def _update_agency_health(db, domain, count, ok, client_id=None):
+    """Met a jour last_scraped_at / last_count / consecutive_failures d'une agence.
+    N'auto-desactive jamais une agence (evite un drop silencieux) — le monitoring
+    alerte, un humain decide. Best-effort : une erreur ici ne casse pas le run."""
+    cur = db.cursor()
+    try:
+        if ok:
+            cur.execute("""
+                UPDATE agency_sources
+                   SET last_scraped_at = NOW(), last_count = %s,
+                       consecutive_failures = 0,
+                       immomig_client_id = COALESCE(%s, immomig_client_id)
+                 WHERE domain = %s
+            """, (count, client_id, domain))
+        else:
+            cur.execute("""
+                UPDATE agency_sources
+                   SET last_scraped_at = NOW(), last_count = %s,
+                       consecutive_failures = consecutive_failures + 1
+                 WHERE domain = %s
+            """, (count, domain))
+        db.commit()
+    except Exception as e:
+        log.debug(f"[agencies] health update {domain} echoue: {e}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    finally:
+        cur.close()
+
+
+def scrape_agencies(db, transaction="location", limit=None):
+    """Scrape toutes les agences actives (une fois par domaine+transaction/run).
+    Met a jour la sante de chaque agence dans agency_sources et renvoie la liste
+    dedupliquee des biens (format _make_property), prete pour save_to_db.
+
+    A appeler UNE FOIS par transaction dans le cron, hors de la boucle par ville.
+    """
+    agencies = get_active_agencies(db)
+    if not agencies:
+        log.info("[agencies] aucune agence active (table vide ou absente)")
+        return []
+    if limit:
+        agencies = agencies[:limit]
+
+    all_biens = []
+    for a in agencies:
+        domain, backend = a['domain'], a['backend']
+        cache_key = f"{domain}:{transaction}"
+        if cache_key in _AGENCY_RUN_CACHE:
+            continue
+        parser = _agency_parser_for(backend)
+        if parser is None:
+            log.debug(f"[agencies] {domain}: backend '{backend}' sans parser — skip")
+            continue
+        try:
+            biens = [b for b in parser(domain, transaction=transaction) if b is not None]
+            all_biens.extend(biens)
+            _SCRAPER_STATS[f"agence:{domain}"] = _SCRAPER_STATS.get(f"agence:{domain}", 0) + len(biens)
+            client_id = None
+            if biens:
+                m = re.match(r'immomig-(\d+)-', biens[0].get('external_id', ''))
+                client_id = m.group(1) if m else None
+            _update_agency_health(db, domain, len(biens), ok=True, client_id=client_id)
+            _AGENCY_RUN_CACHE.add(cache_key)
+            log.info(f"[agencies] {domain} ({backend}): {len(biens)} biens")
+        except Exception as e:
+            log.error(f"[agencies] {domain} FAILED: {e}")
+            _update_agency_health(db, domain, 0, ok=False)
+
+    # Dedup par external_id (un meme bien peut sortir 2x si transaction=None)
+    seen, unique = set(), []
+    for b in all_biens:
+        k = b['external_id']
+        if k not in seen:
+            seen.add(k)
+            unique.append(b)
+    log.info(f"[agencies] Total: {len(unique)} biens uniques de {len(agencies)} agences")
     return unique
 
 
