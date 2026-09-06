@@ -649,6 +649,31 @@ if os.environ.get('DATABASE_URL', ''):
             except Exception:
                 pass
 
+    # v6.4.8 : seed des 3 agences Apimo (2e backend du pivot). INSERT ON CONFLICT
+    # — idempotent. Doit tourner APRES run_schema_v647 (table agency_sources).
+    conn = None
+    conn_broken = False
+    try:
+        import psycopg2 as _pg
+        from migrations.schema_v648_apimo_agencies import run_schema_v648
+        conn = get_db()
+        stats = run_schema_v648(conn)
+        log.info(f"v6.4.8 schema stats: {stats}")
+    except Exception as e:
+        try:
+            import psycopg2 as _pg
+            if isinstance(e, (_pg.OperationalError, _pg.InterfaceError)):
+                conn_broken = True
+        except Exception:
+            pass
+        log.warning(f"v6.4.8 schema error (boot continues, will retry next boot): {e}")
+    finally:
+        if conn is not None:
+            try:
+                return_db(conn, close=conn_broken)
+            except Exception:
+                pass
+
     # v6.3 backfills: rooms (NULL/0), Homegate titles (.â mojibake),
     # addresses (leading 'CH '/NPA/dots), properties GPS.
     # Doit tourner APRÈS _run_migrations() (qui backfill les zones GPS) et

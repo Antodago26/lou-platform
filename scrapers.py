@@ -2845,9 +2845,13 @@ _AGENCY_RUN_CACHE = set()
 # Parser par backend (modele « 1 parser par backend »). Immomig couvre ~43% des
 # agences romandes ; Apimo/CASASOFT/Estatik viendront s'ajouter ici.
 def _agency_parser_for(backend):
-    if (backend or '').lower() == 'immomig':
+    b = (backend or '').lower()
+    if b == 'immomig':
         from scraper_immomig import scrape_immomig_agency
         return scrape_immomig_agency
+    if b == 'apimo':
+        from scraper_apimo import scrape_apimo_agency
+        return scrape_apimo_agency
     return None
 
 
