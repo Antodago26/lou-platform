@@ -8,7 +8,7 @@ import threading
 from flask import Blueprint, jsonify, request
 
 from db import get_db, return_db
-from auth import token_required, admin_required
+from auth import token_required, admin_required, ingest_or_admin_required
 from rate_limit import check_rate_limit, rate_limited_response
 
 log = logging.getLogger('lou-app')
@@ -173,7 +173,7 @@ def api_scrape():
 
 
 @scraping_bp.route('/api/import', methods=['POST'])
-@admin_required
+@ingest_or_admin_required
 def api_import():
     """Import scraped listings from local_scraper. Admin-only.
 
@@ -182,15 +182,20 @@ def api_import():
     user endpoint — see audit C1 (2026-05-04): a non-admin user posting
     listings would inject content into the global catalog visible to everyone.
     """
-    if not check_rate_limit(f"import:user:{request.user_id}", _IMPORT_PER_USER_MIN, _IMPORT_PER_USER_HOUR):
+    key_auth = bool(getattr(request, 'ingest_key_auth', False))
+    if not key_auth and not check_rate_limit(f"import:user:{request.user_id}", _IMPORT_PER_USER_MIN, _IMPORT_PER_USER_HOUR):
         return rate_limited_response()
 
     from scrapers import save_to_db
 
     data = request.json or {}
     listings = data.get('listings', [])
+    # Options du script local (phase 2) : desactiver les annonces d'une
+    # source/canton absentes de seen_ids, et rescorer les profils ensuite.
+    deactivate = data.get('deactivate') if isinstance(data.get('deactivate'), dict) else None
+    want_rescore = bool(data.get('rescore'))
 
-    if not listings:
+    if not listings and not deactivate and not want_rescore:
         return jsonify({"error": "No listings provided"}), 400
     if not isinstance(listings, list) or len(listings) > 500:
         return jsonify({"error": "Listings invalides (max 500)"}), 400
@@ -225,15 +230,60 @@ def api_import():
         listing['images'] = clean_images[:_IMPORT_MAX_IMAGES]
 
     conn = get_db()
+    deactivated = 0
     try:
-        saved = save_to_db(conn, listings)
+        saved = save_to_db(conn, listings) if listings else 0
+        if deactivate:
+            src = str(deactivate.get('source') or '')[:50]
+            canton = str(deactivate.get('canton') or '')[:5].upper()
+            seen_ids = [str(x)[:255] for x in (deactivate.get('seen_ids') or [])][:20000]
+            if src and canton and seen_ids:
+                cur = conn.cursor()
+                cur.execute("""
+                    UPDATE properties SET is_active = FALSE
+                    WHERE source = %s AND is_active = TRUE AND canton = %s
+                      AND NOT (external_id = ANY(%s))
+                """, (src, canton, seen_ids))
+                deactivated = cur.rowcount
+                conn.commit()
+                cur.close()
+                log.info(f"import: {deactivated} annonces {src}/{canton} desactivees")
     finally:
         return_db(conn)
+
+    if want_rescore:
+        def _rescore():
+            c = None
+            try:
+                from scoring_engine import score_all_for_profile
+                c = get_db()
+                cur = c.cursor()
+                cur.execute("SELECT id FROM search_profiles WHERE is_active = TRUE")
+                ids = [r['id'] for r in cur.fetchall()]
+                cur.close()
+                for pid in ids:
+                    try:
+                        score_all_for_profile(c, pid)
+                    except Exception as e:
+                        log.error(f"import rescore profil {pid}: {e}")
+                        c.rollback()
+                log.info(f"import: {len(ids)} profils rescores")
+            except Exception as e:
+                log.error(f"import rescore: {e}")
+            finally:
+                if c is not None:
+                    try:
+                        return_db(c)
+                    except Exception:
+                        pass
+        threading.Thread(target=_rescore, daemon=True).start()
 
     return jsonify({
         "ok": True,
         "received": len(listings),
-        "saved": saved
+        "saved": saved,
+        "deactivated": deactivated,
+        "rescore_started": want_rescore,
     })
 
 

@@ -311,3 +311,50 @@ class CronSecretTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class IngestKeyTest(unittest.TestCase):
+    """Phase 2 : /api/import accepte X-Ingest-Key en plus du JWT admin."""
+
+    def _app(self):
+        from flask import Flask
+        import auth as auth_mod
+        app = Flask(__name__)
+
+        @app.route('/p', methods=['POST'])
+        @auth_mod.ingest_or_admin_required
+        def p():
+            from flask import jsonify, request
+            return jsonify({"key_auth": request.ingest_key_auth, "user_id": request.user_id})
+        return app, auth_mod
+
+    def test_good_key(self):
+        app, auth_mod = self._app()
+        old = auth_mod.INGEST_KEY
+        auth_mod.INGEST_KEY = 'bh_test_key'
+        try:
+            r = app.test_client().post('/p', headers={'X-Ingest-Key': 'bh_test_key'})
+            self.assertEqual(r.status_code, 200)
+            self.assertTrue(r.get_json()['key_auth'])
+        finally:
+            auth_mod.INGEST_KEY = old
+
+    def test_bad_key_falls_back_to_admin_401(self):
+        app, auth_mod = self._app()
+        old = auth_mod.INGEST_KEY
+        auth_mod.INGEST_KEY = 'bh_test_key'
+        try:
+            r = app.test_client().post('/p', headers={'X-Ingest-Key': 'wrong'})
+            self.assertEqual(r.status_code, 401)
+        finally:
+            auth_mod.INGEST_KEY = old
+
+    def test_no_key_configured(self):
+        app, auth_mod = self._app()
+        old = auth_mod.INGEST_KEY
+        auth_mod.INGEST_KEY = ''
+        try:
+            r = app.test_client().post('/p', headers={'X-Ingest-Key': ''})
+            self.assertEqual(r.status_code, 401)
+        finally:
+            auth_mod.INGEST_KEY = old
