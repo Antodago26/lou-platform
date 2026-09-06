@@ -87,6 +87,7 @@ from routes_scraping import scraping_bp
 from routes_pages import pages_bp
 from routes_stats import stats_bp
 from routes_publish import publish_bp
+from routes_feed import feed_bp
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger('lou-app')
@@ -398,6 +399,7 @@ def create_app():
     flask_app.register_blueprint(pages_bp)
     flask_app.register_blueprint(stats_bp)
     flask_app.register_blueprint(publish_bp)
+    flask_app.register_blueprint(feed_bp)
 
     return flask_app
 
@@ -667,6 +669,30 @@ if os.environ.get('DATABASE_URL', ''):
         except Exception:
             pass
         log.warning(f"v6.4.8 schema error (boot continues, will retry next boot): {e}")
+    finally:
+        if conn is not None:
+            try:
+                return_db(conn, close=conn_broken)
+            except Exception:
+                pass
+
+    # v6.4.9 : table swipes (feed mobile). Idempotent, tourne apres v648.
+    conn = None
+    conn_broken = False
+    try:
+        import psycopg2 as _pg
+        from migrations.schema_v649_swipes import run_schema_v649
+        conn = get_db()
+        stats = run_schema_v649(conn)
+        log.info(f"v6.4.9 schema stats: {stats}")
+    except Exception as e:
+        try:
+            import psycopg2 as _pg
+            if isinstance(e, (_pg.OperationalError, _pg.InterfaceError)):
+                conn_broken = True
+        except Exception:
+            pass
+        log.warning(f"v6.4.9 schema error (boot continues, will retry next boot): {e}")
     finally:
         if conn is not None:
             try:

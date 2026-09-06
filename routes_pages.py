@@ -21,6 +21,7 @@ _PUBLIC_PAGES = {
     'profil':    'profil.html',
     'faq':       'faq.html',
     'pricing':   'pricing.html',
+    'feed':      'feed.html',
 }
 
 
