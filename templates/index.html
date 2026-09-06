@@ -2,42 +2,34 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <link rel="manifest" href="/static/manifest.json">
-  <meta name="theme-color" content="#2A6670">
+  <meta name="theme-color" content="#0C171B">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>bonhome. — L'appart qui te va.</title>
-  <meta name="description" content="Lou cherche ton prochain chez-toi dans toute la Suisse romande. Tu vis, elle cherche.">
-  <meta name="keywords" content="immobilier suisse, recherche appartement, location, achat, IA immobilier, assistant immobilier, Suisse romande, Neuchâtel, Lausanne, Genève, Fribourg, Valais">
+  <title>bonhome. — Ton prochain chez-toi, un swipe à la fois.</title>
+  <meta name="description" content="Dis à Lou ce que tu cherches. Elle te montre les biens qui te correspondent, un par un, avec un score expliqué. Suisse romande, Neuchâtel d'abord.">
+  <meta name="keywords" content="immobilier suisse, recherche appartement, location, achat, app immobilier, swipe, assistant immobilier, Suisse romande, Neuchâtel, Lausanne, Genève, Fribourg">
   <meta name="author" content="bonhome.">
   <link rel="canonical" href="https://bonhome.ch/">
-  <!-- Open Graph -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://bonhome.ch/">
-  <meta property="og:title" content="bonhome. — L'appart qui te va.">
-  <meta property="og:description" content="Lou cherche ton prochain chez-toi dans toute la Suisse romande. Tu vis, elle cherche.">
+  <meta property="og:title" content="bonhome. — Ton prochain chez-toi, un swipe à la fois.">
+  <meta property="og:description" content="Dis à Lou ce que tu cherches. Elle te montre les biens qui te correspondent, un par un, avec un score expliqué.">
   <meta property="og:image" content="https://bonhome.ch/static/og-beta-v4.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:locale" content="fr_CH">
   <meta property="og:site_name" content="bonhome.">
-  <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="bonhome. — L'appart qui te va.">
-  <meta name="twitter:description" content="Lou cherche ton prochain chez-toi dans toute la Suisse romande. Tu vis, elle cherche.">
+  <meta name="twitter:title" content="bonhome. — Ton prochain chez-toi, un swipe à la fois.">
+  <meta name="twitter:description" content="Dis à Lou ce que tu cherches. Elle te montre les biens qui te correspondent, un par un, avec un score expliqué.">
   <meta name="twitter:image" content="https://bonhome.ch/static/og-beta-v4.png">
-
   <link rel="icon" type="image/svg+xml" href="/static/logos/favicon.svg">
-  <!-- Fonts self-hosted depuis 2026-05 (audit H18 : FADP/GDPR + perf).
-       Avant : Fraunces+Inter chargés depuis fonts.googleapis.com → Google
-       recevait l'IP de chaque visiteur CH/EU. Maintenant : woff2 servis
-       depuis /static/fonts/, même origine, cache long. -->
   <link rel="stylesheet" href="{{ static_url('fonts/google-fonts.css') }}">
+  <link rel="stylesheet" href="{{ static_url('fonts/feed-fonts.css') }}">
   <link rel="stylesheet" href="{{ static_url('brand.css') }}">
   <link rel="stylesheet" href="{{ static_url('components.css') }}">
-
-  <!-- JSON-LD Organization : carte de visite Google. -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -45,201 +37,252 @@
     "name": "bonhome.",
     "url": "https://bonhome.ch",
     "logo": "https://bonhome.ch/static/logos/wordmark.svg",
-    "description": "Assistant immobilier IA suisse. Lou cherche ton futur logement dans toute la Suisse romande, score chaque annonce selon tes critères et t'alerte en temps réel.",
+    "description": "App immobilière suisse. Lou comprend ce que tu cherches, te montre les biens qui te correspondent un par un, et t'alerte dès qu'un nouveau bien sort.",
     "areaServed": "CH",
     "email": "contact@bonhome.ch",
-    "sameAs": [
-      "https://www.instagram.com/bonhome.ch"
-    ]
+    "sameAs": ["https://www.instagram.com/bonhome.ch"]
   }
   </script>
-
   <style>
+    /* ============================================================
+       bonhome. site public, direction Nuit (6 septembre 2026).
+       Tokens locaux : la charte beige de brand.css reste pour les
+       pages non converties, cette page n'en utilise que le wordmark.
+       ============================================================ */
+    .site {
+      --bg: #0C171B; --surface: #13252B; --surface-2: #1B3036;
+      --text: #FFFFFF; --soft: #C9D2CF; --mute: #7E8C88;
+      --teal: #2A6670; --teal-deep: #1A4650; --sage: #8FA780; --sage-soft: #C2D1B3;
+      --terra: #C96A44; --line: rgba(255,255,255,0.10);
+      --display: "Bricolage Grotesque", "Instrument Sans", system-ui, sans-serif;
+      --body: "Instrument Sans", system-ui, -apple-system, sans-serif;
+      --brand: "Fraunces", Georgia, serif;
+    }
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: var(--font-body); color: var(--ink); background: var(--paper); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
-    h1, h2, h3 { font-family: var(--font-display); font-weight: 400; color: var(--ink); }
+    html { background: #0C171B; }
+    body.site { font-family: var(--body); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+    .site h1, .site h2, .site h3 { font-family: var(--display); font-weight: 800; letter-spacing: -0.03em; color: var(--text); }
+    .site a { color: var(--sage-soft); text-decoration: none; }
+    .site .wordmark { color: var(--text); }
+    .site .wordmark .wordmark__chevron { stroke: var(--sage); }
+    .site .wordmark .wordmark__point { color: var(--terra); }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 0 5%; }
 
-    /* NAV */
-    .nav { display: flex; justify-content: space-between; align-items: center; padding: 18px 5%; max-width: 1280px; margin: 0 auto; position: relative; }
-    .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    /* Boutons */
+    .b { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 52px; padding: 0 22px; border-radius: 999px; font-size: 15px; font-weight: 600; font-family: var(--body); border: 1.5px solid transparent; cursor: pointer; transition: transform .15s, background .2s, border-color .2s; white-space: nowrap; }
+    .b:active { transform: scale(0.97); }
+    .b-terra { background: var(--terra); color: #fff; box-shadow: 0 10px 30px rgba(201,106,68,0.30); }
+    .b-terra:hover { background: #D4785A; }
+    .b-ghost { background: transparent; color: var(--text); border-color: rgba(255,255,255,0.22); }
+    .b-ghost:hover { border-color: rgba(255,255,255,0.5); }
+    .b-teal { background: var(--teal); color: #fff; }
+    .b-teal:hover { background: #337985; }
+    .b-sm { height: 40px; padding: 0 16px; font-size: 14px; }
+
+    /* Nav */
+    .nav { display: flex; justify-content: space-between; align-items: center; padding: 18px 0; position: relative; }
     .nav-logo .wordmark { font-size: 26px; }
-    .nav-links { display: flex; align-items: center; gap: 32px; }
-    .nav-links a { text-decoration: none; color: var(--ink-soft); font-size: 15px; font-weight: 500; transition: color .2s; }
-    .nav-links a:hover { color: var(--teal); }
-    .nav-links a.btn-primary, .nav-links a.btn-primary:hover { color: var(--paper); }
+    .nav-links { display: flex; align-items: center; gap: 28px; }
+    .nav-links a { color: var(--soft); font-size: 15px; font-weight: 500; transition: color .2s; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-links a.b { color: #fff; }
     .nav-toggle { display: none; background: none; border: 0; padding: 8px; cursor: pointer; width: 40px; height: 40px; flex-direction: column; justify-content: center; gap: 5px; }
-    .nav-toggle span { display: block; width: 22px; height: 2px; background: var(--ink); border-radius: 2px; transition: transform .2s, opacity .2s; }
+    .nav-toggle span { display: block; width: 22px; height: 2px; background: var(--text); border-radius: 2px; transition: transform .2s, opacity .2s; }
     .nav-toggle[aria-expanded="true"] span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
     .nav-toggle[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
     .nav-toggle[aria-expanded="true"] span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
 
-    /* HERO */
-    .hero { display: flex; align-items: center; justify-content: space-between; max-width: 1280px; margin: 0 auto; padding: 60px 5% 80px; gap: 60px; }
-    .hero-text { max-width: 560px; }
-    .hero-text h1 { font-size: 64px; line-height: 1.05; margin-bottom: 16px; letter-spacing: -0.02em; font-weight: 300; }
-    .hero-text .hero-baseline { font-family: var(--font-display); font-weight: 300; color: var(--ink-soft); font-size: 22px; margin-bottom: 28px; }
-    .hero-text p { font-size: 18px; line-height: 1.7; color: var(--ink-soft); margin-bottom: 32px; }
-    .hero-ctas { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+    /* Hero */
+    .hero { display: grid; grid-template-columns: 1.1fr 0.9fr; align-items: center; gap: 48px; padding: 56px 0 80px; }
+    .hero-kicker { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--sage-soft); margin-bottom: 22px; }
+    .hero-kicker i { width: 7px; height: 7px; border-radius: 50%; background: var(--terra); }
+    .hero h1 { font-size: 64px; line-height: 0.98; margin-bottom: 18px; }
+    .hero h1 em { font-style: normal; color: var(--sage-soft); }
+    .hero .baseline { font-family: var(--brand); font-weight: 300; font-size: 24px; color: var(--soft); margin-bottom: 22px; letter-spacing: -0.01em; }
+    .hero p { font-size: 18px; line-height: 1.6; color: var(--soft); max-width: 520px; margin-bottom: 30px; }
+    .hero-ctas { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+    .hero-note { margin-top: 18px; font-size: 13px; color: var(--mute); }
 
-    /* CHAT CARD HERO */
-    .hero-visual { flex-shrink: 0; width: 420px; }
-    .chat-card { background: var(--teal-deep); border-radius: 24px; padding: 28px 24px 24px; box-shadow: 0 20px 60px rgba(26,70,80,.22), 0 0 0 1px rgba(255,255,255,.05); position: relative; overflow: hidden; }
-    .cc-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; position: relative; z-index: 1; }
-    .cc-avatar { width: 44px; height: 44px; background: rgba(206,223,225,.15); border-radius: 12px; display: flex; align-items: center; justify-content: center; }
-    .cc-name { color: var(--paper); font-weight: 400; font-size: 16px; font-family: var(--font-display); letter-spacing: -0.01em; }
-    .cc-status { color: var(--teal-soft); font-size: 12px; display: flex; align-items: center; gap: 5px; }
-    .cc-dot { width: 7px; height: 7px; background: var(--sage-tag); border-radius: 50%; display: inline-block; }
-    .cc-messages { display: flex; flex-direction: column; gap: 10px; position: relative; z-index: 1; }
-    .cc-msg { max-width: 85%; padding: 10px 14px; border-radius: 16px; font-size: 13.5px; line-height: 1.5; animation: ccFade .5s ease both; }
-    .cc-bot { background: rgba(206,223,225,.14); color: var(--paper); border-bottom-left-radius: 4px; align-self: flex-start; }
-    .cc-user { background: var(--paper); color: var(--ink); border-bottom-right-radius: 4px; align-self: flex-end; font-weight: 500; }
-    .cc-result { background: rgba(143,167,128,.2); border: 1px solid rgba(143,167,128,.35); color: var(--paper); border-radius: 12px; padding: 10px 14px; font-size: 13px; align-self: flex-start; display: flex; align-items: center; gap: 8px; }
-    .cc-result svg { flex-shrink: 0; }
-    .cc-msg:nth-child(1) { animation-delay: 0s; }
-    .cc-msg:nth-child(2) { animation-delay: .3s; }
-    .cc-msg:nth-child(3) { animation-delay: .6s; }
-    .cc-msg:nth-child(4) { animation-delay: .9s; }
-    .cc-msg:nth-child(5) { animation-delay: 1.2s; }
-    @keyframes ccFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    /* Téléphone animé (swipe) */
+    .phone-wrap { display: flex; justify-content: center; }
+    .phone { position: relative; width: 320px; height: 660px; border-radius: 44px; background: #060D10; border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 40px 90px rgba(0,0,0,0.6), inset 0 0 0 6px #0C171B; overflow: hidden; }
+    .phone::before { content: ""; position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: 92px; height: 26px; border-radius: 999px; background: #060D10; z-index: 5; }
+    .ph-top { position: absolute; top: 52px; left: 18px; right: 18px; z-index: 4; display: flex; justify-content: space-between; align-items: center; }
+    .ph-top .wordmark { font-size: 20px; }
+    .ph-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 999px; background: rgba(12,23,27,0.6); border: 1px solid rgba(255,255,255,0.14); font-size: 11px; font-weight: 600; }
+    .ph-chip i { width: 6px; height: 6px; border-radius: 50%; background: var(--terra); }
+    .ph-stack { position: absolute; inset: 0; }
+    .ph-card { position: absolute; inset: 0; background: var(--bg); transform-origin: 50% 120%; animation: swipeLoop 9s infinite; }
+    .ph-card:nth-child(1) { animation-delay: 0s; z-index: 3; }
+    .ph-card:nth-child(2) { animation-delay: -3s; z-index: 2; }
+    .ph-card:nth-child(3) { animation-delay: -6s; z-index: 1; }
+    @keyframes swipeLoop {
+      0% { transform: translateX(0) rotate(0); opacity: 1; z-index: 3; }
+      27% { transform: translateX(0) rotate(0); opacity: 1; }
+      33% { transform: translateX(130%) rotate(12deg); opacity: 0; }
+      33.1% { transform: translateX(0) rotate(0); opacity: 0; z-index: 1; }
+      34% { opacity: 1; }
+      100% { transform: translateX(0) rotate(0); opacity: 1; }
+    }
+    .ph-photo { position: absolute; top: 0; left: 0; right: 0; height: 62%; overflow: hidden; }
+    .ph-photo svg { width: 100%; height: 100%; display: block; }
+    .ph-photo::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 55%; background: linear-gradient(180deg, rgba(12,23,27,0) 0%, rgba(12,23,27,0.92) 78%, var(--bg) 100%); }
+    .ph-stamp { position: absolute; right: 16px; top: 42%; width: 72px; height: 72px; border-radius: 50%; background: #F2F4F3; color: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; transform: rotate(8deg); box-shadow: 0 10px 24px rgba(0,0,0,0.35); z-index: 3; }
+    .ph-stamp b { font-family: var(--display); font-weight: 800; font-size: 30px; line-height: 1; letter-spacing: -0.04em; }
+    .ph-stamp small { font-family: var(--display); font-weight: 700; font-size: 10px; letter-spacing: 0.14em; color: var(--terra); }
+    .ph-info { position: absolute; left: 18px; right: 100px; top: 52%; z-index: 3; text-shadow: 0 1px 6px rgba(0,0,0,0.45); }
+    .ph-info b { display: block; font-family: var(--display); font-weight: 800; font-size: 26px; letter-spacing: -0.03em; line-height: 1; }
+    .ph-info b span { font-family: var(--body); font-weight: 400; font-size: 12px; color: var(--soft); letter-spacing: 0; margin-left: 4px; }
+    .ph-info .f { margin-top: 8px; font-size: 13px; font-weight: 600; }
+    .ph-info .w { margin-top: 4px; font-size: 12px; color: var(--soft); }
+    .ph-lou { position: absolute; left: 18px; right: 18px; top: 69%; z-index: 3; display: flex; gap: 10px; padding: 10px 12px; border-radius: 14px; background: var(--surface); border: 1px solid rgba(255,255,255,0.08); }
+    .ph-lou i { flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--teal); display: flex; align-items: center; justify-content: center; font-family: var(--brand); font-style: normal; font-size: 15px; }
+    .ph-lou div { font-size: 12px; line-height: 1.35; color: #E6EAE8; }
+    .ph-lou div b { display: block; font-size: 10px; font-weight: 600; color: var(--sage); letter-spacing: 0.06em; margin-bottom: 2px; }
+    .ph-actions { position: absolute; left: 18px; right: 18px; bottom: 34px; z-index: 3; display: flex; justify-content: center; gap: 14px; align-items: center; }
+    .ph-actions span { width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--surface-2); border: 1px solid rgba(255,255,255,0.14); color: #fff; }
+    .ph-actions span.like { width: 62px; height: 62px; background: var(--terra); border: 0; transform: rotate(-6deg); box-shadow: 0 10px 24px rgba(201,106,68,0.4); }
+    .ph-hint { position: absolute; left: 0; right: 0; bottom: 12px; z-index: 3; text-align: center; font-size: 10px; color: var(--mute); letter-spacing: 0.06em; }
 
-    /* STATS BAR */
-    .stats-bar { background: var(--cream); border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
-    .stats-bar-inner { max-width: 1280px; margin: 0 auto; padding: 32px 5%; display: flex; justify-content: space-around; gap: 24px; text-align: center; }
-    .stats-bar-inner div strong { display: block; font-size: 28px; font-family: var(--font-display); font-weight: 400; color: var(--teal); }
-    .stats-bar-inner div span { font-size: 14px; color: var(--ink-soft); }
+    /* Sections */
+    .sec { padding: 88px 0; }
+    .sec-head { max-width: 640px; margin-bottom: 44px; }
+    .sec-head h2 { font-size: 42px; line-height: 1.05; margin-bottom: 14px; }
+    .sec-head p { font-size: 17px; line-height: 1.6; color: var(--soft); }
+    .sec-head.center { margin-left: auto; margin-right: auto; text-align: center; }
+    .kicker { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sage); margin-bottom: 14px; display: block; }
 
-    /* FEATURES */
-    .features { max-width: 1280px; margin: 0 auto; padding: 80px 5%; }
-    .features-header { text-align: center; margin-bottom: 56px; }
-    .features-header h2 { font-size: 40px; margin-bottom: 12px; font-weight: 300; letter-spacing: -0.015em; }
-    .features-header p { font-size: 16px; color: var(--ink-soft); max-width: 560px; margin: 0 auto; }
-    .features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; }
-    .feature-card { background: var(--cream); border: 1px solid var(--line-soft); border-radius: 16px; padding: 32px; transition: all .3s; }
-    .feature-card:hover { border-color: var(--teal); box-shadow: 0 8px 32px rgba(42,102,112,.08); transform: translateY(-4px); }
-    .feature-icon { width: 48px; height: 48px; background: var(--teal-soft); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
-    .feature-icon svg { width: 24px; height: 24px; stroke: var(--teal); }
-    .feature-card h3 { font-size: 20px; margin-bottom: 8px; font-family: var(--font-display); font-weight: 400; }
-    .feature-card p { font-size: 14px; color: var(--ink-soft); line-height: 1.7; }
+    .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+    .step { padding: 28px; border-radius: 22px; background: var(--surface); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 14px; min-height: 250px; }
+    .step .n { font-family: var(--display); font-weight: 800; font-size: 44px; line-height: 1; color: var(--sage-soft); letter-spacing: -0.04em; }
+    .step h3 { font-size: 22px; }
+    .step p { font-size: 15px; line-height: 1.55; color: var(--soft); }
+    .step .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
+    .step .chips span { height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.18); font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; }
+    .step .chips span.me { background: var(--terra); border-color: transparent; }
+    .step .gest { display: flex; gap: 10px; margin-top: auto; align-items: center; }
+    .step .gest span { width: 40px; height: 40px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--surface-2); border: 1px solid rgba(255,255,255,0.14); }
+    .step .gest span.like { background: var(--terra); border: 0; transform: rotate(-6deg); }
+    .step .gest small { font-size: 12px; color: var(--mute); margin-left: 6px; }
 
-    /* HOW IT WORKS */
-    .how { background: var(--teal-deep); color: var(--paper); padding: 80px 5%; }
-    .how-inner { max-width: 1280px; margin: 0 auto; }
-    .how-inner h2 { text-align: center; font-size: 40px; margin-bottom: 56px; color: var(--paper); font-weight: 300; letter-spacing: -0.015em; }
-    .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px; }
-    .step { text-align: center; }
-    .step-num { width: 48px; height: 48px; border-radius: 50%; background: var(--teal); color: var(--paper); display: inline-flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 500; margin-bottom: 16px; font-family: var(--font-display); }
-    .step h3 { font-size: 18px; margin-bottom: 8px; font-family: var(--font-display); font-weight: 400; color: var(--paper); }
-    .step p { font-size: 14px; color: var(--teal-soft); line-height: 1.6; }
+    /* App */
+    .app { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; padding: 48px; border-radius: 32px; background: linear-gradient(135deg, #13252B 0%, #0F1F24 100%); border: 1px solid var(--line); }
+    .app h2 { font-size: 40px; line-height: 1.05; margin-bottom: 14px; }
+    .app p { font-size: 16px; line-height: 1.6; color: var(--soft); margin-bottom: 24px; }
+    .app-ctas { display: flex; flex-wrap: wrap; gap: 12px; }
+    .store-note { margin-top: 16px; font-size: 13px; color: var(--mute); display: flex; align-items: center; gap: 8px; }
+    .store-note i { width: 6px; height: 6px; border-radius: 50%; background: var(--sage); }
+    .app-visual { display: flex; justify-content: center; }
+    .app-visual .phone { transform: scale(0.82); transform-origin: center; margin: -60px 0; }
+    .install-help { display: none; margin-top: 16px; padding: 16px 18px; border-radius: 16px; background: var(--surface-2); border: 1px solid var(--line); font-size: 14px; line-height: 1.6; color: var(--soft); }
+    .install-help.show { display: block; }
+    .install-help b { color: var(--text); }
 
-    /* CTA */
-    .cta { text-align: center; max-width: 1280px; margin: 0 auto; padding: 80px 5%; }
-    .cta h2 { font-size: 40px; margin-bottom: 16px; font-weight: 300; letter-spacing: -0.015em; }
-    .cta p { font-size: 16px; color: var(--ink-soft); margin-bottom: 32px; max-width: 480px; margin-left: auto; margin-right: auto; }
+    /* Pourquoi */
+    .why { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
+    .why div { padding: 24px; border-radius: 20px; border: 1px solid var(--line); background: transparent; }
+    .why svg { width: 26px; height: 26px; stroke: var(--sage-soft); margin-bottom: 14px; }
+    .why h3 { font-size: 18px; margin-bottom: 8px; }
+    .why p { font-size: 14px; line-height: 1.55; color: var(--soft); }
 
-    /* TESTIMONIALS */
-    .testimonials { background: var(--cream); padding: 80px 5%; }
-    .testimonials-inner { max-width: 1280px; margin: 0 auto; }
-    .testimonials-inner > h2 { text-align: center; font-size: 40px; margin-bottom: 12px; font-weight: 300; letter-spacing: -0.015em; }
-    .testimonials-sub { text-align: center; font-size: 16px; color: var(--ink-soft); margin-bottom: 48px; }
-    .testimonials-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
-    .testimonial-card { background: var(--paper); border: 1px solid var(--line-soft); border-radius: 16px; padding: 28px; display: flex; flex-direction: column; gap: 16px; transition: all .3s; }
-    .testimonial-card:hover { border-color: var(--teal); box-shadow: 0 8px 32px rgba(42,102,112,.08); transform: translateY(-4px); }
-    .testimonial-stars { color: var(--accent); font-size: 16px; letter-spacing: 2px; }
-    .testimonial-quote { font-size: 15px; line-height: 1.65; color: var(--ink); flex: 1; font-family: var(--font-display); font-weight: 300; }
-    .testimonial-author { display: flex; align-items: center; gap: 12px; }
-    .testimonial-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--teal); color: var(--paper); display: flex; align-items: center; justify-content: center; font-weight: 500; font-size: 15px; font-family: var(--font-display); }
-    .testimonial-name { font-weight: 600; font-size: 14px; color: var(--ink); }
-    .testimonial-city { font-size: 12px; color: var(--ink-mute); }
+    /* Publier */
+    .owner { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 32px 36px; border-radius: 24px; border: 1px solid var(--line); background: var(--surface); }
+    .owner h3 { font-size: 24px; margin-bottom: 6px; }
+    .owner p { font-size: 15px; color: var(--soft); }
 
-    /* FOOTER */
-    .footer { background: var(--teal-deep); color: var(--teal-soft); padding: 56px 5% 24px; }
-    .footer-grid { max-width: 1280px; margin: 0 auto; display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 48px; padding-bottom: 40px; border-bottom: 1px solid rgba(206,223,225,.12); }
-    .footer-col h4 { color: var(--paper); font-family: var(--font-body); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 16px; }
-    .footer-col a { display: block; font-size: 14px; color: var(--teal-soft); text-decoration: none; margin-bottom: 10px; transition: color .2s; }
-    .footer-col a:hover { color: var(--paper); }
-    .footer-brand { display: flex; flex-direction: column; gap: 12px; }
-    .footer-brand .wordmark { font-size: 28px; color: var(--paper); }
-    /* Wordmark sur fond foncé (teal-deep) — Palette 04 NCS 2026 :
-       chevron = sauge (nature), point = terracotta (signal). */
-    .footer-brand .wordmark .wordmark__chevron { stroke: var(--bh-sage); }
-    .footer-brand .wordmark .wordmark__point   { color: var(--bh-terracotta); }
-    .footer-baseline { font-family: var(--font-display); font-weight: 300; color: var(--teal-soft); font-size: 16px; }
-    .footer-tagline { font-size: 14px; line-height: 1.6; color: var(--teal-soft); max-width: 320px; }
-    .footer-social { display: flex; gap: 12px; margin-top: 12px; }
-    .footer-social a { width: 36px; height: 36px; border-radius: 50%; background: rgba(206,223,225,.1); display: flex; align-items: center; justify-content: center; color: var(--teal-soft); margin-bottom: 0; transition: all .2s; }
-    .footer-social a:hover { background: var(--teal); color: var(--paper); }
-    .footer-bottom { max-width: 1280px; margin: 24px auto 0; text-align: center; }
-    .footer-bottom p { font-size: 12px; color: var(--teal-soft); opacity: 0.6; }
+    /* CTA bas */
+    .cta { text-align: center; padding: 96px 0; }
+    .cta h2 { font-size: 48px; line-height: 1; margin-bottom: 14px; }
+    .cta p { font-size: 17px; color: var(--soft); margin-bottom: 30px; }
 
-    /* AUTH MODAL */
-    .lou-overlay{position:fixed;inset:0;background:rgba(26,70,80,.6);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(4px)}
-    .lou-auth-box{background:var(--paper);border-radius:16px;padding:36px;width:400px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,.2);position:relative;color:var(--ink)}
-    .lou-auth-box .close-btn{position:absolute;top:12px;right:16px;background:none;border:none;font-size:22px;cursor:pointer;color:var(--ink-mute)}
-    .lou-auth-box .close-btn:hover{color:var(--ink)}
-    .lou-auth-box h2{font-size:26px;margin:0 0 4px;font-family:var(--font-display);font-weight:400}
-    .lou-auth-box .sub{font-size:14px;color:var(--ink-soft);margin-bottom:20px}
-    .lou-auth-box input{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:10px;margin-bottom:12px;font-size:14px;box-sizing:border-box;outline:none;font-family:var(--font-body);background:var(--paper);color:var(--ink)}
-    .lou-auth-box input:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(42,102,112,.12)}
-    .auth-submit{width:100%;padding:13px;border:none;border-radius:var(--r-pill);background:var(--teal);color:var(--paper);font-size:15px;font-weight:500;cursor:pointer;transition:background .2s;font-family:var(--font-body)}
-    .auth-submit:hover{background:var(--teal-deep)}
-    .lou-auth-switch{text-align:center;margin-top:14px;font-size:13px;color:var(--ink-soft)}
-    .lou-auth-switch a{color:var(--teal);cursor:pointer;text-decoration:underline}
-    .lou-auth-err{color:var(--accent);font-size:13px;margin-top:8px;display:none;text-align:center}
+    /* Footer */
+    .footer { border-top: 1px solid var(--line); padding: 56px 0 24px; color: var(--soft); }
+    .footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px; padding-bottom: 36px; border-bottom: 1px solid var(--line); }
+    .footer-col h4 { color: var(--text); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 14px; font-family: var(--body); }
+    .footer-col a { display: block; font-size: 14px; color: var(--soft); margin-bottom: 10px; }
+    .footer-col a:hover { color: var(--text); }
+    .footer-brand .wordmark { font-size: 30px; }
+    .footer-brand .baseline { font-family: var(--brand); font-weight: 300; font-size: 16px; color: var(--soft); margin: 8px 0 10px; }
+    .footer-brand p { font-size: 14px; line-height: 1.6; max-width: 320px; }
+    .footer-social a { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.08); display: inline-flex; align-items: center; justify-content: center; color: var(--soft); margin-top: 8px; }
+    .footer-bottom { margin-top: 22px; text-align: center; font-size: 12px; color: var(--mute); }
 
-    /* RESPONSIVE */
-    @media (max-width: 900px) {
-      .hero { flex-direction: column; text-align: center; padding: 40px 5% 60px; }
-      .hero-text h1 { font-size: 44px; }
+    /* Fenêtre de connexion et chat (injectés par app.js) en Nuit */
+    .site .lou-overlay { background: rgba(6,13,16,0.7); }
+    .site .lou-auth-box { background: var(--surface); color: var(--text); border: 1px solid var(--line); }
+    .site .lou-auth-box h2 { font-family: var(--display); font-weight: 800; letter-spacing: -0.02em; color: var(--text); }
+    .site .lou-auth-box .sub, .site .lou-auth-switch { color: var(--soft); }
+    .site .lou-auth-box input { background: var(--surface-2); color: var(--text); border-color: var(--line); }
+    .site .lou-auth-box .close-btn { color: var(--soft); }
+    .site .auth-submit { background: var(--terra); }
+    .site .auth-submit:hover { background: #D4785A; }
+    .site .lou-auth-switch a { color: var(--sage-soft); }
+    .site .chat-panel { background: var(--bg) !important; border: 1px solid var(--line); }
+    .site .chat-head { background: var(--surface) !important; color: var(--text) !important; }
+    .site .chat-body { background: var(--bg) !important; }
+    .site .chat-msg.bot { background: var(--surface) !important; color: #F2F4F3 !important; border: 1px solid rgba(255,255,255,0.08); }
+    .site .chat-msg.user { background: var(--terra) !important; color: #fff !important; }
+    .site .chat-input { background: var(--bg) !important; border-top: 1px solid var(--line) !important; }
+    .site .chat-input input { background: var(--surface) !important; color: var(--text) !important; border: 1px solid var(--line) !important; }
+    .site .chat-input button { background: var(--terra) !important; }
+    .site .chat-sug { background: transparent !important; color: var(--text) !important; border: 1px solid rgba(255,255,255,0.22) !important; }
+    .site .chat-toggle { background: var(--terra) !important; box-shadow: 0 10px 30px rgba(201,106,68,0.4) !important; }
+
+    @media (max-width: 960px) {
+      .hero { grid-template-columns: 1fr; text-align: center; padding: 32px 0 56px; }
+      .hero p { margin-left: auto; margin-right: auto; }
       .hero-ctas { justify-content: center; }
-      .hero-visual { width: 100%; max-width: 380px; }
-      .features-grid { grid-template-columns: 1fr; }
-      .steps { grid-template-columns: repeat(2, 1fr); }
-      .testimonials-grid { grid-template-columns: 1fr; }
-      .footer-grid { grid-template-columns: 1fr 1fr; gap: 32px; }
+      .hero h1 { font-size: 46px; }
+      .phone { width: 290px; height: 600px; }
+      .steps { grid-template-columns: 1fr; }
+      .app { grid-template-columns: 1fr; padding: 32px 24px; text-align: center; }
+      .app-ctas { justify-content: center; }
+      .app .store-note { justify-content: center; }
+      .app-visual .phone { margin: -40px 0 -70px; }
+      .why { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .owner { flex-direction: column; text-align: center; }
+      .footer-grid { grid-template-columns: 1fr 1fr; gap: 28px; }
+      .cta h2 { font-size: 36px; }
+      .sec { padding: 64px 0; }
+      .sec-head h2 { font-size: 34px; }
     }
     @media (max-width: 768px) {
       .nav-toggle { display: flex; }
-      .nav-links { display: none; position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; align-items: stretch; gap: 0; padding: 12px 5% 20px; background: var(--paper); border-top: 1px solid var(--line-soft); box-shadow: 0 12px 24px rgba(26,70,80,.08); z-index: 50; }
+      .nav-links { display: none; position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; align-items: stretch; gap: 0; padding: 12px 0 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 0 0 20px 20px; z-index: 50; }
       .nav-links.open { display: flex; }
-      .nav-links a { padding: 14px 8px; border-bottom: 1px solid var(--line-soft); font-size: 16px; }
+      .nav-links a { padding: 14px 20px; border-bottom: 1px solid var(--line); font-size: 16px; }
       .nav-links a:last-child { border-bottom: 0; }
-      .nav-links a.btn { margin-top: 10px; border-bottom: 0; text-align: center; }
+      .nav-links a.b { margin: 10px 20px 0; }
     }
     @media (max-width: 600px) {
-      .stats-bar-inner { flex-wrap: wrap; }
-      .steps { grid-template-columns: 1fr; }
-      .hero-text h1 { font-size: 36px; }
-      .hero-text .hero-baseline { font-size: 18px; }
-      .hero-text p { font-size: 15px; }
-      .hero-visual { max-width: 100%; }
-      .chat-card { padding: 20px 16px 18px; }
-      .cc-msg { font-size: 12.5px; }
-      .features-header h2 { font-size: 30px; }
-      .testimonials-inner > h2 { font-size: 30px; }
-      .footer-grid { grid-template-columns: 1fr; gap: 28px; }
-      .btn { padding: 12px 20px; font-size: 14px; }
+      .hero h1 { font-size: 40px; }
+      .why { grid-template-columns: 1fr; }
+      .footer-grid { grid-template-columns: 1fr; }
+      .phone { width: 270px; height: 560px; }
     }
+    @media (prefers-reduced-motion: reduce) { .ph-card { animation: none; } .ph-card:nth-child(2), .ph-card:nth-child(3) { display: none; } }
   </style>
 </head>
-<body>
+<body class="site">
 
-  <!-- NAV -->
-  <nav class="nav">
-    <a href="/" class="nav-logo" aria-label="bonhome. — accueil">
-      <span class="wordmark">bonh<span class="wordmark__chevron-wrap"><svg class="wordmark__chevron" viewBox="0 0 20 12" aria-hidden="true"><path d="M2 10 L10 3 L18 10"/></svg>o</span>me<span class="wordmark__point">.</span></span>
-    </a>
-    <button class="nav-toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false" aria-controls="nav-links">
-      <span></span><span></span><span></span>
-    </button>
-    <div class="nav-links" id="nav-links">
-      <a href="#features">Fonctions</a>
-      <a href="#how">Comment ça marche</a>
-      <a href="/pricing">Tarifs</a>
-      <a href="/faq">FAQ</a>
-      <a href="/publier">Publier mon bien</a>
-      <a href="#" class="btn btn-primary" id="nav-login-btn">Connexion</a>
-    </div>
-  </nav>
+  <div class="wrap">
+    <nav class="nav">
+      <a href="/" class="nav-logo" aria-label="bonhome. — accueil">
+        <span class="wordmark">bonh<span class="wordmark__chevron-wrap"><svg class="wordmark__chevron" viewBox="0 0 20 12" aria-hidden="true"><path d="M2 10 L10 3 L18 10"/></svg>o</span>me<span class="wordmark__point">.</span></span>
+      </a>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false" aria-controls="nav-links">
+        <span></span><span></span><span></span>
+      </button>
+      <div class="nav-links" id="nav-links">
+        <a href="#how">Comment ça marche</a>
+        <a href="#app">L'app</a>
+        <a href="/pricing">Tarifs</a>
+        <a href="/faq">FAQ</a>
+        <a href="/publier">Publier mon bien</a>
+        <a href="#" class="b b-teal b-sm" id="nav-login-btn">Connexion</a>
+      </div>
+    </nav>
+  </div>
   <script>
     (function(){
       var t = document.getElementById('nav-toggle');
@@ -250,199 +293,227 @@
         t.setAttribute('aria-expanded', open ? 'true' : 'false');
       });
       l.querySelectorAll('a').forEach(function(a){
-        a.addEventListener('click', function(){
-          l.classList.remove('open');
-          t.setAttribute('aria-expanded', 'false');
-        });
+        a.addEventListener('click', function(){ l.classList.remove('open'); t.setAttribute('aria-expanded', 'false'); });
       });
     })();
   </script>
 
   <!-- HERO -->
-  <section class="hero">
+  <section class="wrap hero">
     <div class="hero-text">
-      <h1 class="hero-wordmark"><span class="wordmark">bonh<span class="wordmark__chevron-wrap"><svg class="wordmark__chevron" viewBox="0 0 20 12" aria-hidden="true"><path d="M2 10 L10 3 L18 10"/></svg>o</span>me<span class="wordmark__point">.</span></span></h1>
-      <div class="hero-baseline">—&nbsp;au bon moment</div>
-      <p>Dis à Lou ce que tu cherches. Elle déniche pour toi les biens qui te correspondent partout en Suisse romande, les note selon tes critères et t'alerte en premier. Tu vis, elle cherche.</p>
+      <span class="hero-kicker"><i></i> Beta ouverte, Neuchâtel d'abord</span>
+      <h1>Ton prochain chez-toi, <em>un swipe à la fois.</em></h1>
+      <div class="baseline">bonhome, au bon moment</div>
+      <p>Dis à Lou ce que tu cherches. Elle te montre les biens qui te correspondent, un par un, avec une note qu'elle t'explique. Tu gardes, tu passes, tu visites.</p>
       <div class="hero-ctas">
-        <a href="#" class="btn btn-primary" id="hero-cta-1">Parler à Lou</a>
-        <a href="#how" class="btn btn-outline">Comment ça marche</a>
+        <a href="#" class="b b-terra" id="hero-cta-1">Parler à Lou</a>
+        <a href="#app" class="b b-ghost">Installer l'app</a>
       </div>
+      <div class="hero-note">Gratuit pendant la beta. Location et achat, Suisse romande.</div>
     </div>
-    <div class="hero-visual">
-      <div class="chat-card">
-        <div class="cc-header">
-          <div class="cc-avatar">
-            <svg width="20" height="12" viewBox="0 0 20 12" aria-hidden="true"><path d="M2 10 L10 3 L18 10" stroke="var(--paper)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </div>
-          <div>
-            <div class="cc-name">Lou</div>
-            <div class="cc-status"><span class="cc-dot"></span> En ligne</div>
-          </div>
+
+    <div class="phone-wrap" aria-hidden="true">
+      <div class="phone">
+        <div class="ph-top">
+          <span class="wordmark">bonh<span class="wordmark__chevron-wrap"><svg class="wordmark__chevron" viewBox="0 0 20 12"><path d="M2 10 L10 3 L18 10"/></svg>o</span>me<span class="wordmark__point">.</span></span>
+          <span class="ph-chip"><i></i>12 nouveaux</span>
         </div>
-        <div class="cc-messages">
-          <div class="cc-msg cc-bot">Salut ! Moi c'est Lou. Qu'est-ce que tu cherches ?</div>
-          <div class="cc-msg cc-user">Un 4 pièces à Lausanne, max 900k</div>
-          <div class="cc-msg cc-bot">Top. Des critères importants ? Balcon, parking, vue ?</div>
-          <div class="cc-msg cc-user">Balcon obligatoire, proche du métro</div>
-          <div class="cc-msg cc-result">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--sage-tag)" stroke-width="2" stroke-linecap="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-            8 biens trouvés. Meilleur match : 87/100 (A+)
+        <div class="ph-stack">
+          <!-- Carte 1 -->
+          <div class="ph-card">
+            <div class="ph-photo"><svg viewBox="0 0 320 420" preserveAspectRatio="xMidYMid slice"><rect width="320" height="420" fill="#D8D3CB"/><rect y="300" width="320" height="120" fill="#A98C6E"/><polygon points="60,240 170,240 250,420 -10,420" fill="#fff" opacity="0.22"/><rect x="58" y="56" width="108" height="184" fill="#DCEBEE" stroke="#fff" stroke-width="9"/><line x1="112" y1="56" x2="112" y2="240" stroke="#fff" stroke-width="5"/><line x1="58" y1="148" x2="166" y2="148" stroke="#fff" stroke-width="5"/><rect x="190" y="230" width="122" height="70" rx="12" fill="#3D5A5E"/><rect x="184" y="242" width="134" height="22" rx="7" fill="#4F7377"/><ellipse cx="44" cy="256" rx="28" ry="22" fill="#6F8F66"/><rect x="34" y="268" width="20" height="46" rx="4" fill="#B9B0A3"/></svg></div>
+            <div class="ph-stamp"><b>88</b><small>A</small></div>
+            <div class="ph-info"><b>1'650 CHF<span>/ mois</span></b><div class="f">3.5 pièces · 78 m² · 2e étage</div><div class="w">Rue de la Côte, Neuchâtel · hier</div></div>
+            <div class="ph-lou"><i>L</i><div><b>LOU</b>Balcon plein sud et dans ton budget. Seul bémol : 14 min à pied de la gare.</div></div>
+            <div class="ph-actions"><span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span><span class="like"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"><path d="M12 20.5s-7.5-4.6-7.5-10A4.2 4.2 0 0 1 12 8a4.2 4.2 0 0 1 7.5 2.5c0 5.4-7.5 10-7.5 10z"/></svg></span></div>
+            <div class="ph-hint">SUIVANT</div>
+          </div>
+          <!-- Carte 2 -->
+          <div class="ph-card">
+            <div class="ph-photo"><svg viewBox="0 0 320 420" preserveAspectRatio="xMidYMid slice"><rect width="320" height="420" fill="#C9D3D6"/><rect y="300" width="320" height="120" fill="#8B7B6A"/><polygon points="150,240 260,240 340,420 90,420" fill="#fff" opacity="0.2"/><rect x="150" y="60" width="118" height="180" fill="#E6EEF0" stroke="#fff" stroke-width="9"/><line x1="209" y1="60" x2="209" y2="240" stroke="#fff" stroke-width="5"/><rect x="20" y="236" width="120" height="64" rx="12" fill="#2C4144"/><ellipse cx="290" cy="262" rx="26" ry="20" fill="#7FA173"/><rect x="280" y="272" width="18" height="42" rx="4" fill="#B9B0A3"/></svg></div>
+            <div class="ph-stamp"><b>92</b><small>A</small></div>
+            <div class="ph-info"><b>1'890 CHF<span>/ mois</span></b><div class="f">4 pièces · 95 m² · rénové</div><div class="w">Grand-Rue, Peseux · aujourd'hui</div></div>
+            <div class="ph-lou"><i>L</i><div><b>LOU</b>Parking inclus, en plein dans ta zone. Publié aujourd'hui, sois rapide.</div></div>
+            <div class="ph-actions"><span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span><span class="like"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"><path d="M12 20.5s-7.5-4.6-7.5-10A4.2 4.2 0 0 1 12 8a4.2 4.2 0 0 1 7.5 2.5c0 5.4-7.5 10-7.5 10z"/></svg></span></div>
+            <div class="ph-hint">SUIVANT</div>
+          </div>
+          <!-- Carte 3 -->
+          <div class="ph-card">
+            <div class="ph-photo"><svg viewBox="0 0 320 420" preserveAspectRatio="xMidYMid slice"><rect width="320" height="420" fill="#E2D9CF"/><rect y="300" width="320" height="120" fill="#7D6754"/><polygon points="90,240 210,240 300,420 20,420" fill="#fff" opacity="0.2"/><rect x="96" y="50" width="130" height="190" fill="#DCEBEE" stroke="#fff" stroke-width="9"/><line x1="161" y1="50" x2="161" y2="240" stroke="#fff" stroke-width="5"/><line x1="96" y1="145" x2="226" y2="145" stroke="#fff" stroke-width="5"/><rect x="200" y="236" width="110" height="64" rx="12" fill="#3D5A5E"/><ellipse cx="40" cy="250" rx="26" ry="22" fill="#5E7D57"/><rect x="30" y="262" width="20" height="46" rx="4" fill="#B9B0A3"/></svg></div>
+            <div class="ph-stamp"><b>79</b><small>B</small></div>
+            <div class="ph-info"><b>1'480 CHF<span>/ mois</span></b><div class="f">3 pièces · 70 m² · vue lac</div><div class="w">Hauterive · il y a 2 jours</div></div>
+            <div class="ph-lou"><i>L</i><div><b>LOU</b>Belle vue, dans ton budget. Seul bémol : 6 km de trajet.</div></div>
+            <div class="ph-actions"><span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span><span class="like"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"><path d="M12 20.5s-7.5-4.6-7.5-10A4.2 4.2 0 0 1 12 8a4.2 4.2 0 0 1 7.5 2.5c0 5.4-7.5 10-7.5 10z"/></svg></span></div>
+            <div class="ph-hint">SUIVANT</div>
           </div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- STATS BAR -->
-  <div class="stats-bar">
-    <div class="stats-bar-inner">
-      <div><strong>0</strong><span>portail à éplucher</span></div>
-      <div><strong>+ de 2 500</strong><span>Annonces analysées</span></div>
-      <div><strong>6</strong><span>Critères de scoring</span></div>
-      <div><strong>24/7</strong><span>Veille automatique</span></div>
+  <!-- COMMENT ÇA MARCHE -->
+  <section class="wrap sec" id="how">
+    <div class="sec-head">
+      <span class="kicker">Comment ça marche</span>
+      <h2>Trois gestes, pas de formulaire.</h2>
+      <p>Lou fait le tri à ta place. Tu ne vois que les biens qui te correspondent, et tu décides en un geste.</p>
     </div>
-  </div>
-
-  <!-- FEATURES -->
-  <section class="features" id="features">
-    <div class="features-header">
-      <h2>Pourquoi bonhome.</h2>
-      <p>Lou cherche partout pour toi, sans relâche. Toi, tu n'as plus qu'à visiter.</p>
-    </div>
-    <div class="features-grid">
-
-      <div class="feature-card">
-        <div class="feature-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
-          </svg>
-        </div>
-        <h3>Une recherche, partout à la fois</h3>
-        <p>Lou ratisse les annonces de toute la Suisse romande en continu — pour que tu ne rates aucune opportunité, même les biens qui partent vite.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="n">1</div>
+        <h3>Parle à Lou</h3>
+        <p>Louer ou acheter, où, jusqu'à combien, combien de pièces. Trois questions, deux minutes.</p>
+        <div class="chips"><span>Louer</span><span class="me">Neuchâtel, 10 km</span><span>Max 2'000</span></div>
       </div>
-
-      <div class="feature-card">
-        <div class="feature-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-          </svg>
-        </div>
-        <h3>Scoring sur mesure</h3>
-        <p>Chaque bien reçoit une note de A à D basée sur tes critères : zone, budget, type, surface, équipements, fraîcheur.</p>
+      <div class="step">
+        <div class="n">2</div>
+        <h3>Swipe</h3>
+        <p>Un bien par écran, avec son score et l'avis de Lou. Cœur pour garder, croix pour passer, vers le haut pour le suivant.</p>
+        <div class="gest"><span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span><span class="like"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"><path d="M12 20.5s-7.5-4.6-7.5-10A4.2 4.2 0 0 1 12 8a4.2 4.2 0 0 1 7.5 2.5c0 5.4-7.5 10-7.5 10z"/></svg></span><small>Lou apprend de ce que tu gardes</small></div>
       </div>
-
-      <div class="feature-card">
-        <div class="feature-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-          </svg>
-        </div>
-        <h3>Lou, ton assistante</h3>
-        <p>Dis à Lou ce que tu cherches en langage naturel. Pas de formulaires — une conversation, et c'est parti.</p>
+      <div class="step">
+        <div class="n">3</div>
+        <h3>Visite</h3>
+        <p>Tes favoris regroupés, le contact en un clic, l'annonce d'origine à portée. Et Lou t'alerte dès qu'un nouveau bien sort.</p>
+        <div class="chips"><span>Match 92</span><span>Contacter l'agence</span></div>
       </div>
-
-      <div class="feature-card">
-        <div class="feature-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>
-          </svg>
-        </div>
-        <h3>Zones & rayon GPS</h3>
-        <p>Ajoute plusieurs villes avec un rayon en km. Lou calcule la distance réelle de chaque bien par rapport à tes zones.</p>
-      </div>
-
-      <div class="feature-card">
-        <div class="feature-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/>
-          </svg>
-        </div>
-        <h3>Alertes instantanées</h3>
-        <p>Un bien qui correspond à tes critères vient d'apparaître ? Lou t'alerte avant tout le monde.</p>
-      </div>
-
-      <div class="feature-card">
-        <div class="feature-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="2" width="4" height="19" rx="1"/>
-          </svg>
-        </div>
-        <h3>Tout en un clic</h3>
-        <p>Dashboard avec scores, filtres, favoris, détails du bien et coordonnées du contact. Tout est là.</p>
-      </div>
-
     </div>
   </section>
 
-  <!-- HOW IT WORKS -->
-  <section class="how" id="how">
-    <div class="how-inner">
-      <h2>Comment ça marche ?</h2>
-      <div class="steps">
-        <div class="step">
-          <div class="step-num">1</div>
-          <h3>Parle à Lou</h3>
-          <p>Dis-lui ce que tu cherches : région, budget, type de bien, nombre de pièces…</p>
+  <!-- APP -->
+  <section class="wrap sec" id="app">
+    <div class="app">
+      <div>
+        <span class="kicker">L'app</span>
+        <h2>bonhome sur ton téléphone.</h2>
+        <p>Le feed, Lou, tes favoris et les alertes, dans ta poche. Installe bonhome sur ton écran d'accueil en trente secondes, sans passer par un store.</p>
+        <div class="app-ctas">
+          <button class="b b-terra" id="install-ios" type="button">Installer sur iPhone</button>
+          <button class="b b-ghost" id="install-android" type="button">Installer sur Android</button>
         </div>
-        <div class="step">
-          <div class="step-num">2</div>
-          <h3>Lou part en chasse</h3>
-          <p>Lou scrute les annonces en continu, partout en Suisse romande. Les doublons regroupés, les nouveautés repérées dans la foulée.</p>
-        </div>
-        <div class="step">
-          <div class="step-num">3</div>
-          <h3>Le bon bien remonte</h3>
-          <p>Chaque bien est scoré de A à D selon tes critères. Tu ne vois que le meilleur.</p>
-        </div>
-        <div class="step">
-          <div class="step-num">4</div>
-          <h3>Visite, signe</h3>
-          <p>Contact, annonce originale, détails complets — tout est prêt pour passer à l'action.</p>
+        <div class="install-help" id="install-help"></div>
+        <div class="store-note"><i></i> Version App Store et Google Play en préparation.</div>
+      </div>
+      <div class="app-visual" aria-hidden="true">
+        <div class="phone">
+          <div class="ph-top"><span class="wordmark">bonh<span class="wordmark__chevron-wrap"><svg class="wordmark__chevron" viewBox="0 0 20 12"><path d="M2 10 L10 3 L18 10"/></svg>o</span>me<span class="wordmark__point">.</span></span><span class="ph-chip"><i></i>4 gardés</span></div>
+          <div class="ph-stack">
+            <div class="ph-card" style="animation:none">
+              <div class="ph-photo"><svg viewBox="0 0 320 420" preserveAspectRatio="xMidYMid slice"><rect width="320" height="420" fill="#C9D3D6"/><rect y="300" width="320" height="120" fill="#8B7B6A"/><polygon points="150,240 260,240 340,420 90,420" fill="#fff" opacity="0.2"/><rect x="150" y="60" width="118" height="180" fill="#E6EEF0" stroke="#fff" stroke-width="9"/><line x1="209" y1="60" x2="209" y2="240" stroke="#fff" stroke-width="5"/><rect x="20" y="236" width="120" height="64" rx="12" fill="#2C4144"/><ellipse cx="290" cy="262" rx="26" ry="20" fill="#7FA173"/><rect x="280" y="272" width="18" height="42" rx="4" fill="#B9B0A3"/></svg></div>
+              <div class="ph-stamp"><b>92</b><small>A</small></div>
+              <div class="ph-info"><b>1'890 CHF<span>/ mois</span></b><div class="f">4 pièces · 95 m² · rénové</div><div class="w">Grand-Rue, Peseux · aujourd'hui</div></div>
+              <div class="ph-lou"><i>L</i><div><b>LOU</b>Parking inclus, en plein dans ta zone. Publié aujourd'hui, sois rapide.</div></div>
+              <div class="ph-actions"><span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span><span class="like"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"><path d="M12 20.5s-7.5-4.6-7.5-10A4.2 4.2 0 0 1 12 8a4.2 4.2 0 0 1 7.5 2.5c0 5.4-7.5 10-7.5 10z"/></svg></span></div>
+              <div class="ph-hint">SUIVANT</div>
+            </div>
+          </div>
         </div>
       </div>
+    </div>
+  </section>
+  <script>
+    (function(){
+      var deferred = null;
+      var help = document.getElementById('install-help');
+      var ios = document.getElementById('install-ios');
+      var android = document.getElementById('install-android');
+      var standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+      if (standalone) {
+        ios.textContent = 'Déjà installée'; ios.disabled = true; android.hidden = true;
+      }
+      window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferred = e; });
+      ios.addEventListener('click', function () {
+        help.innerHTML = '<b>Sur iPhone :</b> ouvre bonhome.ch dans <b>Safari</b>, touche le bouton <b>Partager</b> (le carré avec la flèche), puis <b>Sur l\'écran d\'accueil</b>. L\'icône bonhome apparaît comme une app.';
+        help.classList.add('show');
+      });
+      android.addEventListener('click', function () {
+        if (deferred) { deferred.prompt(); deferred = null; return; }
+        help.innerHTML = '<b>Sur Android :</b> ouvre bonhome.ch dans <b>Chrome</b>, touche le menu <b>⋮</b> en haut à droite, puis <b>Installer l\'application</b> (ou <b>Ajouter à l\'écran d\'accueil</b>).';
+        help.classList.add('show');
+      });
+    })();
+  </script>
+
+  <!-- POURQUOI -->
+  <section class="wrap sec">
+    <div class="sec-head center">
+      <span class="kicker">Pourquoi bonhome</span>
+      <h2>Ce que les portails ne font pas.</h2>
+    </div>
+    <div class="why">
+      <div>
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <h3>Une recherche, partout</h3>
+        <p>Lou regroupe les annonces de plusieurs sources et fusionne les doublons. Une seule liste, la tienne.</p>
+      </div>
+      <div>
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5M10 19V9M16 19v-6M22 19H2"/></svg>
+        <h3>Un score expliqué</h3>
+        <p>Zone, budget, surface, équipements, fraîcheur. Chaque bien a une note, et tu vois d'où elle vient.</p>
+      </div>
+      <div>
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H9l-5 4z"/></svg>
+        <h3>Lou, pas un formulaire</h3>
+        <p>Tu lui parles comme à quelqu'un. Elle comprend « proche de la gare » ou « pas de rez-de-chaussée ».</p>
+      </div>
+      <div>
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <h3>Alertée avant les autres</h3>
+        <p>Un bien qui te correspond vient de sortir ? Tu le sais tout de suite, pas le lendemain.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- PUBLIER -->
+  <section class="wrap sec" style="padding-top:0">
+    <div class="owner">
+      <div>
+        <h3>Tu as un bien à louer ou à vendre ?</h3>
+        <p>Publie-le gratuitement. Lou le propose directement aux personnes dont il correspond aux critères.</p>
+      </div>
+      <a href="/publier" class="b b-ghost">Publier mon bien</a>
     </div>
   </section>
 
   <!-- CTA -->
-  <section class="cta">
-    <h2>Prêt à trouver ton appart ?</h2>
-    <p>Lou est déjà en ligne. Parle-lui de ta recherche — c'est gratuit.</p>
-    <a href="#" class="btn btn-primary btn-lg" id="cta-bottom">Parler à Lou</a>
+  <section class="wrap cta">
+    <h2>Prêt à swiper ?</h2>
+    <p>Lou est en ligne. Dis-lui ce que tu cherches, c'est gratuit.</p>
+    <a href="#" class="b b-terra" id="cta-bottom">Parler à Lou</a>
   </section>
 
   <!-- FOOTER -->
   <footer class="footer">
-    <div class="footer-grid">
-      <div class="footer-col footer-brand">
-        <span class="wordmark" style="font-size:32px">bonh<span class="wordmark__chevron-wrap"><svg class="wordmark__chevron" viewBox="0 0 20 12" aria-hidden="true"><path d="M2 10 L10 3 L18 10"/></svg>o</span>me<span class="wordmark__point">.</span></span>
-        <div class="footer-baseline">—&nbsp;au bon moment</div>
-        <p class="footer-tagline">Ton chasseur immobilier digital en Suisse romande. Tu vis, Lou cherche.</p>
-      </div>
-      <div class="footer-col">
-        <h4>Navigation</h4>
-        <a href="#features">Fonctions</a>
-        <a href="#how">Comment ça marche</a>
-        <a href="/publier">Publier mon bien</a>
-        <a href="/faq">FAQ</a>
-      </div>
-      <div class="footer-col">
-        <h4>Légal</h4>
-        <a href="/privacy">Confidentialité</a>
-        <a href="/terms">Conditions</a>
-      </div>
-      <div class="footer-col">
-        <h4>Contact</h4>
-        <a href="mailto:contact@bonhome.ch">contact@bonhome.ch</a>
-        <div class="footer-social">
-          <a href="https://www.instagram.com/bonhome.ch" target="_blank" rel="noopener noreferrer" aria-label="Instagram">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zM5.838 12a6.162 6.162 0 1 0 12.324 0 6.162 6.162 0 0 0-12.324 0zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/></svg>
-          </a>
+    <div class="wrap">
+      <div class="footer-grid">
+        <div class="footer-col footer-brand">
+          <span class="wordmark">bonh<span class="wordmark__chevron-wrap"><svg class="wordmark__chevron" viewBox="0 0 20 12" aria-hidden="true"><path d="M2 10 L10 3 L18 10"/></svg>o</span>me<span class="wordmark__point">.</span></span>
+          <div class="baseline">au bon moment</div>
+          <p>Ton chasseur immobilier dans la poche, en Suisse romande. Tu vis, Lou cherche.</p>
+        </div>
+        <div class="footer-col">
+          <h4>Navigation</h4>
+          <a href="#how">Comment ça marche</a>
+          <a href="#app">L'app</a>
+          <a href="/publier">Publier mon bien</a>
+          <a href="/faq">FAQ</a>
+        </div>
+        <div class="footer-col">
+          <h4>Légal</h4>
+          <a href="/privacy">Confidentialité</a>
+          <a href="/terms">Conditions</a>
+        </div>
+        <div class="footer-col">
+          <h4>Contact</h4>
+          <a href="mailto:contact@bonhome.ch">contact@bonhome.ch</a>
+          <div class="footer-social">
+            <a href="https://www.instagram.com/bonhome.ch" target="_blank" rel="noopener noreferrer" aria-label="Instagram">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zM5.838 12a6.162 6.162 0 1 0 12.324 0 6.162 6.162 0 0 0-12.324 0zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/></svg>
+            </a>
+          </div>
         </div>
       </div>
-    </div>
-    <div class="footer-bottom">
-      <p>&copy; 2026 bonhome. — Tu vis, Lou cherche.</p>
+      <div class="footer-bottom">&copy; 2026 bonhome. Tu vis, Lou cherche.</div>
     </div>
   </footer>
 
