@@ -81,9 +81,15 @@ class JwtTest(unittest.TestCase):
         self.assertEqual(user_id, 42)
         self.assertIsNone(err)
 
+    def _ctx(self):
+        # jsonify a besoin d'un contexte d'application : une app minimale suffit.
+        from flask import Flask
+        return Flask(__name__).app_context()
+
     def test_decode_empty_token_401(self):
         from auth import _decode_jwt_or_401
-        user_id, err = _decode_jwt_or_401('')
+        with self._ctx():
+            user_id, err = _decode_jwt_or_401('')
         self.assertIsNone(user_id)
         self.assertIsNotNone(err)
         body, status = err
@@ -91,7 +97,8 @@ class JwtTest(unittest.TestCase):
 
     def test_decode_invalid_token_401(self):
         from auth import _decode_jwt_or_401
-        user_id, err = _decode_jwt_or_401('not.a.real.jwt')
+        with self._ctx():
+            user_id, err = _decode_jwt_or_401('not.a.real.jwt')
         self.assertIsNone(user_id)
         body, status = err
         self.assertEqual(status, 401)
