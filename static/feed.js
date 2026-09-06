@@ -141,7 +141,7 @@
       if (!dayTotal) dayTotal = (d.remaining || 0) + (d.seen_today || 0);
       doneToday = d.seen_today || 0;
       document.querySelector('#fd-new span:last-child').textContent = (d.new_today || 0) + (d.new_today === 1 ? ' nouveau' : ' nouveaux');
-      if (!d.has_profile) { scroller.innerHTML = '<section class="fd-end"><h2>Dis-moi ce que tu cherches.</h2><p>Lou a besoin de tes critères avant de te montrer des biens.</p><a class="fd-cta" href="/">Parler à Lou</a></section>'; return; }
+      if (!d.has_profile) { scroller.innerHTML = '<section class="fd-end"><h2>Dis-moi ce que tu cherches.</h2><p>Lou a besoin de tes critères avant de te montrer des biens.</p><a class="fd-cta" href="/?chat=1">Parler à Lou</a></section>'; return; }
       if (items.length === 0 && !d.seen_today && !includeNearby && huntTries < 12) {
         // Nouveau compte : le scoring tourne encore. On patiente sans dire « tu as tout vu ».
         huntTries += 1;

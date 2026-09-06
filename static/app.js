@@ -509,6 +509,10 @@
       }
     }
 
+    // ?chat=1 (venant du feed sans criteres) : ouvre la conversation avec Lou tout de suite.
+    if (new URLSearchParams(window.location.search).get('chat') === '1') {
+      setTimeout(_openChat, 150);
+    }
     // If URL carries ?login=1, open auth modal (used by /pricing, /faq "Connexion" links)
     if (window.location.search.indexOf('login=1') !== -1 && !(isJWT(TOKEN) && USER)) {
       // Clean URL so a refresh doesn't re-trigger
@@ -3230,13 +3234,24 @@
           return;
         }
         loadProfileBar();
+        // Hors dashboard (accueil, feed) : Lou annonce qu'elle part en chasse,
+        // puis on retourne au feed, qui affiche « Lou est en chasse » le temps du scoring.
+        var goFeed = window.location.pathname !== '/dashboard';
+        if (goFeed) {
+          var cb = document.getElementById('chat-body');
+          if (cb) {
+            cb.insertAdjacentHTML('beforeend', '<div class="chat-msg bot">C\'est noté. Je pars en chasse, on se retrouve dans ton feed.</div>');
+            cb.scrollTop = cb.scrollHeight;
+          }
+        }
         // Trigger scoring + scraping so results appear immediately
         apiFetch(API + '/api/score', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
           .then(function () {
+            if (goFeed) { window.location.href = '/feed'; return; }
             if (typeof loadProperties === 'function') loadProperties(1, 'score', 0);
             if (typeof loadStats === 'function') loadStats();
           })
-          .catch(_logErr('chat post-profile score'));
+          .catch(function (e) { _logErr('chat post-profile score')(e); if (goFeed) window.location.href = '/feed'; });
       }).catch(_logErr('chat profile update'));
     }
 
