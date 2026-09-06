@@ -839,6 +839,61 @@ if os.environ.get('DATABASE_URL', ''):
     import threading
     threading.Thread(target=_rescore_all_on_boot, daemon=True).start()
 
+    # ------------------------------------------------------------------
+    # Phase 2 (6 septembre 2026) : planificateur anibis integre au service
+    # web. Pas de cron Render a gerer : 60 s apres le boot, puis toutes les
+    # ANIBIS_SCHEDULE_HOURS heures (defaut 2). Un seul worker travaille a la
+    # fois grace a pg_try_advisory_lock ; l'autre voit le verrou pris et
+    # repasse au tour suivant. ANIBIS_SCHEDULE_HOURS=0 desactive.
+    # ------------------------------------------------------------------
+    ANIBIS_LOCK_KEY = 8493021203
+    _anibis_hours = float(os.environ.get('ANIBIS_SCHEDULE_HOURS', '2') or 0)
+
+    def _anibis_loop():
+        import time as _time
+        if SHUTDOWN_EVENT.wait(60):
+            return
+        while not SHUTDOWN_EVENT.is_set():
+            conn = None
+            conn_broken = False
+            try:
+                from cron_anibis import run_anibis
+                conn = get_db()
+                cur = conn.cursor()
+                cur.execute("SELECT pg_try_advisory_lock(%s)", (ANIBIS_LOCK_KEY,))
+                row = cur.fetchone()
+                got = bool(row[0] if not isinstance(row, dict) else list(row.values())[0])
+                cur.close()
+                if got:
+                    log.info("Anibis scheduler: lock acquired, running")
+                    try:
+                        run_anibis(conn)
+                    finally:
+                        try:
+                            cur = conn.cursor()
+                            cur.execute("SELECT pg_advisory_unlock(%s)", (ANIBIS_LOCK_KEY,))
+                            cur.close()
+                            conn.commit()
+                        except Exception:
+                            conn_broken = True
+                else:
+                    log.info("Anibis scheduler: another worker holds the lock, skipping")
+            except Exception as e:
+                log.error(f"Anibis scheduler error: {e}", exc_info=True)
+                conn_broken = True
+            finally:
+                if conn is not None:
+                    try:
+                        return_db(conn, close=conn_broken)
+                    except Exception:
+                        pass
+            if SHUTDOWN_EVENT.wait(max(600, _anibis_hours * 3600)):
+                return
+
+    if _anibis_hours > 0:
+        threading.Thread(target=_anibis_loop, daemon=True, name='anibis-scheduler').start()
+        log.info(f"Anibis scheduler armed: every {_anibis_hours} h")
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
