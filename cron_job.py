@@ -384,9 +384,22 @@ def run():
     # Without it, scrapers.py:_sb_get falls back to direct requests.get,
     # which gets blocked silently (403 HTML parsed in 0 listings) and looks
     # like a "soft" success — entire cron cycle wasted, no alert.
+    # Phase 2 (septembre 2026) : anibis tourne en acces direct, sans ScrapingBee.
+    # On l'execute d'abord ; le reste du cron (portails via ScrapingBee) ne
+    # tourne que si la cle existe.
+    if os.environ.get('ANIBIS_ENABLED', 'true').lower() not in ('0', 'false', 'no'):
+        try:
+            from cron_anibis import run_anibis
+            _db = get_db()
+            try:
+                run_anibis(_db)
+            finally:
+                _db.close()
+        except Exception as e:
+            log.error(f"Anibis pipeline failed: {e}", exc_info=True)
     if not os.environ.get('SCRAPINGBEE_API_KEY'):
-        log.error("SCRAPINGBEE_API_KEY not set — cron would silently no-op via direct-fetch fallback")
-        sys.exit(1)
+        log.warning("SCRAPINGBEE_API_KEY not set — portails via ScrapingBee ignores, cron termine apres anibis")
+        return
 
     log.info("=" * 50)
     log.info("Bon Home Cron Job Start")

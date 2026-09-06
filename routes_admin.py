@@ -62,3 +62,47 @@ def admin_check():
     finally:
         cur.close()
         return_db(conn)
+
+
+# ------------------------------------------------------------------
+# Phase 2 (septembre 2026) : lancer le pipeline anibis a la demande.
+# Tourne dans un thread avec sa propre connexion ; repond tout de suite.
+# ------------------------------------------------------------------
+_anibis_state = {'running': False, 'started_at': None, 'last': None}
+
+
+@admin_bp.route('/api/admin/scrape/anibis', methods=['POST'])
+@admin_required
+def admin_scrape_anibis():
+    import threading
+    from datetime import datetime
+    if _anibis_state['running']:
+        return jsonify({"ok": False, "error": "deja en cours", "state": _anibis_state}), 409
+
+    def _job():
+        _anibis_state['running'] = True
+        _anibis_state['started_at'] = datetime.utcnow().isoformat()
+        conn = None
+        try:
+            from cron_anibis import run_anibis
+            conn = get_db()
+            _anibis_state['last'] = run_anibis(conn)
+        except Exception as e:
+            log.error(f"admin anibis failed: {e}", exc_info=True)
+            _anibis_state['last'] = {'error': str(e)}
+        finally:
+            _anibis_state['running'] = False
+            if conn is not None:
+                try:
+                    return_db(conn)
+                except Exception:
+                    pass
+
+    threading.Thread(target=_job, daemon=True).start()
+    return jsonify({"ok": True, "started": True})
+
+
+@admin_bp.route('/api/admin/scrape/anibis', methods=['GET'])
+@admin_required
+def admin_scrape_anibis_status():
+    return jsonify(_anibis_state)

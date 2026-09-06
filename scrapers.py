@@ -72,6 +72,7 @@ SOURCE_DOMAINS = {
     'jouval':         ['jouval.ch'],
     'muller-christe': ['muller-christe.ch', 'mullerchriste.ch'],
     'fidimmobil':     ['fidimmobil.ch'],
+    'Anibis':         ['anibis.ch'],
 }
 
 _INVALID_URL_TOKENS = ('undefined', 'null', 'javascript:', '#', 'about:blank')
