@@ -7,7 +7,7 @@
 
   var API = window.location.origin;
   var TOKEN = localStorage.getItem('lou_token');
-  if (!TOKEN) { window.location.replace('/?next=feed'); return; }
+  if (!TOKEN) { window.location.replace('/?login=1&next=feed'); return; }
 
   var root = document.getElementById('feed-app');
   var items = [];          // biens chargés, dans l'ordre
@@ -18,6 +18,7 @@
   var loading = false;
   var exhausted = false;
   var includeNearby = false;
+  var huntTries = 0;       // attente du premier scoring (nouveau compte)
 
   // ---------- SVG (inline, une seule fois) ----------
   var I = {
@@ -41,7 +42,7 @@
     opts = opts || {};
     opts.headers = Object.assign({ 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' }, opts.headers || {});
     return fetch(API + path, opts).then(function (r) {
-      if (r.status === 401) { localStorage.removeItem('lou_token'); window.location.replace('/?next=feed'); throw new Error('401'); }
+      if (r.status === 401) { localStorage.removeItem('lou_token'); window.location.replace('/?login=1&next=feed'); throw new Error('401'); }
       return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
     });
   }
@@ -141,6 +142,13 @@
       doneToday = d.seen_today || 0;
       document.querySelector('#fd-new span:last-child').textContent = (d.new_today || 0) + (d.new_today === 1 ? ' nouveau' : ' nouveaux');
       if (!d.has_profile) { scroller.innerHTML = '<section class="fd-end"><h2>Dis-moi ce que tu cherches.</h2><p>Lou a besoin de tes critères avant de te montrer des biens.</p><a class="fd-cta" href="/">Parler à Lou</a></section>'; return; }
+      if (items.length === 0 && !d.seen_today && !includeNearby && huntTries < 12) {
+        // Nouveau compte : le scoring tourne encore. On patiente sans dire « tu as tout vu ».
+        huntTries += 1;
+        scroller.innerHTML = '<section class="fd-end"><h2>Lou est en chasse.</h2><p>Elle passe tes critères sur toutes les annonces. Quelques secondes.</p></section>';
+        setTimeout(function () { load(true); }, 5000);
+        return;
+      }
       renderAll();
     }).catch(function (e) { loading = false; if (e.message !== '401') { scroller.innerHTML = '<section class="fd-end"><h2>Oups.</h2><p>Le feed ne répond pas. Réessaie dans un instant.</p><button class="fd-cta" onclick="location.reload()">Recharger</button></section>'; } });
   }
