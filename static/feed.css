@@ -23,6 +23,7 @@
   overscroll-behavior: none;
 }
 .feed-body * { box-sizing: border-box; }
+.feed-body [hidden] { display: none !important; }
 .feed-body a { color: var(--fd-sage-soft); text-decoration: none; }
 
 .feed-app { position: relative; height: 100dvh; width: 100%; max-width: 480px; margin: 0 auto; overflow: hidden; background: var(--fd-bg); }
@@ -162,3 +163,28 @@
 @media (min-width: 481px) {
   .feed-app { box-shadow: 0 0 0 1px var(--fd-line); }
 }
+
+/* Onboarding : conversation avec Lou dans le feed */
+.fd-ob { display: flex; flex-direction: column; height: 100dvh; padding: calc(env(safe-area-inset-top, 0px) + 14px) 20px calc(env(safe-area-inset-bottom, 0px) + 16px); gap: 12px; }
+.fd-ob-head { display: flex; justify-content: space-between; align-items: center; }
+.fd-ob-meta { font-size: 12px; font-weight: 600; color: var(--fd-text-mute); letter-spacing: 0.04em; }
+.fd-ob-steps { display: flex; gap: 4px; }
+.fd-ob-steps i { flex: 1; height: 3px; border-radius: 2px; background: rgba(255,255,255,0.18); }
+.fd-ob-steps i.done { background: var(--fd-sage); }
+.fd-ob-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 8px 0; scrollbar-width: none; }
+.fd-ob-body::-webkit-scrollbar { display: none; }
+.fd-ob-row { display: flex; gap: 10px; align-items: flex-end; }
+.fd-ob-row.me { justify-content: flex-end; }
+.fd-ob-avatar { flex: none; width: 36px; height: 36px; border-radius: 50%; background: var(--fd-teal); display: flex; align-items: center; justify-content: center; font-family: var(--fd-brand); font-size: 20px; color: #fff; }
+.fd-ob-msg { max-width: 82%; padding: 13px 16px; font-size: 16px; line-height: 1.4; }
+.fd-ob-msg.bot { border-radius: 20px 20px 20px 6px; background: var(--fd-surface); border: 1px solid rgba(255,255,255,0.08); color: #F2F4F3; }
+.fd-ob-msg.bot.ok { border-color: rgba(143,167,128,0.5); }
+.fd-ob-msg.me { border-radius: 20px 20px 6px 20px; background: var(--fd-terracotta); color: #fff; font-weight: 500; }
+.fd-ob-sugs { display: flex; flex-wrap: wrap; gap: 8px; }
+.fd-ob-sugs:empty { display: none; }
+.fd-ob-sugs button { height: 40px; padding: 0 14px; border-radius: 999px; border: 1.5px solid rgba(255,255,255,0.22); background: transparent; color: #fff; font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer; }
+.fd-ob-form { display: flex; gap: 10px; align-items: center; }
+.fd-ob-form input { flex: 1; height: 56px; padding: 0 18px; border-radius: 999px; background: var(--fd-surface); border: 1px solid rgba(255,255,255,0.14); color: #fff; font-size: 16px; font-family: inherit; outline: none; }
+.fd-ob-form input::placeholder { color: var(--fd-text-mute); }
+.fd-ob-form input:focus { border-color: var(--fd-sage); }
+.fd-btn.send { flex: none; width: 56px; height: 56px; border-radius: 50%; background: var(--fd-terracotta); color: #fff; }
