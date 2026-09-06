@@ -4,6 +4,7 @@ Exports token_required, admin_required, plan_feature decorators so other
 blueprints can import them without depending on the full app module.
 """
 import os
+import hmac
 import sys
 import re
 import logging
@@ -140,6 +141,24 @@ def token_required_query_ok(f):
             return err
         request.user_id = user_id
         return f(*args, **kwargs)
+    return decorated
+
+
+INGEST_KEY = os.environ.get('INGEST_KEY', '').strip()
+
+
+def ingest_or_admin_required(f):
+    """Accepte soit l'en-tete X-Ingest-Key (cle partagee avec le script local
+    qui tourne sur le Mac d'Antony), soit un JWT admin. Phase 2, 6.9.2026."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        key = (request.headers.get('X-Ingest-Key') or '').strip()
+        if key and INGEST_KEY and hmac.compare_digest(key, INGEST_KEY):
+            request.user_id = 0
+            request.ingest_key_auth = True
+            return f(*args, **kwargs)
+        request.ingest_key_auth = False
+        return admin_required(f)(*args, **kwargs)
     return decorated
 
 

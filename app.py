@@ -847,7 +847,7 @@ if os.environ.get('DATABASE_URL', ''):
     # repasse au tour suivant. ANIBIS_SCHEDULE_HOURS=0 desactive.
     # ------------------------------------------------------------------
     ANIBIS_LOCK_KEY = 8493021203
-    _anibis_hours = float(os.environ.get('ANIBIS_SCHEDULE_HOURS', '2') or 0)
+    _anibis_hours = float(os.environ.get('ANIBIS_SCHEDULE_HOURS', '0') or 0)  # 0 : anibis refuse les IP Render (403), on passe par le script local
 
     def _anibis_loop():
         import time as _time
