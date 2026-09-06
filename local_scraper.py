@@ -804,6 +804,20 @@ def scrape_properstar(city="Lausanne", transaction="location"):
 # MAIN
 # ============================================================
 
+def _source_disabled(name):
+    """Homegate + ImmoScout24 sont sortis du scope (drop produit 30/04). On
+    respecte les memes flags que le cron : ENABLE_HOMEGATE / ENABLE_IMMOSCOUT24
+    a 'false'/'0'/'no'/'off' desactivent le scraper. Defaut : desactives, comme
+    en prod — mettre le flag a 'true' pour les reactiver ponctuellement."""
+    flag = {'Homegate': 'ENABLE_HOMEGATE', 'ImmoScout24': 'ENABLE_IMMOSCOUT24'}.get(name)
+    if not flag:
+        return False
+    raw = os.environ.get(flag)
+    if raw is None:
+        return True  # defaut : desactive (aligne sur la prod)
+    return raw.strip().lower() in ('false', '0', 'no', 'off')
+
+
 def run_all(city="Lausanne", transaction="location"):
     """Run all scrapers and return deduplicated results."""
     all_results = []
@@ -818,6 +832,7 @@ def run_all(city="Lausanne", transaction="location"):
         ('Comparis', scrape_comparis),
         ('Properstar', scrape_properstar),
     ]
+    scrapers = [(n, fn) for n, fn in scrapers if not _source_disabled(n)]
 
     for name, scraper in scrapers:
         try:

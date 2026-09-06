@@ -16,7 +16,10 @@ import psycopg2
 import psycopg2.extras
 import requests as http_requests
 
-from scrapers import scrape_all, save_to_db, reset_scraper_stats, get_scraper_stats, get_scraper_stats_city
+from scrapers import (
+    scrape_all, save_to_db, reset_scraper_stats, get_scraper_stats,
+    get_scraper_stats_city, scrape_agencies, reset_agency_cache,
+)
 from scoring_engine import score_all_for_profile
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(name)s] %(message)s')
@@ -49,6 +52,10 @@ if _flag_disabled('ENABLE_HOMEGATE'):
     DISABLED_SOURCES.add('Homegate')
 if _flag_disabled('ENABLE_IMMOSCOUT24'):
     DISABLED_SOURCES.add('ImmoScout24')
+
+# Pivot « scraping direct des sites d'agences » : scrape la table agency_sources
+# une fois par run. Activable/desactivable via ENABLE_AGENCIES (defaut : ON).
+AGENCIES_ENABLED = not _flag_disabled('ENABLE_AGENCIES')
 
 
 def get_db():
@@ -435,6 +442,7 @@ def run():
     # so don't re-scrape Neuchâtel 12× via NEARBY_MAIN_CITY expansion.
     # Reset per-scraper counters so we can detect scrapers returning 0 everywhere.
     reset_scraper_stats()
+    reset_agency_cache()
     total_scraped = 0
     failed_cities = []  # audit C5 : collecte les exceptions par ville pour l'alerte
     for city, transaction in scrape_targets:
@@ -459,6 +467,28 @@ def run():
     log.info(f"Total scraped and saved: {total_scraped}")
     if failed_cities:
         log.warning(f"{len(failed_cities)} city/transaction combos raised: {[(c, tx) for c, tx, _, _ in failed_cities]}")
+
+    # Step 3ter: Sites d'agences (pivot). Scrape la table agency_sources UNE FOIS
+    # par transaction (hors boucle par ville) : chaque agence renvoie tout son
+    # catalogue, le scoring matche ensuite aux zones des utilisateurs.
+    if AGENCIES_ENABLED:
+        for transaction in sorted(transactions_needed):
+            log.info(f"--- Scraping agencies ({transaction}) ---")
+            try:
+                agency_listings = scrape_agencies(db, transaction=transaction)
+                if agency_listings:
+                    saved = save_to_db(db, agency_listings)
+                    total_scraped += saved
+                    log.info(f"Saved {saved} agency listings ({transaction})")
+            except Exception as e:
+                log.error(f"Agency scrape failed ({transaction}): {e}", exc_info=True)
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+        log.info(f"Total scraped and saved (with agencies): {total_scraped}")
+    else:
+        log.info("Agencies disabled via ENABLE_AGENCIES=false")
 
     # Step 3bis: Monitor (v6.3.3 SC4) — 2 niveaux d'alerte :
     #   1. GLOBAL : un scraper retourne 0 sur TOUTES les villes du run

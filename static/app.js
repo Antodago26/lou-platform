@@ -435,14 +435,8 @@
                 body: JSON.stringify(criteriaPayload)
               }).catch(_logErr('login post-chat profile push'));
             }
-            // On external hosts (Webflow), render dashboard in place
-            var isRenderHost = window.location.hostname === 'lou-platform.onrender.com' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-            if (isRenderHost) {
-              window.location.href = '/dashboard';
-            } else {
-              overlay.remove();
-              showDashboard();
-            }
+            // Le feed est la page d'accueil une fois connecté (6 septembre 2026).
+            window.location.href = '/feed';
           } else {
             err.textContent = data.error || 'Erreur de connexion';
             err.style.display = 'block';
@@ -471,7 +465,6 @@
   // LANDING PAGE — Hook CTAs (when HTML already exists, e.g. Render)
   // ============================================================
   function initLanding() {
-    var isRenderHost = window.location.hostname === 'lou-platform.onrender.com' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
     // Hook login button to auth modal
     ['nav-login-btn'].forEach(function (id) {
@@ -499,18 +492,19 @@
       }
     });
 
-    // If user is already logged in, change nav button to "Mon Dashboard"
+    // Déjà connecté : ?next=feed (venant de /feed sans token) renvoie direct au feed.
+    if (isJWT(TOKEN) && USER && new URLSearchParams(window.location.search).get('next') === 'feed') {
+      window.location.replace('/feed');
+      return;
+    }
+    // If user is already logged in, change nav button to "Mon feed"
     if (isJWT(TOKEN) && USER) {
       var navBtn = $('nav-login-btn');
       if (navBtn) {
-        navBtn.textContent = 'Mon Dashboard';
+        navBtn.textContent = 'Mon feed';
         navBtn.onclick = function (e) {
           e.preventDefault();
-          if (isRenderHost) {
-            window.location.href = '/dashboard';
-          } else {
-            showDashboard();
-          }
+          window.location.href = '/feed';
         };
       }
     }

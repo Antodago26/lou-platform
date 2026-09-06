@@ -1,12 +1,12 @@
 {
   "name": "bonhome.",
   "short_name": "bonhome.",
-  "description": "Lou surveille 7 portails immobiliers suisses pour toi. Tu vis, elle cherche.",
+  "description": "Dis à Lou ce que tu cherches, elle te montre les biens qui te correspondent, un par un.",
   "lang": "fr-CH",
-  "start_url": "/",
+  "start_url": "/feed",
   "display": "standalone",
-  "background_color": "#F7F4EE",
-  "theme_color": "#2A6670",
+  "background_color": "#0C171B",
+  "theme_color": "#0C171B",
   "icons": [
     { "src": "/static/logos/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]

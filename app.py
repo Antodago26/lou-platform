@@ -87,6 +87,7 @@ from routes_scraping import scraping_bp
 from routes_pages import pages_bp
 from routes_stats import stats_bp
 from routes_publish import publish_bp
+from routes_feed import feed_bp
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger('lou-app')
@@ -398,6 +399,7 @@ def create_app():
     flask_app.register_blueprint(pages_bp)
     flask_app.register_blueprint(stats_bp)
     flask_app.register_blueprint(publish_bp)
+    flask_app.register_blueprint(feed_bp)
 
     return flask_app
 
@@ -616,6 +618,81 @@ if os.environ.get('DATABASE_URL', ''):
         except Exception:
             pass
         log.warning(f"v6.4.6 schema error (boot continues, will retry next boot): {e}")
+    finally:
+        if conn is not None:
+            try:
+                return_db(conn, close=conn_broken)
+            except Exception:
+                pass
+
+    # v6.4.7 : table agency_sources + seed 38 agences Immomig (pivot « scraping
+    # direct des sites d'agences »). CREATE TABLE / INSERT ON CONFLICT — idempotent.
+    # Doit tourner APRES run_schema_v646.
+    conn = None
+    conn_broken = False
+    try:
+        import psycopg2 as _pg
+        from migrations.schema_v647_agency_sources import run_schema_v647
+        conn = get_db()
+        stats = run_schema_v647(conn)
+        log.info(f"v6.4.7 schema stats: {stats}")
+    except Exception as e:
+        try:
+            import psycopg2 as _pg
+            if isinstance(e, (_pg.OperationalError, _pg.InterfaceError)):
+                conn_broken = True
+        except Exception:
+            pass
+        log.warning(f"v6.4.7 schema error (boot continues, will retry next boot): {e}")
+    finally:
+        if conn is not None:
+            try:
+                return_db(conn, close=conn_broken)
+            except Exception:
+                pass
+
+    # v6.4.8 : seed des 3 agences Apimo (2e backend du pivot). INSERT ON CONFLICT
+    # — idempotent. Doit tourner APRES run_schema_v647 (table agency_sources).
+    conn = None
+    conn_broken = False
+    try:
+        import psycopg2 as _pg
+        from migrations.schema_v648_apimo_agencies import run_schema_v648
+        conn = get_db()
+        stats = run_schema_v648(conn)
+        log.info(f"v6.4.8 schema stats: {stats}")
+    except Exception as e:
+        try:
+            import psycopg2 as _pg
+            if isinstance(e, (_pg.OperationalError, _pg.InterfaceError)):
+                conn_broken = True
+        except Exception:
+            pass
+        log.warning(f"v6.4.8 schema error (boot continues, will retry next boot): {e}")
+    finally:
+        if conn is not None:
+            try:
+                return_db(conn, close=conn_broken)
+            except Exception:
+                pass
+
+    # v6.4.9 : table swipes (feed mobile). Idempotent, tourne apres v648.
+    conn = None
+    conn_broken = False
+    try:
+        import psycopg2 as _pg
+        from migrations.schema_v649_swipes import run_schema_v649
+        conn = get_db()
+        stats = run_schema_v649(conn)
+        log.info(f"v6.4.9 schema stats: {stats}")
+    except Exception as e:
+        try:
+            import psycopg2 as _pg
+            if isinstance(e, (_pg.OperationalError, _pg.InterfaceError)):
+                conn_broken = True
+        except Exception:
+            pass
+        log.warning(f"v6.4.9 schema error (boot continues, will retry next boot): {e}")
     finally:
         if conn is not None:
             try:

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#0C171B">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Feed — bonhome.</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" type="image/svg+xml" href="/static/logos/favicon.svg">
+  <link rel="stylesheet" href="{{ static_url('fonts/google-fonts.css') }}">
+  <link rel="stylesheet" href="{{ static_url('fonts/feed-fonts.css') }}">
+  <link rel="stylesheet" href="{{ static_url('feed.css') }}">
+</head>
+<body class="feed-body">
+  <noscript>
+    <p style="padding:24px;text-align:center;font-family:sans-serif;color:#F2F4F3">
+      Cette page nécessite JavaScript.
+    </p>
+  </noscript>
+  <div id="feed-app" class="feed-app" aria-live="polite"></div>
+  <script src="{{ static_url('feed.js') }}" defer></script>
+</body>
+</html>

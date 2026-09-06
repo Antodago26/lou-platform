@@ -74,8 +74,11 @@ MAX_PASSWORD_BYTES = 72
 
 def _password_too_long(password: str) -> bool:
     """Return True iff the password (UTF-8 encoded) exceeds bcrypt's 72-byte ceiling."""
+    if not isinstance(password, str):
+        # None ou autre type : on refuse plutot que de deviner (defensif).
+        return True
     try:
-        return len((password or '').encode('utf-8')) > MAX_PASSWORD_BYTES
+        return len(password.encode('utf-8')) > MAX_PASSWORD_BYTES
     except Exception:
         return True
 
